@@ -3,43 +3,40 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
-  getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, signOut
+  getAuth, signInAnonymously 
 } from 'firebase/auth';
 import { 
   getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, deleteDoc, 
   query, where, serverTimestamp, orderBy, onSnapshot, setDoc, increment, 
-  limit, runTransaction, writeBatch, startAfter, getCountFromServer, Timestamp
+  limit, runTransaction, writeBatch, startAfter, Timestamp
 } from 'firebase/firestore';
 import { 
   LayoutDashboard, Package, Users, Receipt, ArrowRightLeft, LogOut, 
   AlertTriangle, Download, Plus, Search, Settings, Edit, Store, 
   Trash2, User, Save, Printer, Contact, History, 
   Lock, FileSpreadsheet, Calculator, AlertOctagon, MapPin, 
-  Phone, Loader2, Menu, UserCog, BadgeCheck, Wrench, Wallet, Mail, 
+  Phone, Loader2, Menu, UserCog, Wrench, Wallet, Mail, 
   CheckCircle2, Calendar, X, LogIn, Shield, Image as ImageIcon, Percent,
-  ChevronDown, Database, UploadCloud, DownloadCloud
+  ChevronDown, Database, UploadCloud, DownloadCloud, Check, Activity, Eye
 } from 'lucide-react';
 
 /* ==========================================================================
    🔥 1. FIREBASE CONFIGURATION & CORE SETUP
    ========================================================================== */
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-  ? JSON.parse(__firebase_config) 
-  : {
-      apiKey: "AIzaSyBrRvCAWdC_SOjBqSFPXyav-3ifE80UoLU",
-      authDomain: "nouval-system.firebaseapp.com",
-      projectId: "nouval-system",
-      storageBucket: "nouval-system.firebasestorage.app",
-      messagingSenderId: "194279959532",
-      appId: "1:194279959532:web:578f5894f58102d4872ec9"
-    };
+const firebaseConfig = {
+  apiKey: "AIzaSyBrRvCAWdC_SOjBqSFPXyav-3ifE80UoLU",
+  authDomain: "nouval-system.firebaseapp.com",
+  projectId: "nouval-system",
+  storageBucket: "nouval-system.firebasestorage.app",
+  messagingSenderId: "194279959532",
+  appId: "1:194279959532:web:578f5894f58102d4872ec9"
+};
 
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'nouval-erp-master-final';
+const appId = 'nouval-erp-master-final';
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Helper for strict Firestore Paths
 const getCollRef = (collName) => collection(db, 'artifacts', appId, 'public', 'data', collName);
 const getDocRef = (collName, docId) => doc(db, 'artifacts', appId, 'public', 'data', collName, docId);
 
@@ -54,7 +51,7 @@ const ALL_PERMISSIONS = [
 ];
 
 /* ==========================================================================
-   🛠️ 2. UTILITIES
+   🛠️ 2. UTILITIES & LOGGING
    ========================================================================== */
 const normalizeSearch = (str) => String(str || '').toLowerCase().trim().replace(/\s+/g, ' ');
 const normalizeSerial = (str) => String(str || '').trim().toUpperCase();
@@ -85,24 +82,30 @@ const formatDate = (dateObj) => {
   return d.toLocaleString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
-// --- Helper to revive timestamps when importing ---
 const reviveTimestamps = (obj) => {
     if (obj === null || typeof obj !== 'object') return obj;
-    
-    // Check if it's a Firestore timestamp object
     if (obj.seconds !== undefined && obj.nanoseconds !== undefined && Object.keys(obj).length === 2) {
         return new Timestamp(obj.seconds, obj.nanoseconds);
     }
-    
     if (Array.isArray(obj)) {
         return obj.map(reviveTimestamps);
     }
-    
     const newObj = {};
     for (const key in obj) {
         newObj[key] = reviveTimestamps(obj[key]);
     }
     return newObj;
+};
+
+const logUserActivity = (user, action, details) => {
+    if (!user) return;
+    addDoc(getCollRef('activity_logs'), {
+        userId: user.id,
+        userName: user.name || user.email,
+        action: action,
+        details: details,
+        timestamp: serverTimestamp()
+    }).catch(err => console.error("Activity Log Error:", err));
 };
 
 /* ==========================================================================
@@ -149,6 +152,7 @@ function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify }) {
         } else if (userData.pass === pass) {
            onLoginSuccess({ id: userDoc.id, ...userData, permissions: userData.permissions || {} });
            notify(`أهلاً بك مجدداً يا ${userData.name}`, "success");
+           logUserActivity({ id: userDoc.id, ...userData }, 'تسجيل دخول', 'قام بتسجيل الدخول إلى النظام');
         } else {
            notify("كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى.", "error");
         }
@@ -263,10 +267,8 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
 }
 
 /* ==========================================================================
-   📦 5. CORE MODULES
+   📦 5. DASHBOARD VIEW
    ========================================================================== */
-
-// --- DashboardView (Fixed) ---
 function DashboardView({ appUser }) {
   const [stats, setStats] = useState({ totalItems: 0, totalValue: 0, lowStockCount: 0, salesToday: 0 });
   const [loading, setLoading] = useState(true);
@@ -278,7 +280,6 @@ function DashboardView({ appUser }) {
     const fetchDashboardStats = async () => {
        setLoading(true);
        try {
-           // 1. Fetch inventory and calculate stats manually to avoid index issues
            const invSnap = await getDocs(getCollRef('inventory'));
            let totalQty = 0;
            let totalVal = 0;
@@ -297,7 +298,6 @@ function DashboardView({ appUser }) {
              }
            });
 
-           // 2. Fetch today's sales
            const today = new Date(); 
            today.setHours(0,0,0,0);
            const salesSnap = await getDocs(query(
@@ -367,7 +367,9 @@ function DashboardView({ appUser }) {
   );
 }
 
-// --- InventoryManager (Fixed) ---
+/* ==========================================================================
+   📦 6. INVENTORY MANAGER
+   ========================================================================== */
 function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, warehouseMap }) {
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState('');
@@ -383,7 +385,6 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
   });
   const fileInputRef = useRef(null);
   
-  // Pagination States
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
@@ -391,7 +392,6 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
   const [showBulkUpdate, setShowBulkUpdate] = useState(false);
   const [bulkPercent, setBulkPercent] = useState(0);
 
-  // Load items function with useCallback
   const loadItems = useCallback(async (isNextPage = false) => {
     if (!appUser) return;
     setLoadingData(true);
@@ -442,7 +442,6 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
     setLoadingData(false);
   }, [debouncedSearch, appUser, lastDoc, notify]);
 
-  // Reload when search changes
   useEffect(() => { 
     setLastDoc(null);
     loadItems(false); 
@@ -477,6 +476,8 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
         t.set(doc(getCollRef('inventory')), docData);
         t.set(regRef, { exists: true, usedAt: serverTimestamp() });
       });
+      
+      logUserActivity(appUser, 'إضافة صنف', `إضافة ${qtyNum} قطعة من ${newItem.name} (S/N: ${serial})`);
       notify("تم إضافة الصنف بنجاح", "success"); 
       setLastDoc(null);
       loadItems(false); 
@@ -509,8 +510,9 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
         minStock: Number(dataToUpdate.minStock),
         searchKey: normalizeSearch(`${dataToUpdate.name} ${dataToUpdate.serialNumber}`)
       });
-      setEditingItem(null);
       
+      logUserActivity(appUser, 'تعديل صنف', `تعديل بيانات ${dataToUpdate.name} (S/N: ${dataToUpdate.serialNumber})`);
+      setEditingItem(null);
       setItems(prev => prev.map(i => 
         i.id === id ? {
           ...i, 
@@ -527,12 +529,13 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
     setGlobalLoading(false);
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('تأكيد الحذف؟')) return;
+  const handleDelete = async (item) => {
+    if (!window.confirm(`تأكيد حذف ${item.name}؟`)) return;
     setGlobalLoading(true);
     try {
-      await updateDoc(getDocRef('inventory', id), { isDeleted: true, quantity: 0 });
-      setItems(prev => prev.filter(i => i.id !== id));
+      await updateDoc(getDocRef('inventory', item.id), { isDeleted: true, quantity: 0 });
+      logUserActivity(appUser, 'حذف صنف', `تم حذف صنف: ${item.name} (S/N: ${item.serialNumber})`);
+      setItems(prev => prev.filter(i => i.id !== item.id));
       notify("تم حذف الصنف", "success");
     } catch (error) {
       notify("فشل حذف الصنف", "error");
@@ -577,6 +580,7 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
         }
         if(count > 0) {
             await batch.commit();
+            logUserActivity(appUser, 'استيراد أصناف', `استيراد ${count} صنف من ملف CSV`);
             notify(`تم استيراد ${count} صنف بنجاح`, "success");
             setLastDoc(null);
             loadItems(false);
@@ -618,6 +622,7 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
            await batch.commit();
         }
         
+        logUserActivity(appUser, 'تعديل أسعار مجمع', `تعديل جميع الأسعار بنسبة ${bulkPercent}%`);
         notify("تم تحديث أسعار جميع الأصناف بنجاح", "success");
         setShowBulkUpdate(false);
         setBulkPercent(0);
@@ -632,7 +637,6 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
 
   return (
     <div className="space-y-6 text-right animate-in fade-in" dir="rtl">
-       {/* Edit Modal */}
        {editingItem && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
@@ -667,7 +671,6 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
         </div>
       )}
 
-       {/* Bulk Price Update Modal */}
        {showBulkUpdate && appUser.role === 'admin' && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-[1.5rem] p-6 w-full max-w-sm shadow-2xl">
@@ -694,7 +697,6 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
         </div>
        )}
 
-       {/* Add Section */}
        <div className="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-100">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-slate-50 pb-4">
              <h3 className="font-black text-lg flex items-center gap-2 text-slate-800"><Package size={22} className="text-indigo-600"/> إضافة أصناف</h3>
@@ -785,7 +787,6 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
           </form>
        </div>
 
-       {/* Table Section */}
        <div className="bg-white rounded-[1.5rem] shadow-sm border border-slate-100 overflow-hidden">
           <div className="p-4 border-b bg-slate-50 flex flex-col sm:flex-row items-center gap-4">
              <div className="relative w-full max-w-sm">
@@ -833,7 +834,7 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
                              <Edit size={14}/>
                            </button>
                            <button 
-                             onClick={()=>handleDelete(i.id)} 
+                             onClick={()=>handleDelete(i)} 
                              className="p-1.5 bg-white border border-slate-200 text-rose-500 rounded-md hover:bg-rose-50 transition-all"
                            >
                              <Trash2 size={14}/>
@@ -859,7 +860,395 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
   );
 }
 
-// --- POSManager (No changes needed) ---
+/* ==========================================================================
+   📦 7. TRANSFER MANAGER
+   ========================================================================== */
+function TransferManager({ appUser, warehouseMap, notify, setGlobalLoading }) {
+  const [activeTab, setActiveTab] = useState('pending'); 
+  const [transfers, setTransfers] = useState([]);
+  
+  const [searchSerial, setSearchSerial] = useState('');
+  const [foundMainItem, setFoundMainItem] = useState(null);
+  const [reqQty, setReqQty] = useState(1);
+  const [rejectingReq, setRejectingReq] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const isMain = appUser.assignedWarehouseId === 'main' || appUser.role === 'admin';
+  const currentBranchId = appUser.assignedWarehouseId || 'main';
+
+  useEffect(() => {
+      let q = getCollRef('transfers');
+      
+      if (!isMain) {
+          q = query(q, where('toWarehouseId', '==', currentBranchId));
+      }
+
+      const unsub = onSnapshot(query(q, orderBy('createdAt', 'desc'), limit(150)), snap => {
+         setTransfers(snap.docs.map(d => ({id: d.id, ...d.data()})));
+      });
+      return () => unsub();
+  }, [currentBranchId, isMain]);
+
+  const handleSearchMain = async (e) => {
+      e.preventDefault();
+      if (!searchSerial.trim()) return;
+      setGlobalLoading(true);
+      try {
+          const searchTerm = normalizeSerial(searchSerial);
+          const q = query(
+            getCollRef('inventory'), 
+            where('serialNumber', '==', searchTerm), 
+            where('warehouseId', '==', 'main'), 
+            where('isDeleted', '==', false)
+          );
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+              setFoundMainItem({id: snap.docs[0].id, ...snap.docs[0].data()});
+          } else {
+              notify("هذا الصنف غير متاح في المخزن الرئيسي حالياً", "warn");
+              setFoundMainItem(null);
+          }
+      } catch (error) {
+          console.error(error);
+          notify("حدث خطأ أثناء البحث", "error");
+      }
+      setGlobalLoading(false);
+  };
+
+  const handleSubmitRequest = async () => {
+      if (!foundMainItem) return;
+      if (reqQty <= 0) return notify("الكمية غير صالحة", "warn");
+      if (reqQty > foundMainItem.quantity) return notify("الكمية المطلوبة أكبر من المتاح في الرئيسي!", "error");
+      
+      setGlobalLoading(true);
+      try {
+          await addDoc(getCollRef('transfers'), {
+              serialNumber: foundMainItem.serialNumber,
+              itemName: foundMainItem.name,
+              requestedQty: Number(reqQty),
+              fromWarehouseId: 'main',
+              toWarehouseId: currentBranchId,
+              status: 'pending', 
+              createdAt: serverTimestamp(),
+              requestedBy: appUser.name || appUser.email
+          });
+          
+          logUserActivity(appUser, 'طلب تحويل مخزني', `طلب تحويل ${reqQty} قطعة من ${foundMainItem.name}`);
+          notify("تم إرسال الطلب للمخزن الرئيسي بنجاح", "success");
+          setFoundMainItem(null);
+          setSearchSerial('');
+          setReqQty(1);
+          setActiveTab('history');
+      } catch(e) {
+          console.error(e);
+          notify("فشل إرسال الطلب", "error");
+      }
+      setGlobalLoading(false);
+  };
+
+  const handleApprove = async (req) => {
+      if (!window.confirm(`الموافقة على تحويل ${req.requestedQty} قطعة من ${req.itemName} لفرع ${warehouseMap[req.toWarehouseId]}؟`)) return;
+      setGlobalLoading(true);
+      
+      try {
+          await runTransaction(db, async (t) => {
+              const mainQ = query(
+                getCollRef('inventory'), 
+                where('serialNumber', '==', req.serialNumber), 
+                where('warehouseId', '==', 'main'), 
+                where('isDeleted', '==', false)
+              );
+              const mainSnap = await getDocs(mainQ);
+              if (mainSnap.empty) throw new Error("عذراً، هذا الصنف لم يعد موجوداً في الرئيسي");
+              const mainItem = mainSnap.docs[0];
+              
+              if (mainItem.data().quantity < req.requestedQty) throw new Error("عذراً، رصيد المخزن الرئيسي الحالي غير كافٍ لتلبية هذا الطلب!");
+
+              const branchQ = query(
+                getCollRef('inventory'), 
+                where('serialNumber', '==', req.serialNumber), 
+                where('warehouseId', '==', req.toWarehouseId), 
+                where('isDeleted', '==', false)
+              );
+              const branchSnap = await getDocs(branchQ);
+
+              t.update(mainItem.ref, {
+                  quantity: increment(-req.requestedQty)
+              });
+
+              if (!branchSnap.empty) {
+                  const branchItem = branchSnap.docs[0];
+                  t.update(branchItem.ref, {
+                      quantity: increment(req.requestedQty)
+                  });
+              } else {
+                  const newRef = doc(getCollRef('inventory'));
+                  t.set(newRef, {
+                      ...mainItem.data(),
+                      warehouseId: req.toWarehouseId,
+                      quantity: req.requestedQty,
+                      createdAt: serverTimestamp()
+                  });
+              }
+
+              const reqRef = getDocRef('transfers', req.id);
+              t.update(reqRef, {
+                  status: 'approved',
+                  processedAt: serverTimestamp(),
+                  processedBy: appUser.name || appUser.email
+              });
+          });
+          
+          logUserActivity(appUser, 'موافقة على تحويل مخزني', `تمت الموافقة لفرع ${warehouseMap[req.toWarehouseId]} على ${req.requestedQty} قطعة من ${req.itemName}`);
+          notify("تمت الموافقة وتم التحويل المخزني بنجاح!", "success");
+      } catch(e) {
+          console.error(e);
+          notify(e.message || "خطأ أثناء الموافقة", "error");
+      }
+      setGlobalLoading(false);
+  };
+
+  const submitReject = async (e) => {
+      e.preventDefault();
+      if(!rejectReason.trim()) return notify("يرجى كتابة سبب الرفض", "warn");
+      
+      setGlobalLoading(true);
+      try {
+          await updateDoc(getDocRef('transfers', rejectingReq.id), {
+              status: 'rejected',
+              rejectReason: rejectReason,
+              processedAt: serverTimestamp(),
+              processedBy: appUser.name || appUser.email
+          });
+          
+          logUserActivity(appUser, 'رفض تحويل مخزني', `رفض طلب فرع ${warehouseMap[rejectingReq.toWarehouseId]} بسبب: ${rejectReason}`);
+          notify("تم رفض الطلب بنجاح", "success");
+          setRejectingReq(null);
+          setRejectReason('');
+      } catch(err) {
+          console.error(err);
+          notify("فشل عملية الرفض", "error");
+      }
+      setGlobalLoading(false);
+  };
+
+  const pendingRequests = transfers.filter(t => t.status === 'pending');
+  const processedRequests = transfers.filter(t => t.status !== 'pending');
+
+  return (
+      <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden animate-in fade-in text-right" dir="rtl">
+          {rejectingReq && (
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                  <div className="bg-white rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95">
+                      <h3 className="font-black text-xl mb-4 text-slate-800 border-b pb-3 text-rose-600 flex items-center gap-2">
+                        <X size={20}/> سبب رفض التحويل
+                      </h3>
+                      <form onSubmit={submitReject}>
+                          <p className="text-sm font-bold text-slate-600 mb-2">أنت تقوم برفض طلب ({rejectingReq.itemName}) لفرع ({warehouseMap[rejectingReq.toWarehouseId]})</p>
+                          <textarea 
+                              required
+                              rows="3"
+                              className="w-full border border-slate-200 p-3 rounded-xl focus:border-rose-500 outline-none bg-slate-50 text-sm font-bold resize-none mb-4" 
+                              placeholder="اكتب سبب الرفض هنا ليراه الفرع الطالب..."
+                              value={rejectReason}
+                              onChange={e => setRejectReason(e.target.value)}
+                          />
+                          <div className="flex gap-2">
+                              <button type="submit" className="flex-1 bg-rose-600 text-white py-3 rounded-xl font-bold hover:bg-rose-700 transition-colors shadow-md">تأكيد الرفض</button>
+                              <button type="button" onClick={()=>{setRejectingReq(null); setRejectReason('');}} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-200 transition-colors">إلغاء</button>
+                          </div>
+                      </form>
+                  </div>
+              </div>
+          )}
+
+          <div className="p-6 border-b flex flex-wrap items-center justify-between bg-slate-50 gap-4">
+              <h2 className="text-xl font-black text-slate-800 flex items-center gap-3">
+                 <ArrowRightLeft className="text-indigo-600" size={24}/> 
+                 التحويلات المخزنية
+              </h2>
+              <div className="flex gap-2">
+                  <span className="bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-bold">{pendingRequests.length} طلبات قيد الانتظار</span>
+              </div>
+          </div>
+
+          <div className="flex border-b bg-white overflow-x-auto custom-scrollbar">
+              <button 
+                onClick={()=>setActiveTab('pending')} 
+                className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'pending' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                الطلبات المعلقة
+              </button>
+              <button 
+                onClick={()=>setActiveTab('history')} 
+                className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'history' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                سجل التحويلات
+              </button>
+              {!isMain && (
+                  <button 
+                    onClick={()=>setActiveTab('new')} 
+                    className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'new' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
+                  >
+                    طلب قطعة من الرئيسي
+                  </button>
+              )}
+          </div>
+
+          <div className="p-6 max-h-[65vh] overflow-y-auto custom-scrollbar bg-slate-50/50">
+              
+              {activeTab === 'new' && !isMain && (
+                  <div className="max-w-xl mx-auto space-y-6">
+                      <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100 text-indigo-800 font-bold text-sm leading-relaxed shadow-sm">
+                          قم بمسح باركود المنتج لمعرفة مدى توفره في "المخزن الرئيسي" ثم أرسل طلب لتحويله لفرعك.
+                      </div>
+                      <form onSubmit={handleSearchMain} className="flex flex-col sm:flex-row gap-3">
+                          <input 
+                              className="flex-1 border border-slate-200 p-3.5 rounded-xl outline-none font-bold text-center tracking-widest text-slate-700 font-mono bg-white focus:border-indigo-500 shadow-sm" 
+                              placeholder="الباركود (S/N)..." 
+                              value={searchSerial} 
+                              onChange={e=>setSearchSerial(e.target.value)} 
+                          />
+                          <button type="submit" className="bg-indigo-600 text-white px-8 py-3.5 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-2">
+                              <Search size={18}/> بحث
+                          </button>
+                      </form>
+
+                      {foundMainItem && (
+                          <div className="bg-white border-2 border-indigo-100 rounded-2xl p-8 shadow-md flex flex-col items-center text-center animate-in zoom-in-95">
+                              <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
+                                  <Package size={32}/>
+                              </div>
+                              <h3 className="font-black text-xl text-slate-800 mb-1">{foundMainItem.name}</h3>
+                              <p className="text-slate-500 font-mono text-sm mb-6">{foundMainItem.serialNumber}</p>
+                              
+                              <div className="bg-emerald-50 text-emerald-700 px-6 py-2.5 rounded-xl font-black text-sm mb-8 border border-emerald-100 shadow-sm">
+                                  الكمية المتاحة بالرئيسي: {foundMainItem.quantity}
+                              </div>
+
+                              <div className="flex flex-col w-full max-w-xs gap-2">
+                                  <label className="font-bold text-xs text-slate-500 text-right">أدخل الكمية التي تريدها فرعك:</label>
+                                  <input 
+                                      type="number" 
+                                      min="1" 
+                                      max={foundMainItem.quantity}
+                                      className="w-full border-2 border-slate-200 p-3 rounded-xl outline-none font-black text-center focus:border-indigo-500 text-indigo-700 text-xl bg-slate-50 transition-colors" 
+                                      value={reqQty} 
+                                      onChange={e=>setReqQty(e.target.value)} 
+                                  />
+                                  <button onClick={handleSubmitRequest} className="w-full bg-slate-900 text-white py-3.5 mt-4 rounded-xl font-bold hover:bg-black transition-colors shadow-lg active:scale-95 flex justify-center items-center gap-2">
+                                      <ArrowRightLeft size={18}/> إرسال طلب التحويل
+                                  </button>
+                              </div>
+                          </div>
+                      )}
+                  </div>
+              )}
+
+              {activeTab === 'pending' && (
+                  <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+                      <div className="overflow-x-auto">
+                          <table className="w-full text-right text-sm">
+                              <thead className="bg-slate-50 text-slate-500 font-bold border-b text-[11px] uppercase">
+                                  <tr>
+                                      <th className="p-4">الفرع الطالب</th>
+                                      <th className="p-4">المنتج / الباركود</th>
+                                      <th className="p-4 text-center">الكمية</th>
+                                      <th className="p-4">بواسطة</th>
+                                      <th className="p-4 text-center">الإجراء</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-50">
+                                  {pendingRequests.length === 0 ? <tr><td colSpan="5" className="p-12 text-center text-slate-400 font-bold text-sm">لا توجد طلبات معلقة حالياً.</td></tr> :
+                                      pendingRequests.map(req => (
+                                          <tr key={req.id} className="hover:bg-slate-50 transition-colors">
+                                              <td className="p-4 font-black text-indigo-700">{warehouseMap[req.toWarehouseId]}</td>
+                                              <td className="p-4">
+                                                  <p className="font-bold text-slate-800 mb-0.5">{req.itemName}</p>
+                                                  <p className="text-[10px] font-mono text-slate-500">{req.serialNumber}</p>
+                                              </td>
+                                              <td className="p-4 text-center font-black text-lg text-slate-700">{req.requestedQty}</td>
+                                              <td className="p-4 text-xs text-slate-500">
+                                                  <p className="font-bold text-slate-700 mb-0.5">{req.requestedBy}</p>
+                                                  <p className="text-[9px]">{formatDate(req.createdAt)}</p>
+                                              </td>
+                                              <td className="p-4 text-center">
+                                                  {isMain ? (
+                                                      <div className="flex justify-center gap-2">
+                                                          <button onClick={()=>handleApprove(req)} className="bg-emerald-50 text-emerald-600 p-2.5 rounded-xl hover:bg-emerald-500 hover:text-white transition-all shadow-sm" title="موافقة وخصم الكمية">
+                                                              <Check size={18}/>
+                                                          </button>
+                                                          <button onClick={()=>setRejectingReq(req)} className="bg-rose-50 text-rose-600 p-2.5 rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm" title="رفض">
+                                                              <X size={18}/>
+                                                          </button>
+                                                      </div>
+                                                  ) : (
+                                                      <span className="bg-amber-50 text-amber-600 px-3 py-1.5 rounded-lg text-[10px] font-bold border border-amber-100 flex items-center gap-1 w-max mx-auto"><Loader2 size={12} className="animate-spin"/> بالانتظار</span>
+                                                  )}
+                                              </td>
+                                          </tr>
+                                      ))
+                                  }
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
+              )}
+
+              {activeTab === 'history' && (
+                  <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+                      <div className="overflow-x-auto">
+                          <table className="w-full text-right text-sm">
+                              <thead className="bg-slate-50 text-slate-500 font-bold border-b text-[11px] uppercase">
+                                  <tr>
+                                      <th className="p-4">الفرع</th>
+                                      <th className="p-4">المنتج</th>
+                                      <th className="p-4 text-center">الكمية</th>
+                                      <th className="p-4">الحالة / الملاحظات</th>
+                                      <th className="p-4">التاريخ</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-50">
+                                  {processedRequests.length === 0 ? <tr><td colSpan="5" className="p-12 text-center text-slate-400 font-bold text-sm">لا يوجد سجل للتحويلات بعد.</td></tr> :
+                                      processedRequests.map(req => (
+                                          <tr key={req.id} className="hover:bg-slate-50 transition-colors">
+                                              <td className="p-4 font-bold text-slate-700">{warehouseMap[req.toWarehouseId]}</td>
+                                              <td className="p-4">
+                                                  <p className="font-bold text-slate-800 mb-0.5">{req.itemName}</p>
+                                                  <p className="text-[10px] font-mono text-slate-500">{req.serialNumber}</p>
+                                              </td>
+                                              <td className="p-4 text-center font-black text-slate-700">{req.requestedQty}</td>
+                                              <td className="p-4">
+                                                  {req.status === 'approved' ? (
+                                                      <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-3 py-1 rounded-lg text-[10px] font-bold border border-emerald-100"><Check size={12}/> تمت الموافقة</span>
+                                                  ) : (
+                                                      <div>
+                                                          <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 px-3 py-1 rounded-lg text-[10px] font-bold border border-rose-100 mb-1.5"><X size={12}/> مرفوض</span>
+                                                          <p className="text-[10px] text-rose-600 font-bold max-w-[200px] truncate" title={req.rejectReason}>السبب: {req.rejectReason}</p>
+                                                      </div>
+                                                  )}
+                                              </td>
+                                              <td className="p-4 text-xs text-slate-500">
+                                                  <p className="font-bold text-slate-700 mb-0.5">{formatDate(req.processedAt)}</p>
+                                                  <p className="text-[9px]">بواسطة: {req.processedBy}</p>
+                                              </td>
+                                          </tr>
+                                      ))
+                                  }
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
+              )}
+
+          </div>
+      </div>
+  );
+}
+
+/* ==========================================================================
+   📦 8. POS MANAGER
+   ========================================================================== */
 function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehouseMap }) { 
   const [search, setSearch] = useState('');
   const [foundItem, setFoundItem] = useState(null);
@@ -973,6 +1362,8 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
           t.set(doc(getCollRef('transactions')), transactionData);
        });
        
+       logUserActivity(appUser, 'إصدار فاتورة', `إصدار فاتورة #${invId} للعميل ${invoice.customerName} بقيمة ${calculations.finalTotal} ج`);
+
        setInvoiceData({ 
           ...foundItem, 
           ...invoice, 
@@ -1157,7 +1548,313 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
   );
 }
 
-// --- CustomerProfileView (No changes needed) ---
+/* ==========================================================================
+   📦 9. CUSTOMER MANAGER
+   ========================================================================== */
+function CustomerManager({ systemSettings, notify, setGlobalLoading, appUser }) {
+  const [customers, setCustomers] = useState([]);
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 700);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newCust, setNewCust] = useState({ name: '', phone: '', productCategory: '', productModel: '', issue: '', notes: '' });
+  
+  const [lastDoc, setLastDoc] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingData, setLoadingData] = useState(false);
+  
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [invoiceData, setInvoiceData] = useState(null);
+
+  const loadCustomers = useCallback(async (isNextPage = false) => {
+    setLoadingData(true);
+    try {
+        let q = getCollRef('customers');
+        const term = normalizeSearch(debouncedSearch);
+
+        if (term) {
+           q = query(q, 
+              where('searchKey', '>=', term), 
+              where('searchKey', '<=', term + '\uf8ff'),
+              orderBy('searchKey')
+           );
+        } else {
+           q = query(q, orderBy('createdAt', 'desc'));
+        }
+
+        if (isNextPage && lastDoc) {
+           q = query(q, startAfter(lastDoc));
+        }
+
+        q = query(q, limit(30));
+        const snap = await getDocs(q);
+        const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        if (isNextPage) {
+           setCustomers(prev => [...prev, ...fetched]);
+        } else {
+           setCustomers(fetched);
+        }
+        
+        setLastDoc(snap.docs[snap.docs.length - 1] || null);
+        setHasMore(snap.docs.length === 30);
+    } catch (e) {
+        console.error(e);
+        if (e.message.includes('index')) {
+           notify("يحتاج هذا البحث لتهيئة الفهارس الخاصة بقاعدة البيانات", "warn");
+        } else {
+           notify("فشل جلب العملاء", "error");
+        }
+    }
+    setLoadingData(false);
+  }, [debouncedSearch, lastDoc, notify]);
+
+  useEffect(() => {
+    setLastDoc(null);
+    loadCustomers(false);
+  }, [debouncedSearch, loadCustomers]);
+
+  const handleAddCustomer = async (e) => {
+     e.preventDefault();
+     if(!newCust.name || !newCust.phone) return notify("الاسم ورقم الهاتف مطلوبان", "warn");
+     
+     setGlobalLoading(true);
+     try {
+        await addDoc(getCollRef('customers'), {
+           ...newCust,
+           createdAt: serverTimestamp(),
+           searchKey: normalizeSearch(`${newCust.name} ${newCust.phone}`)
+        });
+        
+        logUserActivity(appUser, 'إضافة عميل', `تسجيل العميل: ${newCust.name}`);
+        notify("تم تسجيل العميل بنجاح", "success");
+        setShowAddModal(false);
+        setNewCust({ name: '', phone: '', productCategory: '', productModel: '', issue: '', notes: '' });
+        setLastDoc(null);
+        loadCustomers(false); 
+     } catch(err) {
+        console.error(err);
+        notify("حدث خطأ أثناء الحفظ", "error");
+     }
+     setGlobalLoading(false);
+  };
+
+  const availableModels = useMemo(() => {
+     if(!newCust.productCategory || !systemSettings.productCategories) return [];
+     const cat = systemSettings.productCategories.find(c => c.name === newCust.productCategory);
+     return cat ? cat.models : [];
+  }, [newCust.productCategory, systemSettings.productCategories]);
+
+  if (invoiceData) {
+     return <InvoiceRenderer data={invoiceData} systemSettings={systemSettings} onBack={() => { setInvoiceData(null); setSelectedCustomer(null); }} />;
+  }
+  
+  if (selectedCustomer) {
+     return (
+        <CustomerProfileView 
+           customer={selectedCustomer} 
+           onClose={() => setSelectedCustomer(null)}
+           systemSettings={systemSettings}
+           notify={notify}
+           setGlobalLoading={setGlobalLoading}
+           appUser={appUser}
+           onCheckoutSuccess={(data) => setInvoiceData(data)}
+        />
+     );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden animate-in fade-in text-right" dir="rtl">
+      
+      {showAddModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[1.5rem] p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <h3 className="font-black text-xl mb-6 text-slate-800 border-b pb-4 flex items-center gap-2">
+              <UserCog className="text-indigo-600"/> تسجيل بيانات عميل جديد
+            </h3>
+            <form onSubmit={handleAddCustomer} className="space-y-4">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                     <label className="block text-xs font-bold text-slate-500 mb-1">اسم العميل *</label>
+                     <input 
+                       required 
+                       className="w-full border border-slate-200 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 text-sm font-bold" 
+                       value={newCust.name} 
+                       onChange={e=>setNewCust({...newCust, name:e.target.value})} 
+                       placeholder="الاسم بالكامل" 
+                     />
+                  </div>
+                  <div>
+                     <label className="block text-xs font-bold text-slate-500 mb-1">رقم الهاتف *</label>
+                     <input 
+                       required 
+                       className="w-full border border-slate-200 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 text-sm font-bold font-mono" 
+                       value={newCust.phone} 
+                       onChange={e=>setNewCust({...newCust, phone:e.target.value})} 
+                       placeholder="01XXXXXXXXX" 
+                     />
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50/50 p-4 rounded-xl border border-indigo-50">
+                  <div>
+                     <label className="block text-xs font-bold text-indigo-900 mb-1">المنتج (التصنيف)</label>
+                     <select 
+                       className="w-full border border-indigo-100 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white text-sm font-bold" 
+                       value={newCust.productCategory} 
+                       onChange={e=>setNewCust({...newCust, productCategory: e.target.value, productModel: ''})}
+                     >
+                        <option value="">-- اختر المنتج --</option>
+                        {(systemSettings.productCategories || []).map((cat, idx) => (
+                           <option key={idx} value={cat.name}>{cat.name}</option>
+                        ))}
+                     </select>
+                  </div>
+                  <div>
+                     <label className="block text-xs font-bold text-indigo-900 mb-1">الموديل</label>
+                     <select 
+                       disabled={!newCust.productCategory} 
+                       className="w-full border border-indigo-100 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white text-sm font-bold disabled:bg-slate-100 disabled:opacity-60" 
+                       value={newCust.productModel} 
+                       onChange={e=>setNewCust({...newCust, productModel: e.target.value})}
+                     >
+                        <option value="">-- اختر الموديل --</option>
+                        {availableModels.map((mod, idx) => (
+                           <option key={idx} value={mod}>{mod}</option>
+                        ))}
+                     </select>
+                  </div>
+               </div>
+
+               <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">العطل / المشكلة</label>
+                  <textarea 
+                    rows="2" 
+                    className="w-full border border-slate-200 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 text-sm font-bold resize-none" 
+                    value={newCust.issue} 
+                    onChange={e=>setNewCust({...newCust, issue:e.target.value})} 
+                    placeholder="وصف المشكلة التي يواجهها العميل..." 
+                  />
+               </div>
+               
+               <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">ملاحظات إضافية</label>
+                  <input 
+                    className="w-full border border-slate-200 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 text-sm font-bold" 
+                    value={newCust.notes} 
+                    onChange={e=>setNewCust({...newCust, notes:e.target.value})} 
+                    placeholder="أي تفاصيل أخرى (العنوان، ميعاد الزيارة...)" 
+                  />
+               </div>
+
+               <div className="flex gap-3 pt-4 border-t">
+                  <button 
+                    type="submit" 
+                    className="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 shadow-md transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Save size={18}/> حفظ البيانات
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={()=>setShowAddModal(false)} 
+                    className="px-6 bg-slate-100 text-slate-600 py-3.5 rounded-xl font-bold hover:bg-slate-200 transition-colors"
+                  >
+                    إلغاء
+                  </button>
+               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div className="p-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50">
+         <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+           <Contact className="text-indigo-600" size={20}/> سجل العملاء والصيانة
+         </h2>
+         <div className="flex gap-2 w-full sm:w-auto">
+             <div className="relative flex-1 sm:w-64">
+                 <Search className="absolute right-3 top-2.5 text-slate-400" size={16}/>
+                 <input 
+                   className="w-full border border-slate-200 py-2 pr-9 pl-3 rounded-lg outline-none text-xs font-bold focus:border-indigo-500" 
+                   placeholder="بحث بالسيرفر (بالاسم أو الهاتف)..." 
+                   value={search} 
+                   onChange={e=>setSearch(e.target.value)} 
+                 />
+             </div>
+             {loadingData && <Loader2 className="animate-spin text-indigo-500 mt-2 sm:mt-0" size={16}/>}
+             <button 
+               onClick={()=>setShowAddModal(true)} 
+               className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-sm whitespace-nowrap"
+             >
+                <Plus size={14}/> إضافة عميل
+             </button>
+         </div>
+      </div>
+      <div className="overflow-x-auto max-h-[70vh] custom-scrollbar">
+         <table className="w-full text-right text-sm">
+            <thead className="bg-white border-b text-slate-500 font-bold text-[11px] uppercase sticky top-0">
+               <tr>
+                  <th className="p-4">العميل</th>
+                  <th className="p-4">المنتج والموديل</th>
+                  <th className="p-4">المشكلة / الملاحظات</th>
+                  <th className="p-4 text-center">التاريخ</th>
+                  <th className="p-4 text-center">إدارة</th>
+               </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50 font-medium text-xs">
+               {customers.length === 0 && !loadingData ? 
+                 <tr><td colSpan="5" className="p-10 text-center text-slate-400 font-bold">لا توجد سجلات للعملاء</td></tr> : 
+                 customers.map((c) => (
+                   <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                     <td className="p-4">
+                        <p className="font-bold text-slate-800 text-sm mb-1">{c.name}</p>
+                        <p className="font-mono text-slate-500 flex items-center gap-1" dir="ltr">
+                          <Phone size={12}/> {c.phone}
+                        </p>
+                     </td>
+                     <td className="p-4">
+                        {c.productCategory ? (
+                           <>
+                             <span className="inline-block bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-[10px] font-black mb-1">{c.productCategory}</span>
+                             <p className="text-slate-600 font-bold text-[11px]">{c.productModel || 'غير محدد'}</p>
+                           </>
+                        ) : <span className="text-slate-400">-</span>}
+                     </td>
+                     <td className="p-4 max-w-xs">
+                        <p className="text-rose-600 font-bold text-[11px] truncate mb-1">{c.issue || 'لا يوجد عطل مسجل'}</p>
+                        <p className="text-slate-500 text-[10px] truncate">{c.notes}</p>
+                     </td>
+                     <td className="p-4 text-center text-slate-500 text-[10px] font-bold">{formatDate(c.createdAt)}</td>
+                     <td className="p-4 text-center">
+                        <button 
+                          onClick={() => setSelectedCustomer(c)} 
+                          className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-indigo-100 transition-colors border border-indigo-100"
+                        >
+                          عرض الملف
+                        </button>
+                     </td>
+                   </tr>
+                 ))
+               }
+            </tbody>
+         </table>
+         {hasMore && !loadingData && customers.length >= 30 && (
+             <div className="p-4 text-center bg-slate-50 border-t border-slate-100">
+                <button 
+                  onClick={() => loadCustomers(true)} 
+                  className="text-indigo-600 font-bold text-xs hover:underline flex items-center justify-center gap-1 mx-auto"
+                >
+                   تحميل المزيد <ChevronDown size={14}/>
+                </button>
+             </div>
+         )}
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================================
+   📦 10. CUSTOMER PROFILE VIEW
+   ========================================================================== */
 function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlobalLoading, appUser, onCheckoutSuccess }) {
   const [activeTab, setActiveTab] = useState('new_invoice'); 
   const [history, setHistory] = useState([]);
@@ -1521,307 +2218,9 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
   );
 }
 
-// --- CustomerManager (No changes needed) ---
-function CustomerManager({ appUser, systemSettings, notify, setGlobalLoading }) {
-  const [customers, setCustomers] = useState([]);
-  const [search, setSearch] = useState('');
-  const debouncedSearch = useDebounce(search, 700);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newCust, setNewCust] = useState({ name: '', phone: '', productCategory: '', productModel: '', issue: '', notes: '' });
-  
-  const [lastDoc, setLastDoc] = useState(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingData, setLoadingData] = useState(false);
-  
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [invoiceData, setInvoiceData] = useState(null);
-
-  const loadCustomers = useCallback(async (isNextPage = false) => {
-    setLoadingData(true);
-    try {
-        let q = getCollRef('customers');
-        const term = normalizeSearch(debouncedSearch);
-
-        if (term) {
-           q = query(q, 
-              where('searchKey', '>=', term), 
-              where('searchKey', '<=', term + '\uf8ff'),
-              orderBy('searchKey')
-           );
-        } else {
-           q = query(q, orderBy('createdAt', 'desc'));
-        }
-
-        if (isNextPage && lastDoc) {
-           q = query(q, startAfter(lastDoc));
-        }
-
-        q = query(q, limit(30));
-        const snap = await getDocs(q);
-        const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-        if (isNextPage) {
-           setCustomers(prev => [...prev, ...fetched]);
-        } else {
-           setCustomers(fetched);
-        }
-        
-        setLastDoc(snap.docs[snap.docs.length - 1] || null);
-        setHasMore(snap.docs.length === 30);
-    } catch (e) {
-        console.error(e);
-        if (e.message.includes('index')) {
-           notify("يحتاج هذا البحث لتهيئة الفهارس الخاصة بقاعدة البيانات", "warn");
-        } else {
-           notify("فشل جلب العملاء", "error");
-        }
-    }
-    setLoadingData(false);
-  }, [debouncedSearch, lastDoc, notify]);
-
-  useEffect(() => {
-    setLastDoc(null);
-    loadCustomers(false);
-  }, [debouncedSearch, loadCustomers]);
-
-  const handleAddCustomer = async (e) => {
-     e.preventDefault();
-     if(!newCust.name || !newCust.phone) return notify("الاسم ورقم الهاتف مطلوبان", "warn");
-     
-     setGlobalLoading(true);
-     try {
-        await addDoc(getCollRef('customers'), {
-           ...newCust,
-           createdAt: serverTimestamp(),
-           searchKey: normalizeSearch(`${newCust.name} ${newCust.phone}`)
-        });
-        notify("تم تسجيل العميل بنجاح", "success");
-        setShowAddModal(false);
-        setNewCust({ name: '', phone: '', productCategory: '', productModel: '', issue: '', notes: '' });
-        setLastDoc(null);
-        loadCustomers(false);
-     } catch(err) {
-        console.error(err);
-        notify("حدث خطأ أثناء الحفظ", "error");
-     }
-     setGlobalLoading(false);
-  };
-
-  const availableModels = useMemo(() => {
-     if(!newCust.productCategory || !systemSettings.productCategories) return [];
-     const cat = systemSettings.productCategories.find(c => c.name === newCust.productCategory);
-     return cat ? cat.models : [];
-  }, [newCust.productCategory, systemSettings.productCategories]);
-
-  if (invoiceData) {
-     return <InvoiceRenderer data={invoiceData} systemSettings={systemSettings} onBack={() => { setInvoiceData(null); setSelectedCustomer(null); }} />;
-  }
-  
-  if (selectedCustomer) {
-     return (
-        <CustomerProfileView 
-           customer={selectedCustomer} 
-           onClose={() => setSelectedCustomer(null)}
-           systemSettings={systemSettings}
-           notify={notify}
-           setGlobalLoading={setGlobalLoading}
-           appUser={appUser}
-           onCheckoutSuccess={(data) => setInvoiceData(data)}
-        />
-     );
-  }
-
-  return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden animate-in fade-in text-right" dir="rtl">
-      
-      {showAddModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[1.5rem] p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
-            <h3 className="font-black text-xl mb-6 text-slate-800 border-b pb-4 flex items-center gap-2">
-              <UserCog className="text-indigo-600"/> تسجيل بيانات عميل جديد
-            </h3>
-            <form onSubmit={handleAddCustomer} className="space-y-4">
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                     <label className="block text-xs font-bold text-slate-500 mb-1">اسم العميل *</label>
-                     <input 
-                       required 
-                       className="w-full border border-slate-200 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 text-sm font-bold" 
-                       value={newCust.name} 
-                       onChange={e=>setNewCust({...newCust, name:e.target.value})} 
-                       placeholder="الاسم بالكامل" 
-                     />
-                  </div>
-                  <div>
-                     <label className="block text-xs font-bold text-slate-500 mb-1">رقم الهاتف *</label>
-                     <input 
-                       required 
-                       className="w-full border border-slate-200 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 text-sm font-bold font-mono" 
-                       value={newCust.phone} 
-                       onChange={e=>setNewCust({...newCust, phone:e.target.value})} 
-                       placeholder="01XXXXXXXXX" 
-                     />
-                  </div>
-               </div>
-
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50/50 p-4 rounded-xl border border-indigo-50">
-                  <div>
-                     <label className="block text-xs font-bold text-indigo-900 mb-1">المنتج (التصنيف)</label>
-                     <select 
-                       className="w-full border border-indigo-100 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white text-sm font-bold" 
-                       value={newCust.productCategory} 
-                       onChange={e=>setNewCust({...newCust, productCategory: e.target.value, productModel: ''})}
-                     >
-                        <option value="">-- اختر المنتج --</option>
-                        {(systemSettings.productCategories || []).map((cat, idx) => (
-                           <option key={idx} value={cat.name}>{cat.name}</option>
-                        ))}
-                     </select>
-                  </div>
-                  <div>
-                     <label className="block text-xs font-bold text-indigo-900 mb-1">الموديل</label>
-                     <select 
-                       disabled={!newCust.productCategory} 
-                       className="w-full border border-indigo-100 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white text-sm font-bold disabled:bg-slate-100 disabled:opacity-60" 
-                       value={newCust.productModel} 
-                       onChange={e=>setNewCust({...newCust, productModel: e.target.value})}
-                     >
-                        <option value="">-- اختر الموديل --</option>
-                        {availableModels.map((mod, idx) => (
-                           <option key={idx} value={mod}>{mod}</option>
-                        ))}
-                     </select>
-                  </div>
-               </div>
-
-               <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">العطل / المشكلة</label>
-                  <textarea 
-                    rows="2" 
-                    className="w-full border border-slate-200 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 text-sm font-bold resize-none" 
-                    value={newCust.issue} 
-                    onChange={e=>setNewCust({...newCust, issue:e.target.value})} 
-                    placeholder="وصف المشكلة التي يواجهها العميل..." 
-                  />
-               </div>
-               
-               <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">ملاحظات إضافية</label>
-                  <input 
-                    className="w-full border border-slate-200 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 text-sm font-bold" 
-                    value={newCust.notes} 
-                    onChange={e=>setNewCust({...newCust, notes:e.target.value})} 
-                    placeholder="أي تفاصيل أخرى (العنوان، ميعاد الزيارة...)" 
-                  />
-               </div>
-
-               <div className="flex gap-3 pt-4 border-t">
-                  <button 
-                    type="submit" 
-                    className="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 shadow-md transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Save size={18}/> حفظ البيانات
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={()=>setShowAddModal(false)} 
-                    className="px-6 bg-slate-100 text-slate-600 py-3.5 rounded-xl font-bold hover:bg-slate-200 transition-colors"
-                  >
-                    إلغاء
-                  </button>
-               </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      <div className="p-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50">
-         <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
-           <Contact className="text-indigo-600" size={20}/> سجل العملاء والصيانة
-         </h2>
-         <div className="flex gap-2 w-full sm:w-auto">
-             <div className="relative flex-1 sm:w-64">
-                 <Search className="absolute right-3 top-2.5 text-slate-400" size={16}/>
-                 <input 
-                   className="w-full border border-slate-200 py-2 pr-9 pl-3 rounded-lg outline-none text-xs font-bold focus:border-indigo-500" 
-                   placeholder="بحث بالسيرفر (بالاسم أو الهاتف)..." 
-                   value={search} 
-                   onChange={e=>setSearch(e.target.value)} 
-                 />
-             </div>
-             {loadingData && <Loader2 className="animate-spin text-indigo-500 mt-2 sm:mt-0" size={16}/>}
-             <button 
-               onClick={()=>setShowAddModal(true)} 
-               className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-sm whitespace-nowrap"
-             >
-                <Plus size={14}/> إضافة عميل
-             </button>
-         </div>
-      </div>
-      <div className="overflow-x-auto max-h-[70vh] custom-scrollbar">
-         <table className="w-full text-right text-sm">
-            <thead className="bg-white border-b text-slate-500 font-bold text-[11px] uppercase sticky top-0">
-               <tr>
-                  <th className="p-4">العميل</th>
-                  <th className="p-4">المنتج والموديل</th>
-                  <th className="p-4">المشكلة / الملاحظات</th>
-                  <th className="p-4 text-center">التاريخ</th>
-                  <th className="p-4 text-center">إدارة</th>
-               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50 font-medium text-xs">
-               {customers.length === 0 && !loadingData ? 
-                 <tr><td colSpan="5" className="p-10 text-center text-slate-400 font-bold">لا توجد سجلات للعملاء</td></tr> : 
-                 customers.map((c) => (
-                   <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                     <td className="p-4">
-                        <p className="font-bold text-slate-800 text-sm mb-1">{c.name}</p>
-                        <p className="font-mono text-slate-500 flex items-center gap-1" dir="ltr">
-                          <Phone size={12}/> {c.phone}
-                        </p>
-                     </td>
-                     <td className="p-4">
-                        {c.productCategory ? (
-                           <>
-                             <span className="inline-block bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-[10px] font-black mb-1">{c.productCategory}</span>
-                             <p className="text-slate-600 font-bold text-[11px]">{c.productModel || 'غير محدد'}</p>
-                           </>
-                        ) : <span className="text-slate-400">-</span>}
-                     </td>
-                     <td className="p-4 max-w-xs">
-                        <p className="text-rose-600 font-bold text-[11px] truncate mb-1">{c.issue || 'لا يوجد عطل مسجل'}</p>
-                        <p className="text-slate-500 text-[10px] truncate">{c.notes}</p>
-                     </td>
-                     <td className="p-4 text-center text-slate-500 text-[10px] font-bold">{formatDate(c.createdAt)}</td>
-                     <td className="p-4 text-center">
-                        <button 
-                          onClick={() => setSelectedCustomer(c)} 
-                          className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-indigo-100 transition-colors border border-indigo-100"
-                        >
-                          عرض الملف
-                        </button>
-                     </td>
-                   </tr>
-                 ))
-               }
-            </tbody>
-         </table>
-         {hasMore && !loadingData && customers.length >= 30 && (
-             <div className="p-4 text-center bg-slate-50 border-t border-slate-100">
-                <button 
-                  onClick={() => loadCustomers(true)} 
-                  className="text-indigo-600 font-bold text-xs hover:underline flex items-center justify-center gap-1 mx-auto"
-                >
-                   تحميل المزيد <ChevronDown size={14}/>
-                </button>
-             </div>
-         )}
-      </div>
-    </div>
-  );
-}
-
-// --- ReportsManager (No changes needed) ---
+/* ==========================================================================
+   📦 11. REPORTS MANAGER
+   ========================================================================== */
 function ReportsManager() {
   const [transactions, setTransactions] = useState([]);
   const [lastDoc, setLastDoc] = useState(null);
@@ -1938,7 +2337,9 @@ function ReportsManager() {
   );
 }
 
-// --- SettingsManager (Fixed - Added getDoc import) ---
+/* ==========================================================================
+   📦 12. SETTINGS MANAGER
+   ========================================================================== */
 function SettingsManager({ systemSettings, notify, setGlobalLoading }) {
   const [settings, setSettings] = useState(systemSettings);
   const [newFee, setNewFee] = useState({ label: '', value: 0 });
@@ -1999,12 +2400,11 @@ function SettingsManager({ systemSettings, notify, setGlobalLoading }) {
       setSettings({...settings, productCategories: cats});
   };
 
-  // ----- Backup & Restore Functions -----
   const handleExportSystem = async () => {
       if(!window.confirm("سيتم تصدير جميع بيانات النظام في ملف واحد. هل تريد المتابعة؟")) return;
       setGlobalLoading(true);
       try {
-          const collectionsToBackup = ['inventory', 'transactions', 'customers', 'employees', 'warehouses', 'serial_registry'];
+          const collectionsToBackup = ['inventory', 'transactions', 'customers', 'employees', 'warehouses', 'serial_registry', 'transfers', 'activity_logs'];
           const backupData = {};
           
           const settingsSnap = await getDoc(getDocRef('settings', 'general'));
@@ -2048,7 +2448,7 @@ function SettingsManager({ systemSettings, notify, setGlobalLoading }) {
                   await setDoc(getDocRef('settings', 'general'), reviveTimestamps(backupData.settings.general));
               }
 
-              const collectionsToRestore = ['inventory', 'transactions', 'customers', 'employees', 'warehouses', 'serial_registry'];
+              const collectionsToRestore = ['inventory', 'transactions', 'customers', 'employees', 'warehouses', 'serial_registry', 'transfers', 'activity_logs'];
               
               for (const coll of collectionsToRestore) {
                   if (backupData[coll] && Array.isArray(backupData[coll])) {
@@ -2356,12 +2756,14 @@ function SettingsManager({ systemSettings, notify, setGlobalLoading }) {
   );
 }
 
-// --- UserManagement (Fixed) ---
-function UserManagement({ appUser, warehouses, notify, setGlobalLoading }) {
+/* ==========================================================================
+   📦 13. USER MANAGEMENT
+   ========================================================================== */
+function UserManagement({ appUser, warehouses, notify, setGlobalLoading, onViewProfile }) {
   const [usersList, setUsersList] = useState([]);
   const [editingUser, setEditingUser] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newUser, setNewUser] = useState({ name: '', email: '', pass: '', role: 'user', assignedWarehouseId: 'main' });
+  const [newUser, setNewUser] = useState({ name: '', email: '', phone: '', pass: '', role: 'user', assignedWarehouseId: 'main' });
 
   useEffect(() => {
     if (appUser?.role !== 'admin') return;
@@ -2375,12 +2777,15 @@ function UserManagement({ appUser, warehouses, notify, setGlobalLoading }) {
      setGlobalLoading(true);
      try {
         const dataToUpdate = {
+            name: editingUser.name,
+            phone: editingUser.phone || '',
             role: editingUser.role,
             assignedWarehouseId: editingUser.assignedWarehouseId,
             isDisabled: editingUser.isDisabled || false,
             permissions: editingUser.permissions || {}
         };
         await updateDoc(getDocRef('employees', editingUser.id), dataToUpdate);
+        logUserActivity(appUser, 'تعديل بيانات موظف', `تعديل صلاحيات أو بيانات الموظف: ${editingUser.name}`);
         notify("تم حفظ الإعدادات", "success"); 
         setEditingUser(null);
      } catch(e) { 
@@ -2422,6 +2827,7 @@ function UserManagement({ appUser, warehouses, notify, setGlobalLoading }) {
             email: emailToSave,
             pass: newUser.pass,
             name: newUser.name,
+            phone: newUser.phone || '',
             role: newUser.role,
             assignedWarehouseId: newUser.assignedWarehouseId,
             permissions: defaultPermissions,
@@ -2429,9 +2835,10 @@ function UserManagement({ appUser, warehouses, notify, setGlobalLoading }) {
             createdAt: serverTimestamp()
         });
         
+        logUserActivity(appUser, 'إضافة موظف', `إنشاء حساب للموظف: ${newUser.name}`);
         notify("تم إضافة المستخدم بنجاح", "success");
         setShowAddModal(false);
-        setNewUser({ name: '', email: '', pass: '', role: 'user', assignedWarehouseId: 'main' });
+        setNewUser({ name: '', email: '', phone: '', pass: '', role: 'user', assignedWarehouseId: 'main' });
      } catch (err) {
         console.error(err);
         notify("حدث خطأ أثناء إضافة المستخدم", "error");
@@ -2445,6 +2852,7 @@ function UserManagement({ appUser, warehouses, notify, setGlobalLoading }) {
      setGlobalLoading(true);
      try {
         await deleteDoc(getDocRef('employees', id));
+        logUserActivity(appUser, 'حذف موظف', `تم حذف حساب الموظف: ${name}`);
         notify("تم حذف المستخدم بنجاح", "success");
      } catch (e) {
         console.error(e);
@@ -2459,9 +2867,30 @@ function UserManagement({ appUser, warehouses, notify, setGlobalLoading }) {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
             <h3 className="font-black text-xl mb-6 border-b pb-4 flex items-center gap-2">
-              <UserCog className="text-indigo-600"/> إعدادات الموظف ({editingUser.name || editingUser.email})
+              <UserCog className="text-indigo-600"/> إعدادات الموظف ({editingUser.email})
             </h3>
             <form onSubmit={handleUpdateUser} className="space-y-6">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                     <label className="block text-xs font-bold text-slate-500 mb-1">اسم الموظف</label>
+                     <input 
+                       required 
+                       className="w-full border border-slate-200 p-3 rounded-xl font-bold bg-slate-50 outline-none focus:border-indigo-500" 
+                       value={editingUser.name} 
+                       onChange={e=>setEditingUser({...editingUser, name:e.target.value})} 
+                     />
+                  </div>
+                  <div>
+                     <label className="block text-xs font-bold text-slate-500 mb-1">رقم الهاتف</label>
+                     <input 
+                       className="w-full border border-slate-200 p-3 rounded-xl font-bold font-mono bg-slate-50 outline-none focus:border-indigo-500" 
+                       value={editingUser.phone || ''} 
+                       onChange={e=>setEditingUser({...editingUser, phone:e.target.value})} 
+                       dir="ltr" 
+                     />
+                  </div>
+               </div>
+               
                <div className="grid grid-cols-2 gap-4 bg-slate-50 p-6 rounded-2xl border border-slate-100">
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1">الرتبة</label>
@@ -2518,7 +2947,7 @@ function UserManagement({ appUser, warehouses, notify, setGlobalLoading }) {
                 </div>
 
                <div className="flex gap-3 pt-4">
-                 <button type="submit" className="flex-1 bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-black transition-colors">حفظ الاعتمادات</button>
+                 <button type="submit" className="flex-1 bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-black transition-colors">حفظ التعديلات</button>
                  <button type="button" onClick={()=>setEditingUser(null)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-200 transition-colors">إلغاء</button>
                </div>
             </form>
@@ -2542,6 +2971,16 @@ function UserManagement({ appUser, warehouses, notify, setGlobalLoading }) {
                        value={newUser.name} 
                        onChange={e=>setNewUser({...newUser, name:e.target.value})} 
                        placeholder="الاسم بالكامل" 
+                     />
+                  </div>
+                  <div>
+                     <label className="block text-xs font-bold text-slate-500 mb-1">رقم الهاتف</label>
+                     <input 
+                       className="w-full border border-slate-200 p-3 rounded-xl font-bold font-mono bg-slate-50 outline-none focus:border-indigo-500" 
+                       value={newUser.phone} 
+                       onChange={e=>setNewUser({...newUser, phone:e.target.value})} 
+                       placeholder="01XXXXXXXXX" 
+                       dir="ltr" 
                      />
                   </div>
                   <div>
@@ -2573,8 +3012,7 @@ function UserManagement({ appUser, warehouses, notify, setGlobalLoading }) {
                     <select 
                       className="w-full border p-3 rounded-xl font-bold bg-slate-50 outline-none focus:border-indigo-500" 
                       value={newUser.role} 
-                      onChange={e=>setNewUser({...newUser, role:e.target.value})}
-                    >
+                      onChange={e=>setNewUser({...newUser, role:e.target.value})}>
                        <option value="user">موظف مبيعات</option>
                        <option value="admin">مدير نظام</option>
                     </select>
@@ -2584,8 +3022,7 @@ function UserManagement({ appUser, warehouses, notify, setGlobalLoading }) {
                     <select 
                       className="w-full border p-3 rounded-xl font-bold bg-slate-50 outline-none focus:border-indigo-500" 
                       value={newUser.assignedWarehouseId} 
-                      onChange={e=>setNewUser({...newUser, assignedWarehouseId:e.target.value})}
-                    >
+                      onChange={e=>setNewUser({...newUser, assignedWarehouseId:e.target.value})}>
                        {warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
                     </select>
                   </div>
@@ -2651,9 +3088,16 @@ function UserManagement({ appUser, warehouses, notify, setGlobalLoading }) {
                         </td>
                         <td className="p-5 text-center flex justify-center gap-2">
                             <button 
+                              onClick={() => onViewProfile(u)} 
+                              className="p-2 bg-sky-50 text-sky-600 rounded-lg hover:bg-sky-600 hover:text-white transition-colors shadow-sm" 
+                              title="عرض نشاط الموظف"
+                            >
+                              <Eye size={16}/>
+                            </button>
+                            <button 
                               onClick={()=>setEditingUser({...u, permissions: u.permissions || {}})} 
                               className="p-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-indigo-600 hover:text-white transition-colors shadow-sm" 
-                              title="إدارة الصلاحيات"
+                              title="إدارة الصلاحيات والبيانات"
                             >
                               <Settings size={16}/>
                             </button>
@@ -2676,7 +3120,9 @@ function UserManagement({ appUser, warehouses, notify, setGlobalLoading }) {
   );
 }
 
-// --- WarehouseManager (Fixed) ---
+/* ==========================================================================
+   📦 14. WAREHOUSE MANAGER
+   ========================================================================== */
 function WarehouseManager({ warehouses, notify, setGlobalLoading }) {
    const [name, setName] = useState('');
    
@@ -2754,71 +3200,94 @@ function WarehouseManager({ warehouses, notify, setGlobalLoading }) {
    );
 }
 
-// --- UserProfileView (No changes needed) ---
-function UserProfileView({ appUser, notify, setGlobalLoading }) {
-  const [profile, setProfile] = useState({ name: appUser?.name || '', phone: appUser?.phone || '' });
-  
-  useEffect(() => {
-    if (appUser) {
-        setProfile({ name: appUser.name || '', phone: appUser.phone || '' });
-    }
-  }, [appUser]);
+/* ==========================================================================
+   📦 15. EMPLOYEE PROFILE VIEW
+   ========================================================================== */
+function EmployeeProfileView({ userToView, warehouseMap }) {
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleSave = async (e) => {
-    e.preventDefault(); 
-    setGlobalLoading(true);
-    try { 
-      await updateDoc(getDocRef('employees', appUser.id), { name: profile.name, phone: profile.phone }); 
-      notify("تم تحديث الملف الشخصي", "success"); 
-    } catch(e) { 
-      console.error(e);
-      notify("فشل الحفظ", "error"); 
-    }
-    setGlobalLoading(false);
-  };
+  useEffect(() => {
+    if (!userToView) return;
+    setLoading(true);
+    const q = query(
+        getCollRef('activity_logs'), 
+        where('userId', '==', userToView.id), 
+        orderBy('timestamp', 'desc'), 
+        limit(50)
+    );
+    
+    const unsub = onSnapshot(q, snap => {
+        setActivities(snap.docs.map(d => ({id: d.id, ...d.data()})));
+        setLoading(false);
+    }, (error) => {
+        console.error(error);
+        setLoading(false);
+    });
+
+    return () => unsub();
+  }, [userToView]);
+
+  if (!userToView) return null;
 
   return (
-    <div className="max-w-xl mx-auto bg-white p-8 rounded-3xl shadow-sm border border-slate-100 animate-in fade-in text-right" dir="rtl">
-       <div className="flex items-center gap-6 mb-8 border-b pb-6">
-          <div className="w-16 h-16 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center font-black text-2xl text-white shadow-lg">
-            {profile.name?.charAt(0) || appUser?.email?.charAt(0) || '?'}
+    <div className="max-w-4xl mx-auto space-y-6 text-right animate-in fade-in" dir="rtl">
+       <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col md:flex-row items-center md:items-start gap-6 relative overflow-hidden">
+          <div className="w-24 h-24 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-3xl flex items-center justify-center font-black text-4xl text-white shadow-xl shadow-indigo-200 shrink-0">
+            {userToView.name?.charAt(0) || userToView.email?.charAt(0) || '?'}
           </div>
-          <div>
-            <h2 className="text-2xl font-black text-slate-800">إعدادات الحساب</h2>
-            <p className="text-slate-500 font-mono text-xs mt-1" dir="ltr">{appUser?.email}</p>
+          <div className="flex-1 text-center md:text-right">
+            <h2 className="text-3xl font-black text-slate-800 mb-2">{userToView.name}</h2>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 text-sm font-bold">
+               <span className="text-slate-500 font-mono" dir="ltr">{userToView.email}</span>
+               {userToView.phone && <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg">{userToView.phone}</span>}
+               <span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg">الفرع: {warehouseMap[userToView.assignedWarehouseId] || 'الرئيسي'}</span>
+               <span className={`px-3 py-1 rounded-lg ${userToView.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                  {userToView.role === 'admin' ? 'مدير نظام' : 'موظف'}
+               </span>
+            </div>
+            <p className="mt-4 text-xs text-rose-500 font-bold bg-rose-50 p-3 rounded-xl border border-rose-100 w-fit mx-auto md:mx-0">
+                لطلب تعديل بياناتك الشخصية (الاسم، كلمة المرور، أو الفرع)، يرجى الرجوع لمدير النظام.
+            </p>
           </div>
        </div>
-       <form onSubmit={handleSave} className="space-y-6 font-bold">
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">الاسم الظاهر</label>
-            <input 
-              className="w-full border border-slate-200 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50" 
-              value={profile.name} 
-              onChange={e=>setProfile({...profile, name:e.target.value})} 
-            />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">رقم الجوال</label>
-            <input 
-              className="w-full border border-slate-200 p-3 rounded-xl font-mono focus:border-indigo-500 outline-none bg-slate-50" 
-              placeholder="01XXXXXXXXX" 
-              value={profile.phone} 
-              onChange={e=>setProfile({...profile, phone:e.target.value})} 
-            />
-          </div>
-          <button 
-            type="submit" 
-            className="w-full bg-slate-900 text-white py-4 rounded-xl flex items-center justify-center gap-2 shadow-md hover:bg-black transition-colors mt-4"
-          >
-            <Save size={18}/> حفظ التعديلات
-          </button>
-       </form>
+
+       <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+           <h3 className="font-black text-xl text-slate-800 flex items-center gap-2 mb-8 border-b pb-4">
+              <Activity className="text-indigo-600" size={24}/> سجل نشاطات الموظف (آخر 50 حركة)
+           </h3>
+           
+           {loading ? (
+               <div className="flex justify-center p-10"><Loader2 className="animate-spin text-indigo-500" size={32}/></div>
+           ) : activities.length === 0 ? (
+               <div className="text-center p-12 text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-2xl">
+                   لا توجد نشاطات مسجلة لهذا الموظف حتى الآن.
+               </div>
+           ) : (
+               <div className="relative border-r-2 border-indigo-100 pr-6 ml-2 space-y-6">
+                   {activities.map((act) => (
+                       <div key={act.id} className="relative">
+                           <span className="absolute -right-[33px] top-1.5 w-4 h-4 bg-white border-2 border-indigo-400 rounded-full"></span>
+                           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 hover:border-indigo-200 transition-colors">
+                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                                   <span className="font-black text-sm text-indigo-900">{act.action}</span>
+                                   <span className="text-[10px] font-bold text-slate-400 bg-white px-2 py-1 rounded-md border border-slate-200 w-fit">
+                                       {formatDate(act.timestamp)}
+                                   </span>
+                               </div>
+                               <p className="text-xs font-bold text-slate-600 leading-relaxed">{act.details}</p>
+                           </div>
+                       </div>
+                   ))}
+               </div>
+           )}
+       </div>
     </div>
   );
 }
 
 /* ==========================================================================
-   🚀 7. MAIN APP ROUTER & WRAPPER
+   🚀 16. MAIN APP ROUTER & WRAPPER
    ========================================================================== */
 
 export default function App() {
@@ -2826,6 +3295,8 @@ export default function App() {
   const [fbReady, setFbReady] = useState(false);
   
   const [currentView, setCurrentView] = useState('dashboard');
+  const [viewedUser, setViewedUser] = useState(null);
+
   const [notifications, setNotifications] = useState([]);
   const [globalLoading, setGlobalLoading] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -2867,11 +3338,7 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
        try {
-           if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-               await signInWithCustomToken(auth, __initial_auth_token);
-           } else {
-               await signInAnonymously(auth);
-           }
+           await signInAnonymously(auth);
        } catch(e) {
            console.error("Firebase Auth Initialization Failed", e);
        } finally {
@@ -2915,6 +3382,12 @@ export default function App() {
   const handleLogout = () => {
      setAppUser(null);
      setCurrentView('dashboard');
+  };
+
+  const openProfileView = (user) => {
+      setViewedUser(user);
+      setCurrentView('user_profile');
+      setIsMobileOpen(false);
   };
 
   if (!appUser) {
@@ -2979,6 +3452,7 @@ export default function App() {
              {[
                { id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, permission: 'viewDashboard' },
                { id: 'inventory', label: 'إدارة المخزون', icon: Package, permission: 'viewInventory' },
+               { id: 'transfers', label: 'التحويلات المخزنية', icon: ArrowRightLeft, permission: 'viewInventory' },
                { id: 'transactions', label: 'نقطة البيع POS', icon: Receipt, permission: 'viewPOS' },
                { id: 'customers', label: 'سجل العملاء', icon: Users, permission: 'viewCustomers' },
                { id: 'reports', label: 'التقارير والمبيعات', icon: History, permission: 'viewReports' }
@@ -3018,15 +3492,15 @@ export default function App() {
           </nav>
           <div className="p-4 border-t border-slate-800 bg-slate-900/50">
              <button 
-               onClick={() => {setCurrentView('profile'); setIsMobileOpen(false);}} 
-               className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 transition-colors mb-2 text-right"
+               onClick={() => openProfileView(appUser)} 
+               className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 transition-colors mb-2 text-right group"
              >
                <div className="w-8 h-8 rounded-md bg-indigo-500 flex items-center justify-center font-black text-white text-xs">
                  {appUser.name?.charAt(0) || appUser.email?.charAt(0)}
                </div>
                <div className="flex-1 overflow-hidden">
                  <p className="text-xs font-bold text-white truncate">{appUser.name || appUser.email}</p>
-                 <p className="text-[9px] text-slate-400 truncate uppercase">{appUser.role === 'admin' ? 'مدير' : 'موظف'}</p>
+                 <p className="text-[9px] text-slate-400 truncate uppercase group-hover:text-indigo-300 transition-colors">حسابي ونشاطاتي</p>
                </div>
             </button>
             <button 
@@ -3058,13 +3532,14 @@ export default function App() {
            <div className="max-w-6xl mx-auto h-full pb-10 print:pb-0">
               {currentView === 'dashboard' && <DashboardView appUser={appUser} />}
               {currentView === 'inventory' && <InventoryManager appUser={appUser} warehouses={warehouses} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} />}
+              {currentView === 'transfers' && <TransferManager appUser={appUser} warehouseMap={warehouseMap} notify={notify} setGlobalLoading={setGlobalLoading} />}
               {currentView === 'transactions' && <POSManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} />}
               {currentView === 'customers' && <CustomerManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} />}
               {currentView === 'reports' && <ReportsManager />}
               {currentView === 'settings' && appUser.role === 'admin' && <SettingsManager systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} />}
               {currentView === 'warehouses' && appUser.role === 'admin' && <WarehouseManager warehouses={warehouses} notify={notify} setGlobalLoading={setGlobalLoading} />}
-              {currentView === 'users' && appUser.role === 'admin' && <UserManagement appUser={appUser} warehouses={warehouses} notify={notify} setGlobalLoading={setGlobalLoading} />}
-              {currentView === 'profile' && <UserProfileView appUser={appUser} notify={notify} setGlobalLoading={setGlobalLoading} />}
+              {currentView === 'users' && appUser.role === 'admin' && <UserManagement appUser={appUser} warehouses={warehouses} notify={notify} setGlobalLoading={setGlobalLoading} onViewProfile={openProfileView} />}
+              {currentView === 'user_profile' && <EmployeeProfileView userToView={viewedUser} warehouseMap={warehouseMap} />}
            </div>
         </main>
       </div>
