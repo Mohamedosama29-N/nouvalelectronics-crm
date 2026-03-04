@@ -5633,8 +5633,12 @@ export default function App() {
     </div>
   );
 }
-import { seedDatabase } from "./utils/seedDatabase";
+// في أول App.jsx بعد الاستيرادات
+import { seedDatabase } from "./scripts/seedDatabase";
 
+// في useEffect بعد ما يتأكد أن المستخدم دخل
 useEffect(() => {
-  seedDatabase();
-}, []);
+  if (appUser) {
+    seedDatabase(); // شغلها مرة واحدة
+  }
+}, [appUser]);
