@@ -4893,7 +4893,7 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
 }
 
 // ==========================================================================
-// ⚙️ صفحة الإعدادات
+// ⚙️ صفحة الإعدادات المركزية
 // ==========================================================================
 function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading }) {
   const [activeTab, setActiveTab] = useState('general');
@@ -4902,12 +4902,13 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
   const handleSave = async () => {
     setGlobalLoading(true);
     try {
-      await setDoc(doc(db, 'settings', 'general'), settings, { merge: true });
+      // استخدام المسار الصحيح مع artifacts
+      await setDoc(doc(db, 'artifacts', 'nouval-system', 'public', 'data', 'settings', 'general'), settings, { merge: true });
       setSettings(settings);
       notify("تم حفظ الإعدادات بنجاح", "success");
     } catch (error) {
       console.error("Error saving settings:", error);
-      notify("حدث خطأ في حفظ الإعدادات", "error");
+      notify("حدث خطأ في حفظ الإعدادات: " + error.message, "error");
     }
     setGlobalLoading(false);
   };
@@ -4924,6 +4925,12 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
     setLocalSettings({...settings, installationFees: newFees});
   };
 
+  const addTechnician = () => {
+    const newTechs = [...(settings.technicians || [])];
+    newTechs.push('');
+    setLocalSettings({...settings, technicians: newTechs});
+  };
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden text-right" dir="rtl">
       <div className="p-6 border-b bg-slate-50">
@@ -4932,34 +4939,40 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
         </h2>
       </div>
 
-      <div className="flex border-b bg-white">
+      <div className="flex border-b bg-white overflow-x-auto">
         <button 
           onClick={() => setActiveTab('general')} 
-          className={`px-6 py-4 font-black text-sm ${activeTab === 'general' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500'}`}
+          className={`px-6 py-4 font-black text-sm whitespace-nowrap ${activeTab === 'general' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
         >
           عام
         </button>
         <button 
           onClick={() => setActiveTab('categories')} 
-          className={`px-6 py-4 font-black text-sm ${activeTab === 'categories' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500'}`}
+          className={`px-6 py-4 font-black text-sm whitespace-nowrap ${activeTab === 'categories' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
         >
           التصنيفات
         </button>
         <button 
           onClick={() => setActiveTab('fees')} 
-          className={`px-6 py-4 font-black text-sm ${activeTab === 'fees' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500'}`}
+          className={`px-6 py-4 font-black text-sm whitespace-nowrap ${activeTab === 'fees' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
         >
           الرسوم
         </button>
         <button 
+          onClick={() => setActiveTab('technicians')} 
+          className={`px-6 py-4 font-black text-sm whitespace-nowrap ${activeTab === 'technicians' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
+        >
+          الفنيين
+        </button>
+        <button 
           onClick={() => setActiveTab('invoice')} 
-          className={`px-6 py-4 font-black text-sm ${activeTab === 'invoice' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500'}`}
+          className={`px-6 py-4 font-black text-sm whitespace-nowrap ${activeTab === 'invoice' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
         >
           الفاتورة
         </button>
       </div>
 
-      <div className="p-6">
+      <div className="p-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
         {activeTab === 'general' && (
           <div className="space-y-4 max-w-2xl">
             <div>
@@ -5089,6 +5102,40 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
               className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-600 font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
             >
               <Plus size={18}/> إضافة رسم جديد
+            </button>
+          </div>
+        )}
+
+        {activeTab === 'technicians' && (
+          <div className="space-y-4 max-w-md">
+            {settings.technicians?.map((tech, idx) => (
+              <div key={idx} className="flex gap-3">
+                <input 
+                  className="flex-1 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
+                  placeholder="اسم الفني"
+                  value={tech}
+                  onChange={e => {
+                    const newTechs = [...settings.technicians];
+                    newTechs[idx] = e.target.value;
+                    setLocalSettings({...settings, technicians: newTechs});
+                  }}
+                />
+                <button 
+                  onClick={() => {
+                    const newTechs = settings.technicians.filter((_, i) => i !== idx);
+                    setLocalSettings({...settings, technicians: newTechs});
+                  }}
+                  className="px-3 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100"
+                >
+                  <Trash2 size={18}/>
+                </button>
+              </div>
+            ))}
+            <button 
+              onClick={addTechnician}
+              className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-600 font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
+            >
+              <Plus size={18}/> إضافة فني جديد
             </button>
           </div>
         )}
