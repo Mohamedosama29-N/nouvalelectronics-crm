@@ -5290,23 +5290,369 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
 }
 
 // ==========================================================================
-// ⚙️ صفحة الإعدادات المبسطة (للتجربة)
+// ⚙️ صفحة الإعدادات الكاملة
 // ==========================================================================
 function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading }) {
+  const [activeTab, setActiveTab] = useState('general');
+  const [settings, setLocalSettings] = useState(systemSettings);
+  
+  const handleSave = async () => {
+    setGlobalLoading(true);
+    try {
+      await setDoc(doc(db, 'artifacts', 'nouval-system', 'public', 'data', 'settings', 'general'), settings, { merge: true });
+      setSettings(settings);
+      notify("تم حفظ الإعدادات بنجاح", "success");
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      notify("حدث خطأ في حفظ الإعدادات: " + error.message, "error");
+    }
+    setGlobalLoading(false);
+  };
+
+  const addCategory = () => {
+    const newCategories = [...(settings.productCategories || [])];
+    newCategories.push({ name: '', models: [] });
+    setLocalSettings({...settings, productCategories: newCategories});
+  };
+
+  const addFee = () => {
+    const newFees = [...(settings.installationFees || [])];
+    newFees.push({ id: Date.now().toString(), label: '', value: 0 });
+    setLocalSettings({...settings, installationFees: newFees});
+  };
+
+  const addTechnician = () => {
+    const newTechs = [...(settings.technicians || [])];
+    newTechs.push('');
+    setLocalSettings({...settings, technicians: newTechs});
+  };
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden text-right p-8" dir="rtl">
-      <h2 className="text-2xl font-black text-slate-800 mb-4">✅ الإعدادات شغالة!</h2>
-      <p className="text-slate-500">اسم النظام: {systemSettings.systemName}</p>
-      <button 
-        onClick={() => notify("الزر شغال", "success")}
-        className="mt-4 bg-indigo-600 text-white px-4 py-2 rounded-lg"
-      >
-        اختبار
-      </button>
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden text-right" dir="rtl">
+      <div className="p-6 border-b bg-slate-50">
+        <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+          <Settings className="text-indigo-600" size={24}/> الإعدادات المركزية
+        </h2>
+      </div>
+
+      <div className="flex border-b bg-white overflow-x-auto">
+        <button 
+          onClick={() => setActiveTab('general')} 
+          className={`px-6 py-4 font-black text-sm whitespace-nowrap ${activeTab === 'general' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
+        >
+          عام
+        </button>
+        <button 
+          onClick={() => setActiveTab('categories')} 
+          className={`px-6 py-4 font-black text-sm whitespace-nowrap ${activeTab === 'categories' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
+        >
+          التصنيفات
+        </button>
+        <button 
+          onClick={() => setActiveTab('fees')} 
+          className={`px-6 py-4 font-black text-sm whitespace-nowrap ${activeTab === 'fees' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
+        >
+          الرسوم
+        </button>
+        <button 
+          onClick={() => setActiveTab('technicians')} 
+          className={`px-6 py-4 font-black text-sm whitespace-nowrap ${activeTab === 'technicians' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
+        >
+          الفنيين
+        </button>
+        <button 
+          onClick={() => setActiveTab('invoice')} 
+          className={`px-6 py-4 font-black text-sm whitespace-nowrap ${activeTab === 'invoice' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}
+        >
+          الفاتورة
+        </button>
+      </div>
+
+      <div className="p-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+        {activeTab === 'general' && (
+          <div className="space-y-4 max-w-2xl">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">اسم النظام</label>
+              <input 
+                className="w-full border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
+                value={settings.systemName || ''}
+                onChange={e => setLocalSettings({...settings, systemName: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">اسم المتجر</label>
+              <input 
+                className="w-full border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
+                value={settings.storeName || ''}
+                onChange={e => setLocalSettings({...settings, storeName: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">نسبة الضريبة (%)</label>
+              <input 
+                type="number"
+                className="w-full border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
+                value={settings.taxRate || 14}
+                onChange={e => setLocalSettings({...settings, taxRate: Number(e.target.value)})}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">تذييل الفاتورة</label>
+              <textarea 
+                rows="2"
+                className="w-full border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
+                value={settings.footerText || ''}
+                onChange={e => setLocalSettings({...settings, footerText: e.target.value})}
+              />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'categories' && (
+          <div className="space-y-6">
+            {settings.productCategories?.map((cat, idx) => (
+              <div key={idx} className="border border-slate-200 rounded-xl p-4 bg-slate-50">
+                <div className="flex gap-3 mb-3">
+                  <input 
+                    className="flex-1 border border-slate-200 p-2 rounded-lg font-bold outline-none focus:border-indigo-500"
+                    placeholder="اسم التصنيف (مثال: تكييف)"
+                    value={cat.name}
+                    onChange={e => {
+                      const newCats = [...settings.productCategories];
+                      newCats[idx].name = e.target.value;
+                      setLocalSettings({...settings, productCategories: newCats});
+                    }}
+                  />
+                  <button 
+                    onClick={() => {
+                      const newCats = settings.productCategories.filter((_, i) => i !== idx);
+                      setLocalSettings({...settings, productCategories: newCats});
+                    }}
+                    className="px-3 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100"
+                  >
+                    <Trash2 size={18}/>
+                  </button>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">الموديلات (افصل بينها بفاصلة)</label>
+                  <input 
+                    className="w-full border border-slate-200 p-2 rounded-lg font-bold outline-none focus:border-indigo-500"
+                    placeholder="مثال: 1.5 حصان, 2.25 حصان, انفرتر"
+                    value={cat.models?.join(', ') || ''}
+                    onChange={e => {
+                      const newCats = [...settings.productCategories];
+                      newCats[idx].models = e.target.value.split(',').map(m => m.trim()).filter(m => m);
+                      setLocalSettings({...settings, productCategories: newCats});
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+            <button 
+              onClick={addCategory}
+              className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-600 font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
+            >
+              <Plus size={18}/> إضافة تصنيف جديد
+            </button>
+          </div>
+        )}
+
+        {activeTab === 'fees' && (
+          <div className="space-y-4 max-w-md">
+            {settings.installationFees?.map((fee, idx) => (
+              <div key={fee.id} className="flex gap-3">
+                <input 
+                  className="flex-1 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
+                  placeholder="اسم الرسم (مثال: تركيب)"
+                  value={fee.label}
+                  onChange={e => {
+                    const newFees = [...settings.installationFees];
+                    newFees[idx].label = e.target.value;
+                    setLocalSettings({...settings, installationFees: newFees});
+                  }}
+                />
+                <input 
+                  type="number"
+                  className="w-24 border border-slate-200 p-3 rounded-xl font-bold text-center outline-none focus:border-indigo-500"
+                  placeholder="القيمة"
+                  value={fee.value}
+                  onChange={e => {
+                    const newFees = [...settings.installationFees];
+                    newFees[idx].value = Number(e.target.value);
+                    setLocalSettings({...settings, installationFees: newFees});
+                  }}
+                />
+                <button 
+                  onClick={() => {
+                    const newFees = settings.installationFees.filter((_, i) => i !== idx);
+                    setLocalSettings({...settings, installationFees: newFees});
+                  }}
+                  className="px-3 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100"
+                >
+                  <Trash2 size={18}/>
+                </button>
+              </div>
+            ))}
+            <button 
+              onClick={addFee}
+              className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-600 font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
+            >
+              <Plus size={18}/> إضافة رسم جديد
+            </button>
+          </div>
+        )}
+
+        {activeTab === 'technicians' && (
+          <div className="space-y-4 max-w-md">
+            {settings.technicians?.map((tech, idx) => (
+              <div key={idx} className="flex gap-3">
+                <input 
+                  className="flex-1 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
+                  placeholder="اسم الفني"
+                  value={tech}
+                  onChange={e => {
+                    const newTechs = [...settings.technicians];
+                    newTechs[idx] = e.target.value;
+                    setLocalSettings({...settings, technicians: newTechs});
+                  }}
+                />
+                <button 
+                  onClick={() => {
+                    const newTechs = settings.technicians.filter((_, i) => i !== idx);
+                    setLocalSettings({...settings, technicians: newTechs});
+                  }}
+                  className="px-3 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100"
+                >
+                  <Trash2 size={18}/>
+                </button>
+              </div>
+            ))}
+            <button 
+              onClick={addTechnician}
+              className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-600 font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
+            >
+              <Plus size={18}/> إضافة فني جديد
+            </button>
+          </div>
+        )}
+
+        {activeTab === 'invoice' && (
+          <div className="bg-white p-6 rounded-2xl border border-slate-100">
+            <h3 className="font-black text-lg mb-6 text-slate-800 flex items-center gap-2">
+              <PrinterIcon className="text-indigo-600" size={20}/> تخصيص شكل الفاتورة
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <h4 className="font-bold text-sm text-slate-600 border-b pb-2">عناصر الفاتورة</h4>
+                <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={settings.invoiceTemplate?.showLogo} onChange={e => setLocalSettings({
+                    ...settings, 
+                    invoiceTemplate: {...settings.invoiceTemplate, showLogo: e.target.checked}
+                  })} />
+                  <span className="text-xs font-bold">عرض الشعار</span>
+                </label>
+                <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={settings.invoiceTemplate?.showStoreName} onChange={e => setLocalSettings({
+                    ...settings, 
+                    invoiceTemplate: {...settings.invoiceTemplate, showStoreName: e.target.checked}
+                  })} />
+                  <span className="text-xs font-bold">عرض اسم المتجر</span>
+                </label>
+                <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={settings.invoiceTemplate?.showCustomerInfo} onChange={e => setLocalSettings({
+                    ...settings, 
+                    invoiceTemplate: {...settings.invoiceTemplate, showCustomerInfo: e.target.checked}
+                  })} />
+                  <span className="text-xs font-bold">عرض معلومات العميل</span>
+                </label>
+                <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={settings.invoiceTemplate?.showItems} onChange={e => setLocalSettings({
+                    ...settings, 
+                    invoiceTemplate: {...settings.invoiceTemplate, showItems: e.target.checked}
+                  })} />
+                  <span className="text-xs font-bold">عرض الأصناف</span>
+                </label>
+                <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={settings.invoiceTemplate?.showPrices} onChange={e => setLocalSettings({
+                    ...settings, 
+                    invoiceTemplate: {...settings.invoiceTemplate, showPrices: e.target.checked}
+                  })} />
+                  <span className="text-xs font-bold">عرض الأسعار</span>
+                </label>
+                <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={settings.invoiceTemplate?.showDiscount} onChange={e => setLocalSettings({
+                    ...settings, 
+                    invoiceTemplate: {...settings.invoiceTemplate, showDiscount: e.target.checked}
+                  })} />
+                  <span className="text-xs font-bold">عرض الخصم</span>
+                </label>
+                <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={settings.invoiceTemplate?.showTax} onChange={e => setLocalSettings({
+                    ...settings, 
+                    invoiceTemplate: {...settings.invoiceTemplate, showTax: e.target.checked}
+                  })} />
+                  <span className="text-xs font-bold">عرض الضريبة</span>
+                </label>
+                <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={settings.invoiceTemplate?.showFees} onChange={e => setLocalSettings({
+                    ...settings, 
+                    invoiceTemplate: {...settings.invoiceTemplate, showFees: e.target.checked}
+                  })} />
+                  <span className="text-xs font-bold">عرض الرسوم الإضافية</span>
+                </label>
+                <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={settings.invoiceTemplate?.showFooter} onChange={e => setLocalSettings({
+                    ...settings, 
+                    invoiceTemplate: {...settings.invoiceTemplate, showFooter: e.target.checked}
+                  })} />
+                  <span className="text-xs font-bold">عرض تذييل الفاتورة</span>
+                </label>
+              </div>
+              <div className="space-y-4">
+                <h4 className="font-bold text-sm text-slate-600 border-b pb-2">إعدادات الطباعة</h4>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">حجم الخط</label>
+                  <select className="w-full border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 text-sm bg-white" 
+                    value={settings.invoiceTemplate?.fontSize || 'normal'}
+                    onChange={e => setLocalSettings({
+                      ...settings, 
+                      invoiceTemplate: {...settings.invoiceTemplate, fontSize: e.target.value}
+                    })}>
+                    <option value="small">صغير</option>
+                    <option value="normal">عادي</option>
+                    <option value="large">كبير</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">حجم الورق</label>
+                  <select className="w-full border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 text-sm bg-white"
+                    value={settings.invoiceTemplate?.paperSize || '80mm'}
+                    onChange={e => setLocalSettings({
+                      ...settings, 
+                      invoiceTemplate: {...settings.invoiceTemplate, paperSize: e.target.value}
+                    })}>
+                    <option value="58mm">58 مم (فاتورة صغيرة)</option>
+                    <option value="80mm">80 مم (فاتورة عادية)</option>
+                    <option value="A4">A4</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-8 pt-6 border-t flex justify-end">
+          <button 
+            onClick={handleSave}
+            className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors flex items-center gap-2"
+          >
+            <Save size={18}/> حفظ الإعدادات
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
-
 // ==========================================================================
 // 🚀 المكون الرئيسي للتطبيق
 // ==========================================================================
@@ -5634,28 +5980,82 @@ export default function App() {
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar">
-           <div className="max-w-6xl mx-auto h-full pb-10 print:pb-0">
-              {currentView === 'dashboard' && <DashboardView appUser={appUser} warehouses={warehouses} onNavigateToInventory={handleNavigateToInventory} notify={notify} />}
-              {currentView === 'inventory' && <InventoryManager appUser={appUser} warehouses={warehouses} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} />}
-              {currentView === 'transfers' && <EnhancedTransferManager appUser={appUser} warehouseMap={warehouseMap} notify={notify} setGlobalLoading={setGlobalLoading} />}
-              {currentView === 'transactions' && <POSManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} />}
-              {currentView === 'customers' && <EnhancedCustomerManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} />}
-              {currentView === 'tickets' && <EnhancedTicketManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} onGenerateInvoice={handleGenerateInvoiceFromTicket} />}
-              {currentView === 'reports' && <ReportsManager notify={notify} />}
-              {currentView === 'lowstock' && <LowStockView lowStockItems={lowStockItems} appUser={appUser} warehouseMap={warehouseMap} />}
-              {currentView === 'settings' && appUser.role === 'admin' && 
-  <SettingsManager 
-    systemSettings={systemSettings}
-    setSettings={setSystemSettings}
-    notify={notify}
-    setGlobalLoading={setGlobalLoading}
-  />
-}
-              {currentView === 'warehouses' && appUser.role === 'admin' && <EnhancedWarehouseManager warehouses={warehouses} appUser={appUser} notify={notify} setGlobalLoading={setGlobalLoading} />}
-              {currentView === 'users' && appUser.role === 'admin' && <EnhancedUserManagement appUser={appUser} warehouses={warehouses} notify={notify} setGlobalLoading={setGlobalLoading} onViewProfile={openProfileView} />}
-              {currentView === 'user_profile' && <EmployeeProfileView userToView={viewedUser} warehouseMap={warehouseMap} />}
-           </div>
-        </main>
+  <div className="max-w-6xl mx-auto h-full pb-10 print:pb-0">
+    
+    {/* اختبار بسيط - هل currentView بتتغير؟ */}
+    <div className="bg-yellow-100 p-2 mb-4 text-center rounded-lg">
+      📍 Current View: {currentView} | User Role: {appUser?.role}
+    </div>
+
+    {currentView === 'dashboard' && (
+      <DashboardView appUser={appUser} warehouses={warehouses} onNavigateToInventory={handleNavigateToInventory} notify={notify} />
+    )}
+    
+    {currentView === 'inventory' && (
+      <InventoryManager appUser={appUser} warehouses={warehouses} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} />
+    )}
+    
+    {currentView === 'transfers' && (
+      <EnhancedTransferManager appUser={appUser} warehouseMap={warehouseMap} notify={notify} setGlobalLoading={setGlobalLoading} />
+    )}
+    
+    {currentView === 'transactions' && (
+      <POSManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} />
+    )}
+    
+    {currentView === 'customers' && (
+      <EnhancedCustomerManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} />
+    )}
+    
+    {currentView === 'tickets' && (
+      <EnhancedTicketManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} onGenerateInvoice={handleGenerateInvoiceFromTicket} />
+    )}
+    
+    {currentView === 'reports' && (
+      <ReportsManager notify={notify} />
+    )}
+    
+    {currentView === 'lowstock' && (
+      <LowStockView lowStockItems={lowStockItems} appUser={appUser} warehouseMap={warehouseMap} />
+    )}
+    
+    {/* ===== أهم جزء: صفحة الإعدادات ===== */}
+    {currentView === 'settings' && appUser?.role === 'admin' ? (
+      <div className="bg-white rounded-2xl shadow-lg border-2 border-green-500 p-8">
+        <h2 className="text-2xl font-black text-green-600 mb-4">✅ صفحة الإعدادات وصلت!</h2>
+        <p className="text-slate-600 mb-4">إذا كنت تشاهد هذه الرسالة، فهذا يعني أن الـ Router يعمل بشكل صحيح.</p>
+        <div className="bg-slate-50 p-4 rounded-lg">
+          <p className="font-bold">معلومات التشخيص:</p>
+          <p>Current View: {currentView}</p>
+          <p>User Role: {appUser?.role}</p>
+          <p>User Name: {appUser?.name}</p>
+        </div>
+        <button 
+          onClick={() => notify("الزر شغال!", "success")}
+          className="mt-4 bg-indigo-600 text-white px-4 py-2 rounded-lg"
+        >
+          اختبار Notification
+        </button>
+      </div>
+    ) : currentView === 'settings' && appUser?.role !== 'admin' ? (
+      <div className="bg-rose-50 p-8 rounded-lg text-center text-rose-600">
+        ⚠️ أنت لا تملك صلاحية الوصول لهذه الصفحة. دورك الحالي: {appUser?.role}
+      </div>
+    ) : null}
+    
+    {currentView === 'warehouses' && appUser.role === 'admin' && (
+      <EnhancedWarehouseManager warehouses={warehouses} appUser={appUser} notify={notify} setGlobalLoading={setGlobalLoading} />
+    )}
+    
+    {currentView === 'users' && appUser.role === 'admin' && (
+      <EnhancedUserManagement appUser={appUser} warehouses={warehouses} notify={notify} setGlobalLoading={setGlobalLoading} onViewProfile={openProfileView} />
+    )}
+    
+    {currentView === 'user_profile' && (
+      <EmployeeProfileView userToView={viewedUser} warehouseMap={warehouseMap} />
+    )}
+  </div>
+</main>
       </div>
     </div>
   );
