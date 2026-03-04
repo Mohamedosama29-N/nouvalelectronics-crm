@@ -5845,14 +5845,7 @@ export default function App() {
               {currentView === 'tickets' && <EnhancedTicketManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} onGenerateInvoice={handleGenerateInvoiceFromTicket} />}
               {currentView === 'reports' && <ReportsManager notify={notify} />}
               {currentView === 'lowstock' && <LowStockView lowStockItems={lowStockItems} appUser={appUser} warehouseMap={warehouseMap} />}
-              {currentView === 'settings' && appUser.role === 'admin' && 
-  <SettingsManager 
-    systemSettings={systemSettings}
-    setSettings={setSystemSettings}
-    notify={notify}
-    setGlobalLoading={setGlobalLoading}
-  />
-}
+              {currentView === 'settings' && appUser.role === 'admin' && <SettingsManager systemSettings={systemSettings} setSettings={setSystemSettings} notify={notify} setGlobalLoading={setGlobalLoading} />}
               {currentView === 'warehouses' && appUser.role === 'admin' && <EnhancedWarehouseManager warehouses={warehouses} appUser={appUser} notify={notify} setGlobalLoading={setGlobalLoading} />}
               {currentView === 'users' && appUser.role === 'admin' && <EnhancedUserManagement appUser={appUser} warehouses={warehouses} notify={notify} setGlobalLoading={setGlobalLoading} onViewProfile={openProfileView} />}
               {currentView === 'user_profile' && <EmployeeProfileView userToView={viewedUser} warehouseMap={warehouseMap} />}
