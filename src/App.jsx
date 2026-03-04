@@ -4893,51 +4893,6 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
 }
 
 // ==========================================================================
-// ⚙️ صفحة الإعدادات - نسخة متوافقة مع الكود الجديد
-// ==========================================================================
-function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading }) {
-  const [activeTab, setActiveTab] = useState('general');
-  const [settings, setLocalSettings] = useState(systemSettings);
-
-  const handleSave = async () => {
-    setGlobalLoading(true);
-    try {
-      // حفظ في Firebase
-      await setDoc(doc(db, 'artifacts', 'nouval-system', 'public', 'data', 'settings', 'general'), settings, { merge: true });
-      setSettings(settings);
-      notify("✅ تم حفظ الإعدادات بنجاح", "success");
-    } catch (error) {
-      console.error("Error saving settings:", error);
-      notify("❌ حدث خطأ في حفظ الإعدادات: " + error.message, "error");
-    }
-    setGlobalLoading(false);
-  };
-
-  // نسخة مبسطة للاختبار - لو عايز تتأكد إن الصفحة بتظهر
-  return (
-    <div className="bg-white rounded-2xl shadow-lg border-4 border-green-500 p-8 text-right" dir="rtl">
-      <h1 className="text-3xl font-black text-green-600 mb-4">✅ صفحة الإعدادات شغالة!</h1>
-      <p className="text-lg mb-2">اسم النظام: {settings?.systemName || 'غير محدد'}</p>
-      <p className="text-lg mb-4">المستخدم: مدير النظام (Admin)</p>
-      
-      <div className="bg-slate-50 p-4 rounded-lg mb-4">
-        <h3 className="font-bold mb-2">معلومات التشخيص:</h3>
-        <p>currentView: settings</p>
-        <p>appUser.role: admin</p>
-        <p>الشرط: true ✅</p>
-      </div>
-
-      <button 
-        onClick={() => notify("الاختبار شغال!", "success")}
-        className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-indigo-700"
-      >
-        اختبار الإشعارات
-      </button>
-    </div>
-  );
-}
-
-// ==========================================================================
 // 👤 عرض ملف الموظف
 // ==========================================================================
 function EmployeeProfileView({ userToView, warehouseMap }) {
@@ -5333,6 +5288,484 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
 }
 
 // ==========================================================================
+// ⚙️ صفحة الإعدادات المركزية - SettingsManager
+// ==========================================================================
+function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading }) {
+  const [activeTab, setActiveTab] = useState('general');
+  const [settings, setLocalSettings] = useState(systemSettings);
+  const [logoPreview, setLogoPreview] = useState(systemSettings.invoiceLogo || '');
+
+  // تصدير الإعدادات
+  const handleExportSettings = () => {
+    const exportData = {
+      systemName: settings.systemName,
+      storeName: settings.storeName,
+      taxRate: settings.taxRate,
+      footerText: settings.footerText,
+      installationFees: settings.installationFees,
+      productCategories: settings.productCategories,
+      technicians: settings.technicians,
+      invoiceTemplate: settings.invoiceTemplate
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `settings_backup_${new Date().toISOString().slice(0,10)}.json`;
+    link.click();
+    notify("تم تصدير الإعدادات بنجاح", "success");
+  };
+
+  // استيراد الإعدادات
+  const handleImportSettings = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const imported = JSON.parse(event.target.result);
+        setLocalSettings({...settings, ...imported});
+        notify("تم تحميل الإعدادات من الملف", "success");
+      } catch (error) {
+        notify("خطأ في قراءة الملف", "error");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = null;
+  };
+
+  const handleSave = async () => {
+    setGlobalLoading(true);
+    try {
+      await setDoc(doc(db, 'settings', 'general'), settings, { merge: true });
+      setSettings(settings);
+      notify("✅ تم حفظ الإعدادات بنجاح", "success");
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      notify("❌ حدث خطأ في حفظ الإعدادات: " + error.message, "error");
+    }
+    setGlobalLoading(false);
+  };
+
+  const addCategory = () => {
+    const newCategories = [...(settings.productCategories || [])];
+    newCategories.push({ name: '', models: [] });
+    setLocalSettings({...settings, productCategories: newCategories});
+  };
+
+  const addFee = () => {
+    const newFees = [...(settings.installationFees || [])];
+    newFees.push({ id: Date.now().toString(), label: '', value: 0 });
+    setLocalSettings({...settings, installationFees: newFees});
+  };
+
+  const addTechnician = () => {
+    const newTechs = [...(settings.technicians || [])];
+    newTechs.push('');
+    setLocalSettings({...settings, technicians: newTechs});
+  };
+
+  const handleLogoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoPreview(reader.result);
+        setLocalSettings({...settings, invoiceLogo: reader.result});
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden text-right" dir="rtl">
+      {/* Header */}
+      <div className="bg-gradient-to-l from-indigo-600 to-purple-600 p-6 text-white">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Settings size={28} className="opacity-90" />
+            <h2 className="text-2xl font-black">الإعدادات المركزية</h2>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleExportSettings}
+              className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors"
+            >
+              <Download size={16} /> تصدير
+            </button>
+            <input
+              type="file"
+              id="importSettings"
+              accept=".json"
+              className="hidden"
+              onChange={handleImportSettings}
+            />
+            <button
+              onClick={() => document.getElementById('importSettings').click()}
+              className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors"
+            >
+              <UploadCloud size={16} /> استيراد
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b bg-slate-50 overflow-x-auto">
+        {[
+          { id: 'general', label: 'عام', icon: SettingsIcon },
+          { id: 'invoice', label: 'الفاتورة', icon: PrinterIcon },
+          { id: 'categories', label: 'التصنيفات', icon: Grid },
+          { id: 'fees', label: 'الرسوم', icon: Calculator },
+          { id: 'technicians', label: 'الفنيين', icon: HardHat }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-6 py-4 font-bold text-sm transition-all whitespace-nowrap ${
+              activeTab === tab.id 
+                ? 'bg-white text-indigo-700 border-b-2 border-indigo-600 shadow-sm' 
+                : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
+            }`}
+          >
+            <tab.icon size={18} />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div className="p-8 max-h-[70vh] overflow-y-auto custom-scrollbar bg-gradient-to-b from-white to-slate-50">
+        {activeTab === 'general' && (
+          <div className="space-y-6 max-w-3xl">
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <label className="block text-xs font-bold text-indigo-600 mb-2">اسم النظام</label>
+                <input 
+                  className="w-full border-2 border-slate-100 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 focus:bg-white" 
+                  value={settings.systemName || ''}
+                  onChange={e => setLocalSettings({...settings, systemName: e.target.value})}
+                  placeholder="مثال: نوڤال ERP"
+                />
+              </div>
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <label className="block text-xs font-bold text-indigo-600 mb-2">اسم المتجر</label>
+                <input 
+                  className="w-full border-2 border-slate-100 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 focus:bg-white" 
+                  value={settings.storeName || ''}
+                  onChange={e => setLocalSettings({...settings, storeName: e.target.value})}
+                  placeholder="مثال: نوڤال للإلكترونيات"
+                />
+              </div>
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <label className="block text-xs font-bold text-indigo-600 mb-2">نسبة الضريبة %</label>
+                <input 
+                  type="number"
+                  className="w-full border-2 border-slate-100 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 focus:bg-white" 
+                  value={settings.taxRate || 14}
+                  onChange={e => setLocalSettings({...settings, taxRate: Number(e.target.value)})}
+                />
+              </div>
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <label className="block text-xs font-bold text-indigo-600 mb-2">شعار الفاتورة</label>
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoChange}
+                    className="hidden"
+                    id="logoUpload"
+                  />
+                  <button
+                    onClick={() => document.getElementById('logoUpload').click()}
+                    className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors"
+                  >
+                    اختيار صورة
+                  </button>
+                  {logoPreview && (
+                    <img src={logoPreview} alt="Logo" className="h-10 w-auto rounded border" />
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+              <label className="block text-xs font-bold text-indigo-600 mb-2">تذييل الفاتورة</label>
+              <textarea 
+                rows="3"
+                className="w-full border-2 border-slate-100 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 focus:bg-white" 
+                value={settings.footerText || ''}
+                onChange={e => setLocalSettings({...settings, footerText: e.target.value})}
+                placeholder="شكراً لتعاملكم معنا..."
+              />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'invoice' && (
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 className="font-black text-lg mb-6 text-slate-800 flex items-center gap-2">
+              <PrinterIcon className="text-indigo-600" size={20}/> تخصيص شكل الفاتورة
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <h4 className="font-bold text-sm text-indigo-600 border-b pb-2">عناصر الفاتورة</h4>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { key: 'showLogo', label: 'عرض الشعار' },
+                    { key: 'showStoreName', label: 'اسم المتجر' },
+                    { key: 'showCustomerInfo', label: 'معلومات العميل' },
+                    { key: 'showItems', label: 'عرض الأصناف' },
+                    { key: 'showPrices', label: 'عرض الأسعار' },
+                    { key: 'showDiscount', label: 'عرض الخصم' },
+                    { key: 'showTax', label: 'عرض الضريبة' },
+                    { key: 'showFees', label: 'الرسوم الإضافية' },
+                    { key: 'showFooter', label: 'عرض التذييل' }
+                  ].map(item => (
+                    <label key={item.key} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-indigo-50 transition-colors border border-slate-100">
+                      <input 
+                        type="checkbox" 
+                        className="w-4 h-4 accent-indigo-600" 
+                        checked={settings.invoiceTemplate?.[item.key] !== false} 
+                        onChange={e => setLocalSettings({
+                          ...settings, 
+                          invoiceTemplate: {...settings.invoiceTemplate, [item.key]: e.target.checked}
+                        })} 
+                      />
+                      <span className="text-xs font-bold text-slate-700">{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <h4 className="font-bold text-sm text-indigo-600 border-b pb-2 mb-4">إعدادات الطباعة</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-2">حجم الخط</label>
+                      <select 
+                        className="w-full border-2 border-slate-100 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 bg-slate-50" 
+                        value={settings.invoiceTemplate?.fontSize || 'normal'}
+                        onChange={e => setLocalSettings({
+                          ...settings, 
+                          invoiceTemplate: {...settings.invoiceTemplate, fontSize: e.target.value}
+                        })}>
+                        <option value="small">صغير</option>
+                        <option value="normal">عادي</option>
+                        <option value="large">كبير</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-2">حجم الورق</label>
+                      <select 
+                        className="w-full border-2 border-slate-100 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 bg-slate-50"
+                        value={settings.invoiceTemplate?.paperSize || '80mm'}
+                        onChange={e => setLocalSettings({
+                          ...settings, 
+                          invoiceTemplate: {...settings.invoiceTemplate, paperSize: e.target.value}
+                        })}>
+                        <option value="58mm">58 مم (فاتورة صغيرة)</option>
+                        <option value="80mm">80 مم (فاتورة عادية)</option>
+                        <option value="A4">A4</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100">
+                  <h5 className="font-bold text-sm text-indigo-900 mb-3">معاينة سريعة</h5>
+                  <div className="bg-white p-4 rounded-lg text-xs shadow-inner">
+                    <p className="font-black text-center text-lg">{settings.storeName}</p>
+                    {settings.invoiceTemplate?.showItems && (
+                      <div className="border-t border-dashed my-2 pt-2 space-y-1">
+                        <div className="flex justify-between">
+                          <span>منتج 1</span>
+                          <span>١ × ١٠٠ ج</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>منتج 2</span>
+                          <span>١ × ٢٠٠ ج</span>
+                        </div>
+                      </div>
+                    )}
+                    {settings.invoiceTemplate?.showPrices && (
+                      <div className="border-t border-dashed mt-2 pt-2 font-black">
+                        <div className="flex justify-between">
+                          <span>الإجمالي:</span>
+                          <span className="text-indigo-600">٣٠٠ ج</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'categories' && (
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+              <h4 className="font-bold text-indigo-600 mb-4">تصنيفات المنتجات</h4>
+              {settings.productCategories?.map((cat, idx) => (
+                <div key={idx} className="mb-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="flex gap-3 mb-3">
+                    <input 
+                      className="flex-1 border-2 border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
+                      placeholder="اسم التصنيف (مثال: تكييف)"
+                      value={cat.name}
+                      onChange={e => {
+                        const newCats = [...settings.productCategories];
+                        newCats[idx].name = e.target.value;
+                        setLocalSettings({...settings, productCategories: newCats});
+                      }}
+                    />
+                    <button 
+                      onClick={() => {
+                        const newCats = settings.productCategories.filter((_, i) => i !== idx);
+                        setLocalSettings({...settings, productCategories: newCats});
+                      }}
+                      className="px-4 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors"
+                    >
+                      <Trash2 size={18}/>
+                    </button>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">الموديلات (افصل بينها بفاصلة)</label>
+                    <input 
+                      className="w-full border-2 border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
+                      placeholder="مثال: 1.5 حصان, 2.25 حصان, انفرتر"
+                      value={cat.models?.join(', ') || ''}
+                      onChange={e => {
+                        const newCats = [...settings.productCategories];
+                        newCats[idx].models = e.target.value.split(',').map(m => m.trim()).filter(m => m);
+                        setLocalSettings({...settings, productCategories: newCats});
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+              <button 
+                onClick={addCategory}
+                className="w-full py-4 border-3 border-dashed border-indigo-200 rounded-xl text-indigo-600 font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <Plus size={20}/> إضافة تصنيف جديد
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'fees' && (
+          <div className="space-y-6 max-w-2xl">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+              <h4 className="font-bold text-indigo-600 mb-4">الرسوم الإضافية</h4>
+              {settings.installationFees?.map((fee, idx) => (
+                <div key={fee.id} className="flex gap-3 mb-3">
+                  <input 
+                    className="flex-1 border-2 border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
+                    placeholder="اسم الرسم (مثال: تركيب)"
+                    value={fee.label}
+                    onChange={e => {
+                      const newFees = [...settings.installationFees];
+                      newFees[idx].label = e.target.value;
+                      setLocalSettings({...settings, installationFees: newFees});
+                    }}
+                  />
+                  <input 
+                    type="number"
+                    className="w-32 border-2 border-slate-200 p-3 rounded-xl font-bold text-center outline-none focus:border-indigo-500"
+                    placeholder="القيمة"
+                    value={fee.value}
+                    onChange={e => {
+                      const newFees = [...settings.installationFees];
+                      newFees[idx].value = Number(e.target.value);
+                      setLocalSettings({...settings, installationFees: newFees});
+                    }}
+                  />
+                  <button 
+                    onClick={() => {
+                      const newFees = settings.installationFees.filter((_, i) => i !== idx);
+                      setLocalSettings({...settings, installationFees: newFees});
+                    }}
+                    className="px-4 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors"
+                  >
+                    <Trash2 size={18}/>
+                  </button>
+                </div>
+              ))}
+              <button 
+                onClick={addFee}
+                className="w-full mt-4 py-4 border-3 border-dashed border-indigo-200 rounded-xl text-indigo-600 font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <Plus size={20}/> إضافة رسم جديد
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'technicians' && (
+          <div className="space-y-6 max-w-2xl">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+              <h4 className="font-bold text-indigo-600 mb-4">قائمة الفنيين</h4>
+              {settings.technicians?.map((tech, idx) => (
+                <div key={idx} className="flex gap-3 mb-3">
+                  <input 
+                    className="flex-1 border-2 border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
+                    placeholder="اسم الفني"
+                    value={tech}
+                    onChange={e => {
+                      const newTechs = [...settings.technicians];
+                      newTechs[idx] = e.target.value;
+                      setLocalSettings({...settings, technicians: newTechs});
+                    }}
+                  />
+                  <button 
+                    onClick={() => {
+                      const newTechs = settings.technicians.filter((_, i) => i !== idx);
+                      setLocalSettings({...settings, technicians: newTechs});
+                    }}
+                    className="px-4 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors"
+                  >
+                    <Trash2 size={18}/>
+                  </button>
+                </div>
+              ))}
+              <button 
+                onClick={addTechnician}
+                className="w-full mt-4 py-4 border-3 border-dashed border-indigo-200 rounded-xl text-indigo-600 font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <Plus size={20}/> إضافة فني جديد
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Save Button */}
+        <div className="mt-8 pt-6 border-t border-slate-200 flex justify-end gap-4">
+          <button 
+            onClick={() => setLocalSettings(systemSettings)}
+            className="px-8 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors"
+          >
+            إلغاء
+          </button>
+          <button 
+            onClick={handleSave}
+            className="px-8 py-3 bg-gradient-to-l from-indigo-600 to-purple-600 text-white rounded-xl font-bold hover:from-indigo-700 hover:to-purple-700 transition-colors flex items-center gap-2 shadow-lg"
+          >
+            <Save size={18}/> حفظ الإعدادات
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================================================
 // 🚀 المكون الرئيسي للتطبيق
 // ==========================================================================
 export default function App() {
@@ -5668,8 +6101,7 @@ export default function App() {
               {currentView === 'tickets' && <EnhancedTicketManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} onGenerateInvoice={handleGenerateInvoiceFromTicket} />}
               {currentView === 'reports' && <ReportsManager notify={notify} />}
               {currentView === 'lowstock' && <LowStockView lowStockItems={lowStockItems} appUser={appUser} warehouseMap={warehouseMap} />}
-              {/* صفحة الإعدادات - معدلة للعمل مع الكود الجديد */}
-{currentView === 'settings' && appUser?.role === 'admin' && (
+              {currentView === 'settings' && appUser.role === 'admin' && (
   <SettingsManager 
     systemSettings={systemSettings}
     setSettings={setSystemSettings}
@@ -5686,12 +6118,3 @@ export default function App() {
     </div>
   );
 }
-// في أول App.jsx بعد الاستيرادات
-import { seedDatabase } from "./scripts/seedDatabase";
-
-// في useEffect بعد ما يتأكد أن المستخدم دخل
-useEffect(() => {
-  if (appUser) {
-    seedDatabase(); // شغلها مرة واحدة
-  }
-}, [appUser]);
