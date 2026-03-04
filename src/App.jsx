@@ -5633,3 +5633,8 @@ export default function App() {
     </div>
   );
 }
+import { seedDatabase } from "./utils/seedDatabase";
+
+useEffect(() => {
+  seedDatabase();
+}, []);
