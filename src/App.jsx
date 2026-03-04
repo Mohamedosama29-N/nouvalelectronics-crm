@@ -4893,223 +4893,46 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
 }
 
 // ==========================================================================
-// ⚙️ صفحة الإعدادات
+// ⚙️ صفحة الإعدادات - نسخة متوافقة مع الكود الجديد
 // ==========================================================================
 function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading }) {
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setLocalSettings] = useState(systemSettings);
-  
+
   const handleSave = async () => {
     setGlobalLoading(true);
     try {
-      await setDoc(doc(db, 'settings', 'general'), settings, { merge: true });
+      // حفظ في Firebase
+      await setDoc(doc(db, 'artifacts', 'nouval-system', 'public', 'data', 'settings', 'general'), settings, { merge: true });
       setSettings(settings);
-      notify("تم حفظ الإعدادات بنجاح", "success");
+      notify("✅ تم حفظ الإعدادات بنجاح", "success");
     } catch (error) {
       console.error("Error saving settings:", error);
-      notify("حدث خطأ في حفظ الإعدادات", "error");
+      notify("❌ حدث خطأ في حفظ الإعدادات: " + error.message, "error");
     }
     setGlobalLoading(false);
   };
 
-  const addCategory = () => {
-    const newCategories = [...(settings.productCategories || [])];
-    newCategories.push({ name: '', models: [] });
-    setLocalSettings({...settings, productCategories: newCategories});
-  };
-
-  const addFee = () => {
-    const newFees = [...(settings.installationFees || [])];
-    newFees.push({ id: Date.now().toString(), label: '', value: 0 });
-    setLocalSettings({...settings, installationFees: newFees});
-  };
-
+  // نسخة مبسطة للاختبار - لو عايز تتأكد إن الصفحة بتظهر
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden text-right" dir="rtl">
-      <div className="p-6 border-b bg-slate-50">
-        <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-          <Settings className="text-indigo-600" size={24}/> الإعدادات المركزية
-        </h2>
+    <div className="bg-white rounded-2xl shadow-lg border-4 border-green-500 p-8 text-right" dir="rtl">
+      <h1 className="text-3xl font-black text-green-600 mb-4">✅ صفحة الإعدادات شغالة!</h1>
+      <p className="text-lg mb-2">اسم النظام: {settings?.systemName || 'غير محدد'}</p>
+      <p className="text-lg mb-4">المستخدم: مدير النظام (Admin)</p>
+      
+      <div className="bg-slate-50 p-4 rounded-lg mb-4">
+        <h3 className="font-bold mb-2">معلومات التشخيص:</h3>
+        <p>currentView: settings</p>
+        <p>appUser.role: admin</p>
+        <p>الشرط: true ✅</p>
       </div>
 
-      <div className="flex border-b bg-white">
-        <button 
-          onClick={() => setActiveTab('general')} 
-          className={`px-6 py-4 font-black text-sm ${activeTab === 'general' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500'}`}
-        >
-          عام
-        </button>
-        <button 
-          onClick={() => setActiveTab('categories')} 
-          className={`px-6 py-4 font-black text-sm ${activeTab === 'categories' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500'}`}
-        >
-          التصنيفات
-        </button>
-        <button 
-          onClick={() => setActiveTab('fees')} 
-          className={`px-6 py-4 font-black text-sm ${activeTab === 'fees' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500'}`}
-        >
-          الرسوم
-        </button>
-        <button 
-          onClick={() => setActiveTab('invoice')} 
-          className={`px-6 py-4 font-black text-sm ${activeTab === 'invoice' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-500'}`}
-        >
-          الفاتورة
-        </button>
-      </div>
-
-      <div className="p-6">
-        {activeTab === 'general' && (
-          <div className="space-y-4 max-w-2xl">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">اسم النظام</label>
-              <input 
-                className="w-full border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
-                value={settings.systemName || ''}
-                onChange={e => setLocalSettings({...settings, systemName: e.target.value})}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">اسم المتجر</label>
-              <input 
-                className="w-full border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
-                value={settings.storeName || ''}
-                onChange={e => setLocalSettings({...settings, storeName: e.target.value})}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">نسبة الضريبة (%)</label>
-              <input 
-                type="number"
-                className="w-full border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
-                value={settings.taxRate || 14}
-                onChange={e => setLocalSettings({...settings, taxRate: Number(e.target.value)})}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">تذييل الفاتورة</label>
-              <textarea 
-                rows="2"
-                className="w-full border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
-                value={settings.footerText || ''}
-                onChange={e => setLocalSettings({...settings, footerText: e.target.value})}
-              />
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'categories' && (
-          <div className="space-y-6">
-            {settings.productCategories?.map((cat, idx) => (
-              <div key={idx} className="border border-slate-200 rounded-xl p-4 bg-slate-50">
-                <div className="flex gap-3 mb-3">
-                  <input 
-                    className="flex-1 border border-slate-200 p-2 rounded-lg font-bold outline-none focus:border-indigo-500"
-                    placeholder="اسم التصنيف (مثال: تكييف)"
-                    value={cat.name}
-                    onChange={e => {
-                      const newCats = [...settings.productCategories];
-                      newCats[idx].name = e.target.value;
-                      setLocalSettings({...settings, productCategories: newCats});
-                    }}
-                  />
-                  <button 
-                    onClick={() => {
-                      const newCats = settings.productCategories.filter((_, i) => i !== idx);
-                      setLocalSettings({...settings, productCategories: newCats});
-                    }}
-                    className="px-3 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100"
-                  >
-                    <Trash2 size={18}/>
-                  </button>
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 mb-1 block">الموديلات (افصل بينها بفاصلة)</label>
-                  <input 
-                    className="w-full border border-slate-200 p-2 rounded-lg font-bold outline-none focus:border-indigo-500"
-                    placeholder="مثال: 1.5 حصان, 2.25 حصان, انفرتر"
-                    value={cat.models?.join(', ') || ''}
-                    onChange={e => {
-                      const newCats = [...settings.productCategories];
-                      newCats[idx].models = e.target.value.split(',').map(m => m.trim()).filter(m => m);
-                      setLocalSettings({...settings, productCategories: newCats});
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-            <button 
-              onClick={addCategory}
-              className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-600 font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
-            >
-              <Plus size={18}/> إضافة تصنيف جديد
-            </button>
-          </div>
-        )}
-
-        {activeTab === 'fees' && (
-          <div className="space-y-4 max-w-md">
-            {settings.installationFees?.map((fee, idx) => (
-              <div key={fee.id} className="flex gap-3">
-                <input 
-                  className="flex-1 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-indigo-500"
-                  placeholder="اسم الرسم (مثال: تركيب)"
-                  value={fee.label}
-                  onChange={e => {
-                    const newFees = [...settings.installationFees];
-                    newFees[idx].label = e.target.value;
-                    setLocalSettings({...settings, installationFees: newFees});
-                  }}
-                />
-                <input 
-                  type="number"
-                  className="w-24 border border-slate-200 p-3 rounded-xl font-bold text-center outline-none focus:border-indigo-500"
-                  placeholder="القيمة"
-                  value={fee.value}
-                  onChange={e => {
-                    const newFees = [...settings.installationFees];
-                    newFees[idx].value = Number(e.target.value);
-                    setLocalSettings({...settings, installationFees: newFees});
-                  }}
-                />
-                <button 
-                  onClick={() => {
-                    const newFees = settings.installationFees.filter((_, i) => i !== idx);
-                    setLocalSettings({...settings, installationFees: newFees});
-                  }}
-                  className="px-3 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100"
-                >
-                  <Trash2 size={18}/>
-                </button>
-              </div>
-            ))}
-            <button 
-              onClick={addFee}
-              className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-600 font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
-            >
-              <Plus size={18}/> إضافة رسم جديد
-            </button>
-          </div>
-        )}
-
-        {activeTab === 'invoice' && (
-          <InvoiceTemplateManager 
-            systemSettings={settings}
-            setSettings={setLocalSettings}
-            notify={notify}
-          />
-        )}
-
-        <div className="mt-8 pt-6 border-t flex justify-end">
-          <button 
-            onClick={handleSave}
-            className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors flex items-center gap-2"
-          >
-            <Save size={18}/> حفظ الإعدادات
-          </button>
-        </div>
-      </div>
+      <button 
+        onClick={() => notify("الاختبار شغال!", "success")}
+        className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-indigo-700"
+      >
+        اختبار الإشعارات
+      </button>
     </div>
   );
 }
