@@ -3,11 +3,11 @@
 // ==========================================================================
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { 
-  LineChart, Line, BarChart, Bar, PieChart, Pie,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, Cell 
-} from 'recharts';
+//import { 
+//  LineChart, Line, BarChart, Bar, PieChart, Pie,
+//  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+//  ResponsiveContainer, Cell 
+// } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import CryptoJS from 'crypto-js';
