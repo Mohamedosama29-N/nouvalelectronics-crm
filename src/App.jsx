@@ -3,16 +3,17 @@
 // ==========================================================================
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-//import { 
-//  LineChart, Line, BarChart, Bar, PieChart, Pie,
-//  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-//  ResponsiveContainer, Cell 
-// } from 'recharts';
-//import jsPDF from 'jspdf';
-//import autoTable from 'jspdf-autotable';
-//import CryptoJS from 'crypto-js';
+import { FixedSizeList as List } from 'react-window';
+import { 
+  LineChart, Line, BarChart, Bar, PieChart, Pie,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, Cell 
+} from 'recharts';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import CryptoJS from 'crypto-js';
 import { openDB } from 'idb';
-//import Swal from 'sweetalert2';
+import Swal from 'sweetalert2';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
@@ -48,18 +49,15 @@ import {
 // 🔥 FIREBASE CONFIGURATION
 // ==========================================================================
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
 
-console.log('🔥 Firebase Config:', {
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  hasApiKey: !!import.meta.env.VITE_FIREBASE_API_KEY
-});
+// التحقق من وجود المتغيرات (للتأكيد)
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
@@ -72,7 +70,7 @@ const getDocRef = (collName, docId) => doc(db, collName, docId);
 // ==========================================================================
 // 🔐 ENCRYPTION SETUP
 // ==========================================================================
-const SECRET_KEY = process.env.REACT_APP_ENCRYPTION_KEY || 'nouval-secret-key-2024';
+const SECRET_KEY = process.env.REACT_APP_ENCRYPTION_KEY || 'nouval-secret-key-2024$$Nada202$$291';
 
 const encrypt = (data) => {
   return CryptoJS.AES.encrypt(JSON.stringify(data), SECRET_KEY).toString();
@@ -1371,7 +1369,7 @@ export const requestNotificationPermission = async () => {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
       const token = await getToken(messaging, {
-        vapidKey: 'YOUR_VAPID_KEY' // أضف VAPID key من Firebase
+        vapidKey: 'BM-uzhdJEQ0yrbCFuB9G0BznP7e50HqWuRR06ICqs4j8TiaYdeEqaaxiGA9eJmJ6rDlnopU2bKUzs7fmjDAxa7c' // أضف VAPID key من Firebase
       });
       
       // حفظ التوكن في قاعدة البيانات
