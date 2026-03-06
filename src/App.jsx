@@ -9489,42 +9489,97 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
      setGlobalLoading(false);
    };
 
-   const handleAdd = async (e) => {
-      e.preventDefault(); 
-      if(!name) return;
-      setGlobalLoading(true);
-      try { 
-        await addDoc(collection(db, 'warehouses'), { 
-          name, 
-          location,
-          phone,
-          address,
-          manager,
-          email,
-          workingHours,
-          createdAt: serverTimestamp(),
-          managers: [],
-          users: []
-        }); 
-        showSuccess("تم إضافة الفرع بنجاح"); 
-        setName(''); 
-        setLocation('');
-        setPhone('');
-        setAddress('');
-        setManager('');
-        setEmail('');
-        setWorkingHours('');
-      } catch(e) { 
-        console.error(e);
-        if (e.code === 'permission-denied') {
-          showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
-        } else {
-          showError("فشل الإضافة: " + e.message); 
-        }
-      }
-      setGlobalLoading(false);
-   };
 
+        // دالة التحقق من السيريال - بتشوف إذا كان السيريال مستخدم في صنف نشط
+    const checkSerialAvailability = async (serial) => {
+      // دور على السيريال في الأصناف النشطة فقط (isDeleted = false)
+      const q = query(
+        collection(db, 'inventory'), 
+        where('serialNumber', '==', serial),
+        where('isDeleted', '==', false)
+      );
+      const snap = await getDocs(q);
+      
+      // لو لقى صنف نشط بنفس السيريال → مش متاح
+      // لو ملقاش → متاح للإضافة
+      return snap.empty; // true = متاح, false = غير متاح
+    };
+
+   const handleAdd = async (e) => {
+  e.preventDefault();
+  
+  // 1️⃣ التحقق من البيانات الأساسية
+  if (!newItem.serialNumber || !newItem.name) {
+    showError("البيانات غير مكتملة");
+    return;
+  }
+
+  setGlobalLoading(true);
+  
+  // 2️⃣ تنظيف السيريال
+  const serial = normalizeSerial(newItem.serialNumber);
+  const priceNum = Number(newItem.price) || 0;
+  const qtyNum = Number(newItem.quantity) || 1;
+
+  try {
+    // 3️⃣ التحقق الذكي من السيريال (الأهم)
+    const isAvailable = await checkSerialAvailability(serial);
+    
+    if (!isAvailable) {
+      throw new Error("❌ هذا السيريال مستخدم بالفعل في صنف نشط");
+    }
+
+    // 4️⃣ تحديد المخزن
+    const warehouseToUse = appUser.permissions?.viewAllWarehouses 
+      ? newItem.warehouseId 
+      : (appUser.assignedWarehouseId || 'main');
+
+    // 5️⃣ إضافة الصنف الجديد
+    const docData = { 
+      serialNumber: serial, 
+      name: newItem.name,
+      price: priceNum,
+      quantity: qtyNum,
+      minStock: Number(newItem.minStock) || 2,
+      category: newItem.category || 'عام',
+      location: newItem.location || '',
+      notes: newItem.notes || '',
+      warehouseId: warehouseToUse,
+      searchKey: normalizeSearch(`${newItem.name} ${serial} ${newItem.category || ''}`), 
+      createdAt: serverTimestamp(), 
+      isDeleted: false // مهم: صنف نشط
+    };
+    
+    await addDoc(collection(db, 'inventory'), docData);
+    
+    // 6️⃣ رسالة نجاح
+    showSuccess(`✅ تم إضافة ${qtyNum} قطعة من ${newItem.name}`);
+    
+    // 7️⃣ تنظيف الفورم
+    setNewItem({ 
+      serialNumber: '', 
+      name: '', 
+      quantity: 1, 
+      price: 0, 
+      minStock: 2, 
+      category: 'عام',
+      location: '',
+      notes: '',
+      warehouseId: appUser?.assignedWarehouseId || 'main' 
+    });
+    
+    // 8️⃣ تحديث القائمة
+    setLastDoc(null);
+    loadItems(false);
+    
+  } catch(err) { 
+    showError(err.message || "فشل الإضافة"); 
+  }
+  
+  setGlobalLoading(false);
+};
+
+  
    const handleDelete = async (id) => {
       const confirmed = await showConfirm(
         'تأكيد الحذف',
@@ -9602,6 +9657,87 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
       }
       setGlobalLoading(false);
    };
+
+   const handleDelete = async (item) => {
+  const confirmed = await showConfirm(
+    '⚠️ تأكيد الحذف النهائي',
+    `هل أنت متأكد من حذف ${item.name} نهائياً؟`,
+    'warning',
+    'نعم، احذف نهائياً'
+  );
+  
+  if (!confirmed) return;
+  
+  setGlobalLoading(true);
+  try {
+    // حذف من inventory
+    await deleteDoc(doc(db, 'inventory', item.id));
+    
+    // رسالة نجاح
+    showSuccess(`✅ تم حذف ${item.name} نهائياً`);
+    
+    // تحديث القائمة
+    setItems(prev => prev.filter(i => i.id !== item.id));
+    
+  } catch (error) {
+    showError("❌ فشل الحذف: " + error.message);
+  }
+  setGlobalLoading(false);
+};
+
+  
+  
+  // دالة استرجاع المحذوفات
+const handleRestoreDeleted = async () => {
+  const confirmed = await showConfirm(
+    '🔄 استرجاع المحذوفات',
+    'هل تريد استرجاع كل الأصناف المحذوفة؟',
+    'info',
+    'نعم، استرجاع'
+  );
+  
+  if (!confirmed) return;
+  
+  setGlobalLoading(true);
+  try {
+    const q = query(
+      collection(db, 'inventory'), 
+      where('isDeleted', '==', true)
+    );
+    const snap = await getDocs(q);
+    
+    const batch = writeBatch(db);
+    snap.docs.forEach(doc => {
+      batch.update(doc.ref, { 
+        isDeleted: false,
+        restoredAt: serverTimestamp() 
+      });
+    });
+    
+    await batch.commit();
+    showSuccess(`✅ تم استرجاع ${snap.size} صنف`);
+    setLastDoc(null);
+    loadItems(false);
+    
+  } catch (error) {
+    showError("❌ فشل الاسترجاع");
+  }
+  setGlobalLoading(false);
+};
+
+// أضف الزر في واجهة المستخدم (حطها جنب أزرار الاستيراد)
+{appUser.role === 'admin' && (
+  <button
+    onClick={handleRestoreDeleted}
+    className="bg-amber-50 text-amber-700 px-4 py-2 rounded-lg text-xs font-bold hover:bg-amber-100 flex items-center gap-2"
+  >
+    <RotateCcw size={14} /> استرجاع المحذوفات
+  </button>
+)}
+
+
+
+
 
    const filteredUsers = allUsers.filter(user => 
      user.name?.toLowerCase().includes(searchUser.toLowerCase()) ||
