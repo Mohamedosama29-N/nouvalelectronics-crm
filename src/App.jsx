@@ -49,12 +49,12 @@ import {
 // 🔥 FIREBASE CONFIGURATION
 // ==========================================================================
 const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID
+  apiKey: "AIzaSyBrRvCAWdC_SOjBqSFPXyav-3ifE80UoLU",
+  authDomain: "nouval-system.firebaseapp.com",
+  projectId: "nouval-system",
+  storageBucket: "nouval-system.firebasestorage.app",
+  messagingSenderId: "194279959532",
+  appId: "1:194279959532:web:578f5894f58102d4872ec9"
 };
 
 // التحقق من وجود المتغيرات (للتأكيد)
