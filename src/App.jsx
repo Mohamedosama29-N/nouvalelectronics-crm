@@ -3,8 +3,7 @@
 // ==========================================================================
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import ReactWindow from 'react-window';
-const { FixedSizeList: List } = ReactWindow;
+const List = require('react-window').FixedSizeList;
 import { 
   LineChart, Line, BarChart, Bar, PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
