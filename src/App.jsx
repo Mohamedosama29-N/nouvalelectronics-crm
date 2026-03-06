@@ -8,11 +8,11 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 //  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 //  ResponsiveContainer, Cell 
 // } from 'recharts';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import CryptoJS from 'crypto-js';
-import { openDB } from 'idb';
-import Swal from 'sweetalert2';
+//import jsPDF from 'jspdf';
+//import autoTable from 'jspdf-autotable';
+//import CryptoJS from 'crypto-js';
+//import { openDB } from 'idb';
+//import Swal from 'sweetalert2';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
