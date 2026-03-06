@@ -3522,33 +3522,43 @@ const handleImportConfirm = async () => {
     setGlobalLoading(false);
   };
 
-  const handleDelete = async (item) => {
-    const confirmed = await showConfirm(
-      'تأكيد الحذف',
-      `هل أنت متأكد من حذف ${item.name}؟`
-    );
+  // ==========================================================================
+// 📦 دالة حذف الصنف
+// ==========================================================================
+const handleDeleteItem = async (item) => {
+  const confirmed = await showConfirm(
+    'تأكيد حذف الصنف',
+    `هل أنت متأكد من حذف "${item.name}"؟`,
+    'warning',
+    'نعم، احذف'
+  );
+  
+  if (!confirmed) return;
+  
+  setGlobalLoading(true);
+  try {
+    // Soft delete
+    await updateDoc(doc(db, 'inventory', item.id), { 
+      isDeleted: true, 
+      quantity: 0, 
+      deletedAt: serverTimestamp(),
+      deletedBy: appUser.name
+    });
     
-    if (!confirmed) return;
+    await logUserActivity(appUser, 'حذف صنف', `تم حذف صنف: ${item.name} (S/N: ${item.serialNumber})`);
+    setItems(prev => prev.filter(i => i.id !== item.id));
+    showSuccess(`✅ تم حذف "${item.name}" بنجاح`);
     
-    setGlobalLoading(true);
-    try {
-      await updateDoc(doc(db, 'inventory', item.id), { 
-        isDeleted: true, 
-        quantity: 0, 
-        deletedAt: serverTimestamp() 
-      });
-      await logUserActivity(appUser, 'حذف صنف', `تم حذف صنف: ${item.name} (S/N: ${item.serialNumber})`);
-      setItems(prev => prev.filter(i => i.id !== item.id));
-      showSuccess("تم حذف الصنف");
-    } catch (error) {
-      if (error.code === 'permission-denied') {
-        showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
-      } else {
-        showError("فشل حذف الصنف: " + error.message);
-      }
+  } catch (error) {
+    console.error("Delete error:", error);
+    if (error.code === 'permission-denied') {
+      showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
+    } else {
+      showError("فشل حذف الصنف: " + error.message);
     }
-    setGlobalLoading(false);
-  };
+  }
+  setGlobalLoading(false);
+};
 
   const handleBulkUpdate = async () => {
     if (!bulkPercent || bulkPercent === 0) {
@@ -3736,7 +3746,7 @@ const handleImportConfirm = async () => {
           </button>
           {appUser.permissions?.deleteInventoryItem && (
             <button 
-              onClick={()=>handleDelete(item)} 
+              onClick={()=>handleDeleteItem(item)} 
               className="p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 dark:text-rose-400 rounded-md hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-all"
               title="حذف"
             >
@@ -9506,103 +9516,67 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
     };
 
    const handleAdd = async (e) => {
-  e.preventDefault();
-  
-  // 1️⃣ التحقق من البيانات الأساسية
-  if (!newItem.serialNumber || !newItem.name) {
-    showError("البيانات غير مكتملة");
-    return;
-  }
-
-  setGlobalLoading(true);
-  
-  // 2️⃣ تنظيف السيريال
-  const serial = normalizeSerial(newItem.serialNumber);
-  const priceNum = Number(newItem.price) || 0;
-  const qtyNum = Number(newItem.quantity) || 1;
-
-  try {
-    // 3️⃣ التحقق الذكي من السيريال (الأهم)
-    const isAvailable = await checkSerialAvailability(serial);
-    
-    if (!isAvailable) {
-      throw new Error("❌ هذا السيريال مستخدم بالفعل في صنف نشط");
-    }
-
-    // 4️⃣ تحديد المخزن
-    const warehouseToUse = appUser.permissions?.viewAllWarehouses 
-      ? newItem.warehouseId 
-      : (appUser.assignedWarehouseId || 'main');
-
-    // 5️⃣ إضافة الصنف الجديد
-    const docData = { 
-      serialNumber: serial, 
-      name: newItem.name,
-      price: priceNum,
-      quantity: qtyNum,
-      minStock: Number(newItem.minStock) || 2,
-      category: newItem.category || 'عام',
-      location: newItem.location || '',
-      notes: newItem.notes || '',
-      warehouseId: warehouseToUse,
-      searchKey: normalizeSearch(`${newItem.name} ${serial} ${newItem.category || ''}`), 
-      createdAt: serverTimestamp(), 
-      isDeleted: false // مهم: صنف نشط
-    };
-    
-    await addDoc(collection(db, 'inventory'), docData);
-    
-    // 6️⃣ رسالة نجاح
-    showSuccess(`✅ تم إضافة ${qtyNum} قطعة من ${newItem.name}`);
-    
-    // 7️⃣ تنظيف الفورم
-    setNewItem({ 
-      serialNumber: '', 
-      name: '', 
-      quantity: 1, 
-      price: 0, 
-      minStock: 2, 
-      category: 'عام',
-      location: '',
-      notes: '',
-      warehouseId: appUser?.assignedWarehouseId || 'main' 
-    });
-    
-    // 8️⃣ تحديث القائمة
-    setLastDoc(null);
-    loadItems(false);
-    
-  } catch(err) { 
-    showError(err.message || "فشل الإضافة"); 
-  }
-  
-  setGlobalLoading(false);
-};
-
-  
-   const handleDelete = async (id) => {
-      const confirmed = await showConfirm(
-        'تأكيد الحذف',
-        'هل أنت متأكد من حذف هذا الفرع؟'
-      );
-      
-      if (!confirmed) return;
-      
+      e.preventDefault(); 
+      if(!name) return;
       setGlobalLoading(true);
-      try {
-        await deleteDoc(doc(db, 'warehouses', id));
-        showSuccess("تم حذف الفرع");
-        setSelectedWarehouse(null);
-      } catch(e) {
+      try { 
+        await addDoc(collection(db, 'warehouses'), { 
+          name, 
+          location,
+          phone,
+          address,
+          manager,
+          email,
+          workingHours,
+          createdAt: serverTimestamp(),
+          managers: [],
+          users: []
+        }); 
+        showSuccess("تم إضافة الفرع بنجاح"); 
+        setName(''); 
+        setLocation('');
+        setPhone('');
+        setAddress('');
+        setManager('');
+        setEmail('');
+        setWorkingHours('');
+      } catch(e) { 
         console.error(e);
         if (e.code === 'permission-denied') {
           showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
         } else {
-          showError("فشل الحذف: " + e.message);
+          showError("فشل الإضافة: " + e.message); 
         }
       }
       setGlobalLoading(false);
    };
+
+   // ==========================================================================
+// 🏪 دالة حذف الفرع
+// ==========================================================================
+const handleDeleteWarehouse = async (id) => {
+  const confirmed = await showConfirm(
+    'تأكيد حذف الفرع',
+    'هل أنت متأكد من حذف هذا الفرع؟'
+  );
+  
+  if (!confirmed) return;
+  
+  setGlobalLoading(true);
+  try {
+    await deleteDoc(doc(db, 'warehouses', id));
+    showSuccess("تم حذف الفرع بنجاح");
+    setSelectedWarehouse(null);
+  } catch(e) {
+    console.error(e);
+    if (e.code === 'permission-denied') {
+      showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
+    } else {
+      showError("فشل حذف الفرع: " + e.message);
+    }
+  }
+  setGlobalLoading(false);
+};
 
    const handleUpdateWarehouse = async () => {
       if (!editingWarehouse) return;
@@ -9657,87 +9631,6 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
       }
       setGlobalLoading(false);
    };
-
-   const handleDelete = async (item) => {
-  const confirmed = await showConfirm(
-    '⚠️ تأكيد الحذف النهائي',
-    `هل أنت متأكد من حذف ${item.name} نهائياً؟`,
-    'warning',
-    'نعم، احذف نهائياً'
-  );
-  
-  if (!confirmed) return;
-  
-  setGlobalLoading(true);
-  try {
-    // حذف من inventory
-    await deleteDoc(doc(db, 'inventory', item.id));
-    
-    // رسالة نجاح
-    showSuccess(`✅ تم حذف ${item.name} نهائياً`);
-    
-    // تحديث القائمة
-    setItems(prev => prev.filter(i => i.id !== item.id));
-    
-  } catch (error) {
-    showError("❌ فشل الحذف: " + error.message);
-  }
-  setGlobalLoading(false);
-};
-
-  
-  
-  // دالة استرجاع المحذوفات
-const handleRestoreDeleted = async () => {
-  const confirmed = await showConfirm(
-    '🔄 استرجاع المحذوفات',
-    'هل تريد استرجاع كل الأصناف المحذوفة؟',
-    'info',
-    'نعم، استرجاع'
-  );
-  
-  if (!confirmed) return;
-  
-  setGlobalLoading(true);
-  try {
-    const q = query(
-      collection(db, 'inventory'), 
-      where('isDeleted', '==', true)
-    );
-    const snap = await getDocs(q);
-    
-    const batch = writeBatch(db);
-    snap.docs.forEach(doc => {
-      batch.update(doc.ref, { 
-        isDeleted: false,
-        restoredAt: serverTimestamp() 
-      });
-    });
-    
-    await batch.commit();
-    showSuccess(`✅ تم استرجاع ${snap.size} صنف`);
-    setLastDoc(null);
-    loadItems(false);
-    
-  } catch (error) {
-    showError("❌ فشل الاسترجاع");
-  }
-  setGlobalLoading(false);
-};
-
-// أضف الزر في واجهة المستخدم (حطها جنب أزرار الاستيراد)
-{appUser.role === 'admin' && (
-  <button
-    onClick={handleRestoreDeleted}
-    className="bg-amber-50 text-amber-700 px-4 py-2 rounded-lg text-xs font-bold hover:bg-amber-100 flex items-center gap-2"
-  >
-    <RotateCcw size={14} /> استرجاع المحذوفات
-  </button>
-)}
-
-
-
-
 
    const filteredUsers = allUsers.filter(user => 
      user.name?.toLowerCase().includes(searchUser.toLowerCase()) ||
@@ -9950,7 +9843,7 @@ const handleRestoreDeleted = async () => {
                              </button>
                              {selectedWarehouse.id !== 'main' && (
                                <button
-                                 onClick={() => handleDelete(selectedWarehouse.id)}
+                                 onClick={() => handleDeleteWarehouse(selectedWarehouse.id)}
                                  className="p-2 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-lg hover:bg-rose-600 dark:hover:bg-rose-700 hover:text-white transition-colors"
                                  title="حذف الفرع"
                                >
