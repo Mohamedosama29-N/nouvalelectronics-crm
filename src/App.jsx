@@ -3143,148 +3143,241 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
   };
 
   // دالة الاستيراد المحسنة مع Web Worker
-  const handleImportConfirm = async () => {
-    if (importData.length === 0) return;
+  // ==========================================================================
+// 📦 دالة الاستيراد المحسنة - تدعم 10,000+ صنف
+// ==========================================================================
+const handleImportConfirm = async () => {
+  if (importData.length === 0) return;
 
-    setShowImportModal(false);
-    setGlobalLoading(true);
-    setImportProgress({ total: importData.length, processed: 0, status: 'جاري الاستيراد...' });
+  setShowImportModal(false);
+  setGlobalLoading(true);
+  
+  // إعدادات الاستيراد
+  const BATCH_SIZE = 200; // 200 صنف كل دفعة (متوازن للأداء)
+  const totalItems = importData.length;
+  
+  setImportProgress({ 
+    total: totalItems, 
+    processed: 0, 
+    failed: 0,
+    status: 'بدء الاستيراد...',
+    currentBatch: 0,
+    totalBatches: Math.ceil(totalItems / BATCH_SIZE)
+  });
 
-    try {
-      const BATCH_SIZE = 400;
-      const totalItems = importData.length;
-      let processed = 0;
-      let failed = 0;
+  try {
+    // ✅ استخدام Web Worker للمعالجة
+    const worker = new Worker('/workers/inventoryImportWorker.js');
+    
+    // بدأ المعالجة في الـ Worker
+    worker.postMessage({
+      data: importData,
+      batchSize: BATCH_SIZE,
+      userId: appUser.id,
+      userName: appUser.name
+    });
 
-      // استخدام Web Worker للعمليات الثقيلة
-      const worker = new Worker('/workers/inventoryImportWorker.js');
+    // استقبال النتائج من الـ Worker
+    worker.onmessage = async (e) => {
+      const { type, processed, failed, total, batch, batchIndex, totalBatches, error } = e.data;
       
-      worker.postMessage({
-        data: importData,
-        batchSize: BATCH_SIZE,
-        userId: appUser.id,
-        userName: appUser.name
-      });
-
-      worker.onmessage = async (e) => {
-        const { type, processed: p, failed: f, completed } = e.data;
-        
-        if (type === 'progress') {
-          setImportProgress({ 
-            total: totalItems, 
-            processed: p, 
-            status: `تم استيراد ${p} من ${totalItems} (فشل ${f})` 
-          });
-        } else if (type === 'complete') {
-          await logUserActivity(appUser, 'استيراد أصناف', `استيراد ${p} صنف من ملف CSV (فشل ${f})`);
+      if (type === 'batch') {
+        // ✅ استقبال دفعة جديدة - نقوم بإضافتها لـ Firebase
+        try {
+          const firestoreBatch = writeBatch(db);
           
-          if (f === 0) {
-            showSuccess(`تم استيراد ${p} صنف بنجاح`);
-          } else {
-            showWarning(`تم استيراد ${p} صنف، فشل ${f} صنف`);
+          for (const item of batch) {
+            const newRef = doc(collection(db, 'inventory'));
+            firestoreBatch.set(newRef, {
+              ...item,
+              searchKey: normalizeSearch(item.searchKey),
+              createdAt: serverTimestamp(),
+              isDeleted: false,
+              importedBy: appUser.name,
+              importedAt: serverTimestamp()
+            });
+
+            // تسجيل السيريال لمنع التكرار
+            const regRef = doc(db, 'serial_registry', item.serialNumber);
+            firestoreBatch.set(regRef, { 
+              exists: true, 
+              imported: true,
+              importedAt: serverTimestamp() 
+            }, { merge: true });
           }
           
-          setLastDoc(null);
-          loadItems(false);
-          setGlobalLoading(false);
-          worker.terminate();
+          await firestoreBatch.commit();
+          
+          // تحديث التقدم
+          setImportProgress(prev => ({
+            ...prev,
+            processed: prev.processed + batch.length,
+            currentBatch: batchIndex + 1,
+            status: `جاري الاستيراد... ${Math.round(((batchIndex + 1) / totalBatches) * 100)}% (${batchIndex + 1}/${totalBatches})`
+          }));
+          
+        } catch (err) {
+          console.error('Error saving batch:', err);
+          setImportProgress(prev => ({
+            ...prev,
+            failed: prev.failed + batch.length,
+            status: `خطأ في الدفعة ${batchIndex + 1}`
+          }));
         }
-      };
-
-      worker.onerror = (error) => {
-        console.error("Worker error:", error);
-        showError("حدث خطأ أثناء الاستيراد");
+        
+      } else if (type === 'progress') {
+        // تحديث التقدم
+        setImportProgress(prev => ({
+          ...prev,
+          processed,
+          failed,
+          status: `معالجة البيانات... ${processed}/${total}`
+        }));
+        
+      } else if (type === 'complete') {
+        // ✅ اكتمل الاستيراد بنجاح
+        await logUserActivity(appUser, 'استيراد أصناف', `استيراد ${processed} صنف (فشل ${failed})`);
+        
+        if (failed === 0) {
+          showSuccess(`✅ تم استيراد ${processed} صنف بنجاح`);
+        } else {
+          showWarning(`⚠️ تم استيراد ${processed} صنف، فشل ${failed} صنف`);
+        }
+        
+        // إعادة تحميل البيانات
+        setLastDoc(null);
+        await loadItems(false);
+        
+        // تنظيف
         setGlobalLoading(false);
         worker.terminate();
-      };
-      
-    } catch (err) {
-      console.error("Import error:", err);
-      showError("حدث خطأ أثناء الاستيراد: " + err.message);
-      setGlobalLoading(false);
-    }
-
-    setImportProgress({ total: 0, processed: 0, status: '' });
-    setImportData([]);
-  };
-
-  // دالة معالجة الملف المحسنة
-  const handleFileSelect = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    // التحقق من حجم الملف
-    if (file.size > 50 * 1024 * 1024) { // 50MB كحد أقصى
-      showError("حجم الملف كبير جداً. الحد الأقصى 50MB");
-      e.target.value = null;
-      return;
-    }
-
-    setGlobalLoading(true);
-    try {
-      const text = await file.text();
-      const data = await parseCSV(text);
-      
-      if (data.length > 50000) {
-        showError("عدد الأصناف كبير جداً. الحد الأقصى 50000 صنف");
-        e.target.value = null;
+        
+      } else if (type === 'error') {
+        showError(`❌ خطأ في الاستيراد: ${error}`);
         setGlobalLoading(false);
-        return;
+        worker.terminate();
       }
+    };
 
-      const errors = [];
-      const validData = [];
+    worker.onerror = (error) => {
+      console.error("Worker error:", error);
+      showError("حدث خطأ في عملية الاستيراد");
+      setGlobalLoading(false);
+      worker.terminate();
+    };
+    
+  } catch (err) {
+    console.error("Import error:", err);
+    showError("حدث خطأ أثناء الاستيراد: " + err.message);
+    setGlobalLoading(false);
+  }
 
-      data.forEach((row, index) => {
-        if (!row.serialNumber || !row.name) {
-          errors.push(`الصف ${index + 2}: السيريال أو الاسم مطلوب`);
-          return;
-        }
+  setImportData([]);
+};
+  // دالة معالجة الملف المحسنة
+  const handleFileSelect = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
 
-        const serial = normalizeSerial(row.serialNumber);
-        const quantity = parseInt(row.quantity) || 1;
-        const price = parseFloat(row.price) || 0;
-        const minStock = parseInt(row.minStock) || 2;
+  // ✅ تحذير للملفات الكبيرة
+  if (file.size > 10 * 1024 * 1024) { // 10MB
+    showWarning(`حجم الملف كبير (${(file.size / (1024*1024)).toFixed(2)} MB). قد يستغرق الاستيراد بعض الوقت.`);
+  }
 
-        if (quantity < 0) {
-          errors.push(`الصف ${index + 2}: الكمية غير صالحة`);
-          return;
-        }
-
-        if (price < 0) {
-          errors.push(`الصف ${index + 2}: السعر غير صالح`);
-          return;
-        }
-
-        validData.push({
-          serialNumber: serial,
-          name: row.name,
-          quantity,
-          price,
-          minStock,
-          category: row.category || 'عام',
-          location: row.location || '',
-          tags: row.tags ? row.tags.split(',').map(t => t.trim()) : [],
-          notes: row.notes || '',
-          warehouseId: appUser.assignedWarehouseId || 'main'
-        });
-      });
-
-      if (errors.length > 0) {
-        setImportErrors(errors);
-        setImportData([]);
+  setGlobalLoading(true);
+  
+  const reader = new FileReader();
+  reader.onload = async (event) => {
+    try {
+      const text = event.target.result;
+      
+      // ✅ استخدام Worker لتحليل CSV لو الملف كبير
+      if (text.length > 500000) { // 500KB
+        const csvWorker = new Worker('/workers/csvParser.js');
+        
+        csvWorker.postMessage(text);
+        
+        csvWorker.onmessage = (e) => {
+          const data = e.data;
+          processParsedData(data);
+          csvWorker.terminate();
+        };
+        
+        csvWorker.onerror = (error) => {
+          console.error("CSV Worker error:", error);
+          showError("خطأ في تحليل الملف");
+          setGlobalLoading(false);
+        };
+        
       } else {
-        setImportData(validData);
-        setImportErrors([]);
-        setShowImportModal(true);
+        // ملف صغير - حلل عادي
+        const data = parseCSV(text);
+        processParsedData(data);
       }
+      
     } catch (error) {
       console.error("File parse error:", error);
       showError("خطأ في قراءة الملف: " + error.message);
+      setGlobalLoading(false);
     }
+  };
+  
+  const processParsedData = (data) => {
+    if (data.length > 50000) {
+      showError("عدد الأصناف كبير جداً. الحد الأقصى 50000 صنف");
+      e.target.value = null;
+      setGlobalLoading(false);
+      return;
+    }
+
+    const errors = [];
+    const validData = [];
+
+    // معالجة سريعة للبيانات
+    data.forEach((row, index) => {
+      if (!row.serialNumber || !row.name) {
+        errors.push(`الصف ${index + 2}: السيريال أو الاسم مطلوب`);
+        return;
+      }
+
+      const serial = normalizeSerial(row.serialNumber);
+      const quantity = parseInt(row.quantity) || 1;
+      const price = parseFloat(row.price) || 0;
+
+      if (quantity < 0 || price < 0) {
+        errors.push(`الصف ${index + 2}: قيم غير صالحة`);
+        return;
+      }
+
+      validData.push({
+        serialNumber: serial,
+        name: row.name,
+        quantity,
+        price,
+        minStock: parseInt(row.minStock) || 2,
+        category: row.category || 'عام',
+        location: row.location || '',
+        notes: row.notes || ''
+      });
+    });
+
+    if (errors.length > 0) {
+      setImportErrors(errors);
+      setImportData([]);
+      showWarning(`تم العثور على ${errors.length} خطأ في الملف`);
+    } else {
+      setImportData(validData);
+      setImportErrors([]);
+      setShowImportModal(true);
+      showSuccess(`تم تحميل ${validData.length} صنف بنجاح`);
+    }
+    
     setGlobalLoading(false);
     e.target.value = null;
   };
+
+  reader.readAsText(file);
+};
 
   const downloadTemplate = () => {
     const template = [
@@ -3853,19 +3946,41 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
               أدخل النسبة المئوية (استخدم علامة - للخصم)
             </p>
             
-            {importProgress.status && (
-              <div className="mb-4 p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg">
-                <p className="text-xs font-bold text-indigo-700 dark:text-indigo-300 mb-2">{importProgress.status}</p>
-                {importProgress.total > 0 && (
-                  <div className="w-full bg-indigo-100 dark:bg-indigo-900 rounded-full h-2">
-                    <div 
-                      className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${(importProgress.processed / importProgress.total) * 100}%` }}
-                    ></div>
-                  </div>
-                )}
-              </div>
-            )}
+            // في قسم الـ JSX، بعد importErrors
+{importProgress.status && (
+  <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+    <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 w-full max-w-md shadow-2xl text-center">
+      <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mx-auto mb-4" />
+      <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">
+        استيراد البيانات
+      </h3>
+      <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+        {importProgress.status}
+      </p>
+      
+      {/* شريط التقدم */}
+      {importProgress.total > 0 && (
+        <>
+          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-4 mb-2">
+            <div 
+              className="bg-indigo-600 h-4 rounded-full transition-all duration-300"
+              style={{ width: `${(importProgress.processed / importProgress.total) * 100}%` }}
+            />
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-500">
+            {importProgress.processed} من {importProgress.total} عنصر
+            {importProgress.failed > 0 && ` (فشل ${importProgress.failed})`}
+          </p>
+          {importProgress.totalBatches > 1 && (
+            <p className="text-xs text-indigo-500 mt-2">
+              الدفعة {importProgress.currentBatch} من {importProgress.totalBatches}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  </div>
+)}
             
             <div className="space-y-4">
                <div className="relative">
