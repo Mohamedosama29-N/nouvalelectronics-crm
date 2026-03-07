@@ -9474,50 +9474,61 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
 
      setGlobalLoading(true);
      try {
-       const itemsToTransfer = Array.from(selectedItems).map(id => inventory.find(i => i.id === id));
-       
-       for (const item of itemsToTransfer) {
-  
-      for (const item of itemsToTransfer) {
+ const itemsToTransfer = Array.from(selectedItems).map(id => inventory.find(i => i.id === id));
 
-  await addDoc(collection(db, 'inventory'), {
-    ...item,
-    warehouseId: transferData.toWarehouse,
-    createdAt: serverTimestamp(),
-    isDeleted: false,
-    quantity: item.quantity || 1
-  });
+try {
 
-  await updateDoc(doc(db, 'inventory', item.id), {
-    quantity: 0,
-    isDeleted: true
-  });
+  for (const item of itemsToTransfer) {
+
+    await addDoc(collection(db, 'inventory'), {
+      ...item,
+      warehouseId: transferData.toWarehouse,
+      createdAt: serverTimestamp(),
+      isDeleted: false,
+      quantity: item.quantity || 1
+    });
+
+    await updateDoc(doc(db, 'inventory', item.id), {
+      quantity: 0,
+      isDeleted: true
+    });
+
+  }
+
+  await logUserActivity(
+    appUser,
+    'نقل مخزون بين فروع',
+    `نقل ${selectedItems.size} صنف من ${selectedWarehouse.name}`
+  );
+
+  showSuccess("تم نقل الأصناف بنجاح");
+
+  setSelectedItems(new Set());
+  setShowTransferModal(false);
+  setTransferData({ toWarehouse: '', items: [] });
+
+  if (selectedWarehouse) {
+    const invSnap = await getDocs(
+      query(
+        collection(db, 'inventory'),
+        where('warehouseId', '==', selectedWarehouse.id),
+        where('isDeleted', '==', false)
+      )
+    );
+
+    setInventory(invSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+  }
+
+} catch (error) {
+
+  console.error("Transfer error:", error);
+  showError("حدث خطأ أثناء نقل الأصناف");
+
+} finally {
+
+  setGlobalLoading(false);
 
 }
-
-await logUserActivity(
-  appUser,
-  'نقل مخزون بين فروع',
-  `نقل ${selectedItems.size} صنف من ${selectedWarehouse.name}`
-);
-
-showSuccess("تم نقل الأصناف بنجاح");
-
-setSelectedItems(new Set());
-setShowTransferModal(false);
-setTransferData({ toWarehouse: '', items: [] });   
-       if (selectedWarehouse) {
-         const invSnap = await getDocs(query(collection(db, 'inventory'), where('warehouseId', '==', selectedWarehouse.id), where('isDeleted', '==', false)));
-         setInventory(invSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-       }
-       
-     } catch (error) {
-       console.error("Transfer error:", error);
-       showError("حدث خطأ أثناء نقل الأصناف");
-     }
-     setGlobalLoading(false);
-   };
-
    const handleAdd = async (e) => {
       e.preventDefault(); 
       if(!name) return;
