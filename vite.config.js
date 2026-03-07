@@ -11,3 +11,8 @@ export default defineConfig({
     include: ['firebase/app', 'firebase/firestore']
   }
 })
+export default {
+  build: {
+    minify: false
+  }
+}

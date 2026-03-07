@@ -2,7 +2,7 @@
 // 📦 NOUVAL ERP SYSTEM - الإصدار النهائي المتكامل (الجزء 1)
 // ==========================================================================
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useContext } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import { 
   LineChart, Line, BarChart, Bar, PieChart, Pie,
@@ -34,7 +34,7 @@ import {
   Phone, Loader2, Menu, UserCog, Wrench, Wallet, Mail, 
   CheckCircle2, Calendar, X, LogIn, Shield, Image as ImageIcon, Percent,
   ChevronDown, Database, UploadCloud, DownloadCloud, Check, Activity, Eye,
-  Home, Map, Building, FileText, Printer as PrinterIcon, Copy, Grid,
+  Home, Map as MapIcon, Building, FileText, Printer as PrinterIcon, Copy, Grid,
   Filter, RefreshCw, UsersRound, UserCheck, UserX, UserPlus, Briefcase,
   HardHat, Headphones, Settings as SettingsIcon, GitBranch, GitMerge,
   AlertCircle, CheckCircle, XCircle, Clock, ThumbsUp, ThumbsDown,
