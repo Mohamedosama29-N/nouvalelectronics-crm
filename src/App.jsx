@@ -1,5 +1,5 @@
 // ==========================================================================
-// 📦 NOUVAL ERP SYSTEM - الإصدار النهائي المتكامل
+// 📦 NOUVAL ERP SYSTEM - الإصدار النهائي المتكامل (الجزء 1)
 // ==========================================================================
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -22,7 +22,7 @@ import {
 import { 
   getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, deleteDoc, 
   query, where, serverTimestamp, orderBy, onSnapshot, setDoc, increment, 
-  limit, runTransaction, writeBatch, startAfter, Timestamp
+  limit, runTransaction, writeBatch, startAfter, Timestamp, arrayUnion
 } from 'firebase/firestore';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 
@@ -42,27 +42,39 @@ import {
   TrendingUp, TrendingDown, PieChart as PieChartIcon, LineChart as LineChartIcon,
   DownloadCloud as DownloadIcon, RefreshCcw, WifiOff, Sun, Moon,
   Key, Globe, MapPin as MapPinIcon, Fingerprint, Webhook, 
-  MessageCircle, Share2, FileJson, Server, Cloud, Zap
+  MessageCircle, Share2, FileJson, Server, Cloud, Zap, EyeOff,
+  RotateCcw, Sparkles, Box, Layers, ShoppingBag, Truck, 
+  Wrench as WrenchIcon, Headphones as HeadphonesIcon, Star as StarIcon,
+  FileText as FileTextIcon, Settings as CogIcon, Trash as TrashIcon
 } from 'lucide-react';
 
 // ==========================================================================
-// 🔥 FIREBASE CONFIGURATION
+// 🔥 FIREBASE CONFIGURATION (Vite compatible)
 // ==========================================================================
 const firebaseConfig = {
-  apiKey: "AIzaSyBrRvCAWdC_SOjBqSFPXyav-3ifE80UoLU",
-  authDomain: "nouval-system.firebaseapp.com",
-  projectId: "nouval-system",
-  storageBucket: "nouval-system.firebasestorage.app",
-  messagingSenderId: "194279959532",
-  appId: "1:194279959532:web:578f5894f58102d4872ec9"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBrRvCAWdC_SOjBqSFPXyav-3ifE80UoLU",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "nouval-system.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "nouval-system",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "nouval-system.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "194279959532",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:194279959532:web:578f5894f58102d4872ec9"
 };
 
-// التحقق من وجود المتغيرات (للتأكيد)
+// التحقق من وجود المتغيرات
+console.log('🔥 Firebase Config Loaded:', {
+  projectId: firebaseConfig.projectId,
+  hasApiKey: !!firebaseConfig.apiKey
+});
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
-const messaging = getMessaging(app);
+let messaging;
+try {
+  messaging = getMessaging(app);
+} catch (error) {
+  console.warn('Firebase Messaging not available:', error);
+}
 
 const getCollRef = (collName) => collection(db, collName);
 const getDocRef = (collName, docId) => doc(db, collName, docId);
@@ -70,7 +82,7 @@ const getDocRef = (collName, docId) => doc(db, collName, docId);
 // ==========================================================================
 // 🔐 ENCRYPTION SETUP
 // ==========================================================================
-const SECRET_KEY = process.env.REACT_APP_ENCRYPTION_KEY || 'nouval-secret-key-2024$$Nada202$$291';
+const SECRET_KEY = import.meta.env.VITE_ENCRYPTION_KEY || 'nouval-secret-key-2024$$Nada202$$291';
 
 const encrypt = (data) => {
   return CryptoJS.AES.encrypt(JSON.stringify(data), SECRET_KEY).toString();
@@ -155,15 +167,15 @@ const showInfo = (message, title = 'معلومة') => {
 const dbPromise = openDB('nouval-offline-db', 3, {
   upgrade(db, oldVersion, newVersion) {
     if (oldVersion < 1) {
-      // المخازن الرئيسية
       db.createObjectStore('inventory', { keyPath: 'id' });
       db.createObjectStore('transactions', { keyPath: 'id' });
       db.createObjectStore('customers', { keyPath: 'id' });
       db.createObjectStore('tickets', { keyPath: 'id' });
       db.createObjectStore('settings', { keyPath: 'id' });
+      db.createObjectStore('warehouses', { keyPath: 'id' });
+      db.createObjectStore('employees', { keyPath: 'id' });
     }
     if (oldVersion < 2) {
-      // سجل المزامنة
       const syncStore = db.createObjectStore('sync_queue', { 
         keyPath: 'id', 
         autoIncrement: true 
@@ -172,16 +184,14 @@ const dbPromise = openDB('nouval-offline-db', 3, {
       syncStore.createIndex('attempts', 'attempts');
     }
     if (oldVersion < 3) {
-      // تخزين مؤقت للبحث
       db.createObjectStore('search_cache', { keyPath: 'term' });
-      // تخزين مؤقت للتقارير
       db.createObjectStore('reports_cache', { keyPath: 'id' });
+      db.createObjectStore('backups', { keyPath: 'id' });
     }
   },
 });
 
 export const offlineDB = {
-  // حفظ البيانات
   async save(store, data) {
     try {
       const db = await dbPromise;
@@ -193,7 +203,6 @@ export const offlineDB = {
     }
   },
 
-  // جلب بيانات
   async get(store, id) {
     try {
       const db = await dbPromise;
@@ -204,7 +213,6 @@ export const offlineDB = {
     }
   },
 
-  // جلب كل البيانات
   async getAll(store) {
     try {
       const db = await dbPromise;
@@ -215,7 +223,6 @@ export const offlineDB = {
     }
   },
 
-  // حذف بيانات
   async delete(store, id) {
     try {
       const db = await dbPromise;
@@ -227,7 +234,6 @@ export const offlineDB = {
     }
   },
 
-  // مسح كل البيانات
   async clear(store) {
     try {
       const db = await dbPromise;
@@ -239,7 +245,6 @@ export const offlineDB = {
     }
   },
 
-  // إضافة عملية للمزامنة
   async addToSyncQueue(operation) {
     try {
       const db = await dbPromise;
@@ -255,7 +260,6 @@ export const offlineDB = {
     }
   },
 
-  // جلب عمليات المزامنة
   async getSyncQueue() {
     try {
       const db = await dbPromise;
@@ -266,7 +270,6 @@ export const offlineDB = {
     }
   },
 
-  // تحديث عملية في قائمة المزامنة
   async updateSyncQueue(id, updates) {
     try {
       const db = await dbPromise;
@@ -282,7 +285,6 @@ export const offlineDB = {
     }
   },
 
-  // حذف عملية من قائمة المزامنة
   async removeFromSyncQueue(id) {
     try {
       const db = await dbPromise;
@@ -294,7 +296,6 @@ export const offlineDB = {
     }
   },
 
-  // حفظ في كاش البحث
   async saveSearchCache(term, results) {
     try {
       const db = await dbPromise;
@@ -310,12 +311,11 @@ export const offlineDB = {
     }
   },
 
-  // جلب من كاش البحث
   async getSearchCache(term) {
     try {
       const db = await dbPromise;
       const cached = await db.get('search_cache', term);
-      if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) { // 5 دقائق
+      if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) {
         return cached.results;
       }
       return null;
@@ -325,7 +325,6 @@ export const offlineDB = {
     }
   },
 
-  // مزامنة مع السيرفر
   async syncWithServer() {
     const queue = await this.getSyncQueue();
     let synced = 0;
@@ -338,7 +337,6 @@ export const offlineDB = {
       }
 
       try {
-        // تنفيذ العملية على Firebase
         switch (item.type) {
           case 'add':
             await addDoc(collection(db, item.collection), item.data);
@@ -382,7 +380,6 @@ class RateLimiter {
     const now = Date.now();
     const userRequests = this.requests.get(key) || [];
     
-    // تنظيف الطلبات القديمة
     const validRequests = userRequests.filter(
       time => now - time < this.windowMs
     );
@@ -410,7 +407,7 @@ class RateLimiter {
   }
 }
 
-export const apiLimiter = new RateLimiter(60, 60000); // 60 طلب في الدقيقة
+export const apiLimiter = new RateLimiter(60, 60000);
 
 // ==========================================================================
 // 👤 USER IP & LOCATION TRACKING
@@ -485,7 +482,6 @@ const logUserLogin = async (user) => {
       success: true
     });
 
-    // حفظ آخر 5 IPs للمستخدم
     const userRef = doc(db, 'employees', user.id);
     await updateDoc(userRef, {
       lastIPs: arrayUnion(ip),
@@ -657,8 +653,8 @@ function AdvancedCharts({ data, type = 'line', title, height = 300 }) {
   };
 
   return (
-    <div className="bg-white p-4 rounded-xl">
-      {title && <h3 className="font-bold text-lg mb-4 text-slate-800">{title}</h3>}
+    <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+      {title && <h3 className="font-bold text-lg mb-4 text-slate-800 dark:text-white">{title}</h3>}
       <ResponsiveContainer width="100%" height={height}>
         {renderChart()}
       </ResponsiveContainer>
@@ -672,16 +668,13 @@ function AdvancedCharts({ data, type = 'line', title, height = 300 }) {
 export const exportToPDF = async (data, title, headers) => {
   const doc = new jsPDF();
   
-  // إضافة العنوان
   doc.setFont('cairo', 'normal');
   doc.setFontSize(20);
   doc.text(title, 105, 15, { align: 'center' });
   
-  // إضافة التاريخ
   doc.setFontSize(10);
   doc.text(`تاريخ التقرير: ${new Date().toLocaleDateString('ar-EG')}`, 105, 25, { align: 'center' });
   
-  // إنشاء الجدول
   autoTable(doc, {
     head: [headers],
     body: data.map(row => headers.map(h => row[h] || '-')),
@@ -700,7 +693,6 @@ export const exportToPDF = async (data, title, headers) => {
     margin: { top: 35 }
   });
   
-  // حفظ الملف
   doc.save(`${title}_${new Date().toISOString().split('T')[0]}.pdf`);
 };
 
@@ -709,7 +701,6 @@ export const exportToPDF = async (data, title, headers) => {
 // ==========================================================================
 export const sendEmail = async (to, subject, body, attachments = []) => {
   try {
-    // استخدام EmailJS أو خدمة مشابهة
     const response = await fetch('YOUR_EMAIL_API_ENDPOINT', {
       method: 'POST',
       headers: {
@@ -777,7 +768,6 @@ export const validateAPIKey = async (apiKey) => {
       return { valid: false, error: 'انتهت صلاحية المفتاح' };
     }
     
-    // تحديث آخر استخدام
     await updateDoc(doc(db, 'api_keys', snap.docs[0].id), {
       lastUsed: serverTimestamp()
     });
@@ -1313,7 +1303,6 @@ const parseCSV = (text) => {
     const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
     const results = [];
     
-    // استخدام Web Worker للكميات الكبيرة
     if (lines.length > 1000) {
       return parseCSVWithWorker(text);
     }
@@ -1369,10 +1358,9 @@ export const requestNotificationPermission = async () => {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
       const token = await getToken(messaging, {
-        vapidKey: 'BM-uzhdJEQ0yrbCFuB9G0BznP7e50HqWuRR06ICqs4j8TiaYdeEqaaxiGA9eJmJ6rDlnopU2bKUzs7fmjDAxa7c' // أضف VAPID key من Firebase
+        vapidKey: import.meta.env.VITE_VAPID_KEY || ''
       });
       
-      // حفظ التوكن في قاعدة البيانات
       const user = auth.currentUser;
       if (user) {
         await setDoc(doc(db, 'fcm_tokens', user.uid), {
@@ -1392,9 +1380,11 @@ export const requestNotificationPermission = async () => {
 
 export const onMessageListener = () => 
   new Promise((resolve) => {
-    onMessage(messaging, (payload) => {
-      resolve(payload);
-    });
+    if (messaging) {
+      onMessage(messaging, (payload) => {
+        resolve(payload);
+      });
+    }
   });
 
 // ==========================================================================
@@ -1476,7 +1466,6 @@ const syncManager = {
   async addOperation(operation) {
     if (navigator.onLine) {
       try {
-        // تنفيذ مباشر إذا كان متصلاً
         switch (operation.type) {
           case 'add':
             await addDoc(collection(db, operation.collection), operation.data);
@@ -1490,18 +1479,16 @@ const syncManager = {
         }
         return { synced: true };
       } catch (error) {
-        // إذا فشل، أضف لقائمة الانتظار
         await offlineDB.addToSyncQueue(operation);
         return { synced: false, queued: true };
       }
     } else {
-      // غير متصل - أضف لقائمة الانتظار
       await offlineDB.addToSyncQueue(operation);
       return { synced: false, queued: true };
     }
   },
 
-  startAutoSync(interval = 5 * 60 * 1000) { // كل 5 دقائق
+  startAutoSync(interval = 5 * 60 * 1000) {
     setInterval(async () => {
       if (navigator.onLine) {
         await this.syncAll();
@@ -1523,18 +1510,13 @@ const searchCache = {
   },
 
   async search(term, type, searchFn) {
-    // حاول من الكاش أولاً
     const cached = await this.get(term, type);
     if (cached) {
       return cached;
     }
 
-    // نفذ البحث الفعلي
     const results = await searchFn(term);
-
-    // احفظ في الكاش
     await this.set(term, type, results);
-
     return results;
   }
 };
@@ -1546,11 +1528,11 @@ function VirtualTable({ data, columns, height = 600, rowHeight = 50 }) {
   const Row = ({ index, style }) => {
     const item = data[index];
     return (
-      <div style={style} className="flex border-b hover:bg-slate-50 transition-colors">
+      <div style={style} className="flex border-b hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
         {columns.map((col, idx) => (
           <div
             key={idx}
-            className="p-3 text-sm"
+            className="p-3 text-sm truncate"
             style={{ width: col.width || `${100 / columns.length}%` }}
           >
             {col.render ? col.render(item) : item[col.field]}
@@ -1571,6 +1553,7 @@ function VirtualTable({ data, columns, height = 600, rowHeight = 50 }) {
     </List>
   );
 }
+
 // ==========================================================================
 // 🎨 THEME PROVIDER (للتبديل بين الوضع الفاتح والداكن)
 // ==========================================================================
@@ -1609,6 +1592,141 @@ const useTheme = () => {
 };
 
 // ==========================================================================
+// 👤 عرض ملف الموظف
+// ==========================================================================
+function EmployeeProfileView({ userToView, warehouseMap }) {
+  const [activities, setActivities] = useState([]);
+  const [stats, setStats] = useState({ totalActions: 0, lastActive: null, commonActions: [] });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userToView) return;
+    setLoading(true);
+    
+    const q = query(
+        collection(db, 'activity_logs'), 
+        where('userId', '==', userToView.id), 
+        orderBy('timestamp', 'desc'), 
+        limit(100)
+    );
+    
+    const unsub = onSnapshot(q, snap => {
+        const logs = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        setActivities(logs);
+        
+        const actionCounts = {};
+        logs.forEach(log => {
+          actionCounts[log.action] = (actionCounts[log.action] || 0) + 1;
+        });
+        
+        const commonActions = Object.entries(actionCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([action, count]) => ({ action, count }));
+        
+        setStats({
+          totalActions: logs.length,
+          lastActive: logs[0]?.timestamp,
+          commonActions
+        });
+        
+        setLoading(false);
+    }, (error) => {
+        console.error(error);
+        setLoading(false);
+    });
+
+    return () => unsub();
+  }, [userToView]);
+
+  if (!userToView) return null;
+
+  const RoleIcon = getRoleIcon(userToView.role);
+  const roleColor = getRoleColor(userToView.role);
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6 text-right" dir="rtl">
+       <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+          <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
+            <div className="w-24 h-24 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-3xl flex items-center justify-center font-black text-4xl text-white shadow-xl shadow-indigo-200 shrink-0">
+              {userToView.name?.charAt(0) || userToView.email?.charAt(0) || '?'}
+            </div>
+            <div className="flex-1 text-center md:text-right">
+              <h2 className="text-3xl font-black text-slate-800 dark:text-white mb-2">{userToView.name}</h2>
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 text-sm font-bold">
+                 <span className="text-slate-500 dark:text-slate-400 font-mono" dir="ltr">{userToView.email}</span>
+                 {userToView.phone && <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-lg">{userToView.phone}</span>}
+                 <span className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg">الفرع: {warehouseMap[userToView.assignedWarehouseId] || 'الرئيسي'}</span>
+                 <span className={`px-3 py-1 rounded-lg bg-${roleColor}-100 dark:bg-${roleColor}-900/30 text-${roleColor}-700 dark:text-${roleColor}-300 flex items-center gap-1`}>
+                   <RoleIcon size={14}/> {USER_ROLES.find(r => r.key === userToView.role)?.label || userToView.role}
+                 </span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+            <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl text-center">
+              <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-1">إجمالي النشاطات</p>
+              <p className="text-2xl font-black text-indigo-800 dark:text-indigo-300">{stats.totalActions}</p>
+            </div>
+            <div className="bg-emerald-50 dark:bg-emerald-900/30 p-4 rounded-xl text-center">
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-1">آخر نشاط</p>
+              <p className="text-lg font-black text-emerald-800 dark:text-emerald-300">{formatDate(stats.lastActive)}</p>
+            </div>
+            <div className="bg-purple-50 dark:bg-purple-900/30 p-4 rounded-xl text-center">
+              <p className="text-xs text-purple-600 dark:text-purple-400 mb-1">تاريخ الانضمام</p>
+              <p className="text-lg font-black text-purple-800 dark:text-purple-300">{formatDate(userToView.createdAt)}</p>
+            </div>
+          </div>
+          
+          {stats.commonActions.length > 0 && (
+            <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl">
+              <h3 className="font-bold text-slate-700 dark:text-slate-300 mb-3">أكثر الإجراءات تكراراً</h3>
+              <div className="flex flex-wrap gap-2">
+                {stats.commonActions.map((item, idx) => (
+                  <span key={idx} className="bg-white dark:bg-slate-800 px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700">
+                    {item.action} ({item.count})
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+       </div>
+
+       <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+           <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2 mb-8 border-b pb-4">
+              <Activity className="text-indigo-600" size={24}/> سجل النشاطات (آخر 100 حركة)
+           </h3>
+           
+           {loading ? (
+               <div className="flex justify-center p-10"><Loader2 className="animate-spin text-indigo-500" size={32}/></div>
+           ) : activities.length === 0 ? (
+               <div className="text-center p-12 text-slate-400 dark:text-slate-500 font-bold border-2 border-dashed border-slate-100 dark:border-slate-700 rounded-2xl">
+                   لا توجد نشاطات مسجلة لهذا الموظف حتى الآن.
+               </div>
+           ) : (
+               <div className="relative border-r-2 border-indigo-200 dark:border-indigo-800 pr-6 ml-2 space-y-6">
+                   {activities.map((act, idx) => (
+                       <div key={act.id || idx} className="relative">
+                           <span className="absolute -right-[33px] top-1.5 w-4 h-4 bg-white dark:bg-slate-800 border-2 border-indigo-400 rounded-full"></span>
+                           <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-indigo-800 transition-colors">
+                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                                   <span className="font-black text-sm text-indigo-900 dark:text-indigo-300">{act.action}</span>
+                                   <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 w-fit">
+                                       {formatDate(act.timestamp)}
+                                   </span>
+                               </div>
+                               <p className="text-xs font-bold text-slate-600 dark:text-slate-400 leading-relaxed">{act.details}</p>
+                           </div>
+                       </div>
+                   ))}
+               </div>
+           )}
+       </div>
+    </div>
+  );
+}
+// ==========================================================================
 // 🔐 شاشة تسجيل الدخول المحسنة (مع تتبع IP والموقع)
 // ==========================================================================
 function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry, isConnecting, firebaseError }) {
@@ -1622,16 +1740,6 @@ function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry,
   const [isLocked, setIsLocked] = useState(false);
   const [lockTimer, setLockTimer] = useState(null);
 
-  
-
-  // في useEffect بعد ما المستخدم يسجل دخول
-  useEffect(() => {
-    if (appUser) {
-     // طلب إذن الإشعارات
-     requestNotificationPermission();
-     }
-  }, [appUser]);
-  
   // تحميل البريد الإلكتروني المحفوظ
   useEffect(() => {
     const savedEmail = localStorage.getItem('last_email');
@@ -1658,7 +1766,6 @@ function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry,
   const handleLogin = async (e) => {
     e.preventDefault();
     
-    // التحقق من Rate Limiting
     if (isLocked) {
       setError("تم قفل الحساب مؤقتاً بسبب كثرة المحاولات. حاول بعد 5 دقائق");
       return;
@@ -1706,7 +1813,6 @@ function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry,
           
           const userData = { id: docRef.id, ...newAdmin, permissions: newAdmin.permissions };
           
-          // تسجيل معلومات الدخول
           await logUserLogin(userData);
           
           saveUserToStorage(userData);
@@ -1734,7 +1840,6 @@ function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry,
            
            const userWithId = { id: userDoc.id, ...userData, permissions: userData.permissions || {} };
            
-           // تسجيل معلومات الدخول
            await logUserLogin(userWithId);
            
            saveUserToStorage(userWithId);
@@ -2243,6 +2348,7 @@ function InvoiceTemplateManager({ systemSettings, setSettings, notify }) {
     </div>
   );
 }
+
 // ==========================================================================
 // 📊 لوحة التحكم المحسنة مع إحصائيات متقدمة
 // ==========================================================================
@@ -2290,7 +2396,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
   const [selectedWarehouse, setSelectedWarehouse] = useState('all');
   const [chartType, setChartType] = useState('sales');
 
-  // دالة التحديث اليدوي
   const handleRefresh = () => {
     setRefreshKey(prev => prev + 1);
   };
@@ -2303,7 +2408,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
        setLoading(true);
        setError(null);
        try {
-           // جلب المخزون
            let invSnap;
            try {
              let q = collection(db, 'inventory');
@@ -2334,10 +2438,8 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
                    totalQty += qty;
                    totalVal += qty * price;
                    
-                   // توزيع المخازن
                    warehouseCount[data.warehouseId] = (warehouseCount[data.warehouseId] || 0) + qty;
                    
-                   // توزيع التصنيفات
                    const category = data.category || 'عام';
                    categoryCount[category] = (categoryCount[category] || 0) + qty;
                    
@@ -2359,7 +2461,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
 
            setShowInventoryValue(appUser.permissions?.viewInventoryValue || false);
 
-           // تجهيز بيانات التوزيع
            const categoryDistribution = Object.entries(categoryCount).map(([name, count]) => ({
              name,
              value: count
@@ -2370,7 +2471,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
              value: count
            }));
 
-           // جلب المبيعات
            let salesToday = 0;
            let salesWeek = 0;
            let salesMonth = 0;
@@ -2400,7 +2500,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
                where('type', '==', 'sell')
              ));
              
-             // تجميع المبيعات اليومية
              const dailyTotals = {};
              const monthlyTotals = {};
              
@@ -2412,35 +2511,20 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
                    const dateStr = date.toISOString().split('T')[0];
                    const monthStr = date.toISOString().slice(0, 7);
                    
-                   // تجميع يومي
                    dailyTotals[dateStr] = (dailyTotals[dateStr] || 0) + amount;
-                   
-                   // تجميع شهري
                    monthlyTotals[monthStr] = (monthlyTotals[monthStr] || 0) + amount;
                    
-                   if (date >= today) {
-                     salesToday += amount;
-                   }
-                   if (date >= yesterday && date < today) {
-                     salesYesterday += amount;
-                   }
-                   if (date >= weekAgo) {
-                     salesWeek += amount;
-                   }
-                   if (date >= monthAgo) {
-                     salesMonth += amount;
-                   }
-                   if (date >= yearAgo) {
-                     salesYear += amount;
-                   }
+                   if (date >= today) salesToday += amount;
+                   if (date >= yesterday && date < today) salesYesterday += amount;
+                   if (date >= weekAgo) salesWeek += amount;
+                   if (date >= monthAgo) salesMonth += amount;
+                   if (date >= yearAgo) salesYear += amount;
                    
-                   // تجميع مبيعات المنتجات
                    const productName = data.itemName;
                    productSales[productName] = (productSales[productName] || 0) + amount;
                 }
              });
 
-             // ترتيب المبيعات اليومية
              dailySalesData = Object.entries(dailyTotals)
                .sort((a, b) => a[0].localeCompare(b[0]))
                .slice(-30)
@@ -2455,13 +2539,11 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
              console.warn("Sales access error:", err);
            }
 
-           // ترتيب أفضل المنتجات
            const topProducts = Object.entries(productSales)
              .sort((a, b) => b[1] - a[1])
              .slice(0, 10)
              .map(([name, value]) => ({ name, value }));
 
-           // جلب التذاكر
            let todayTickets = 0, weekTickets = 0, monthTickets = 0, closedTickets = 0, 
                waitingApprovalTickets = 0, highPriorityTickets = 0;
            let statusCount = {};
@@ -2488,13 +2570,8 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
                 if (createdDate >= weekAgo) weekTickets++;
                 if (createdDate >= monthAgo) monthTickets++;
                 
-                if (data.status === 'delivered_to_customer' || data.status === 'closed') {
-                  closedTickets++;
-                }
-                
-                if (data.status === 'waiting_customer_approval_cost') {
-                  waitingApprovalTickets++;
-                }
+                if (data.status === 'delivered_to_customer' || data.status === 'closed') closedTickets++;
+                if (data.status === 'waiting_customer_approval_cost') waitingApprovalTickets++;
                 
                 if (data.priority === 'high') {
                   highPriorityTickets++;
@@ -2522,7 +2599,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
              count
            }));
 
-           // جلب آخر النشاطات
            let recentActs = [];
            try {
              const activitiesSnap = await getDocs(query(
@@ -2606,7 +2682,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
 
   return (
     <div className="space-y-6 text-right">
-      {/* رأس الصفحة مع الفلاتر */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
          <div className="flex items-center gap-2">
            <h2 className="text-xl font-black text-slate-800 dark:text-white">لوحة المؤشرات</h2>
@@ -2663,7 +2738,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
         </div>
       )}
 
-      {/* بطاقات الإحصائيات الرئيسية */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <button 
           onClick={() => handleStatClick('inventory')}
@@ -2735,7 +2809,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
         </button>
       </div>
 
-      {/* إحصائيات إضافية للمبيعات */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
           <p className="text-xs font-bold text-blue-800 dark:text-blue-300 mb-1">مبيعات الأسبوع</p>
@@ -2757,7 +2830,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
         </div>
       </div>
 
-      {/* إحصائيات التذاكر */}
       {appUser.permissions?.manageTickets && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-4">
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
@@ -2783,7 +2855,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
         </div>
       )}
 
-      {/* أفضل المنتجات مبيعاً */}
       {stats.topProducts.length > 0 && (
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
           <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2">
@@ -2805,11 +2876,9 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
         </div>
       )}
 
-      {/* الرسوم البيانية المتقدمة */}
       {appUser.permissions?.viewCharts && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
           
-          {/* اختيار نوع الرسم البياني */}
           <div className="col-span-2 flex gap-2 mb-2">
             <button
               onClick={() => setChartType('sales')}
@@ -2831,7 +2900,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
             </button>
           </div>
 
-          {/* رسوم المبيعات */}
           {chartType === 'sales' && (
             <>
               <AdvancedCharts 
@@ -2849,7 +2917,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
             </>
           )}
 
-          {/* رسوم التذاكر */}
           {chartType === 'tickets' && (
             <>
               <AdvancedCharts 
@@ -2867,7 +2934,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
             </>
           )}
 
-          {/* رسوم المخزون */}
           {chartType === 'inventory' && (
             <>
               <AdvancedCharts 
@@ -2885,7 +2951,6 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
             </>
           )}
 
-          {/* آخر النشاطات */}
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm lg:col-span-2">
             <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2">
               <Activity className="text-indigo-600" size={20}/> آخر النشاطات
@@ -3051,7 +3116,6 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
   }, [debouncedSearch, appUser, searchFilters, selectedTags]);
 
   useEffect(() => {
-    // استخراج التصنيفات من العناصر
     const uniqueCategories = [...new Set(items.map(item => item.category).filter(Boolean))];
     setCategories(uniqueCategories);
   }, [items]);
@@ -3138,242 +3202,232 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
     setGlobalLoading(false);
   };
 
+  // دالة التحقق من السيريال
+  const checkSerialAvailability = async (serial) => {
+    const q = query(
+      collection(db, 'inventory'), 
+      where('serialNumber', '==', serial),
+      where('isDeleted', '==', false)
+    );
+    const snap = await getDocs(q);
+    return snap.empty;
+  };
+
   // دالة الاستيراد المحسنة مع Web Worker
-  // ==========================================================================
-// 📦 دالة الاستيراد المحسنة - تدعم 10,000+ صنف
-// ==========================================================================
-const handleImportConfirm = async () => {
-  if (importData.length === 0) return;
+  const handleImportConfirm = async () => {
+    if (importData.length === 0) return;
 
-  setShowImportModal(false);
-  setGlobalLoading(true);
-  
-  // إعدادات الاستيراد
-  const BATCH_SIZE = 200; // 200 صنف كل دفعة (متوازن للأداء)
-  const totalItems = importData.length;
-  
-  setImportProgress({ 
-    total: totalItems, 
-    processed: 0, 
-    failed: 0,
-    status: 'بدء الاستيراد...',
-    currentBatch: 0,
-    totalBatches: Math.ceil(totalItems / BATCH_SIZE)
-  });
-
-  try {
-    // ✅ استخدام Web Worker للمعالجة
-    const worker = new Worker('/workers/inventoryImportWorker.js');
+    setShowImportModal(false);
+    setGlobalLoading(true);
     
-    // بدأ المعالجة في الـ Worker
-    worker.postMessage({
-      data: importData,
-      batchSize: BATCH_SIZE,
-      userId: appUser.id,
-      userName: appUser.name
+    const BATCH_SIZE = 200;
+    const totalItems = importData.length;
+    
+    setImportProgress({ 
+      total: totalItems, 
+      processed: 0, 
+      failed: 0,
+      status: 'بدء الاستيراد...',
+      currentBatch: 0,
+      totalBatches: Math.ceil(totalItems / BATCH_SIZE)
     });
 
-    // استقبال النتائج من الـ Worker
-    worker.onmessage = async (e) => {
-      const { type, processed, failed, total, batch, batchIndex, totalBatches, error } = e.data;
+    try {
+      const worker = new Worker('/workers/inventoryImportWorker.js');
       
-      if (type === 'batch') {
-        // ✅ استقبال دفعة جديدة - نقوم بإضافتها لـ Firebase
-        try {
-          const firestoreBatch = writeBatch(db);
-          
-          for (const item of batch) {
-            const newRef = doc(collection(db, 'inventory'));
-            firestoreBatch.set(newRef, {
-              ...item,
-              searchKey: normalizeSearch(item.searchKey),
-              createdAt: serverTimestamp(),
-              isDeleted: false,
-              importedBy: appUser.name,
-              importedAt: serverTimestamp()
-            });
+      worker.postMessage({
+        data: importData,
+        batchSize: BATCH_SIZE,
+        userId: appUser.id,
+        userName: appUser.name
+      });
 
-            // تسجيل السيريال لمنع التكرار
-            const regRef = doc(db, 'serial_registry', item.serialNumber);
-            firestoreBatch.set(regRef, { 
-              exists: true, 
-              imported: true,
-              importedAt: serverTimestamp() 
-            }, { merge: true });
+      worker.onmessage = async (e) => {
+        const { type, processed, failed, total, batch, batchIndex, totalBatches, error } = e.data;
+        
+        if (type === 'batch') {
+          try {
+            const firestoreBatch = writeBatch(db);
+            
+            for (const item of batch) {
+              const newRef = doc(collection(db, 'inventory'));
+              firestoreBatch.set(newRef, {
+                ...item,
+                searchKey: normalizeSearch(`${item.name} ${item.serialNumber} ${item.category} ${(item.tags || []).join(' ')}`),
+                createdAt: serverTimestamp(),
+                isDeleted: false,
+                importedBy: appUser.name,
+                importedAt: serverTimestamp()
+              });
+
+              const regRef = doc(db, 'serial_registry', item.serialNumber);
+              firestoreBatch.set(regRef, { 
+                exists: true, 
+                imported: true,
+                importedAt: serverTimestamp() 
+              }, { merge: true });
+            }
+            
+            await firestoreBatch.commit();
+            
+            setImportProgress(prev => ({
+              ...prev,
+              processed: prev.processed + batch.length,
+              currentBatch: batchIndex + 1,
+              status: `جاري الاستيراد... ${Math.round(((batchIndex + 1) / totalBatches) * 100)}% (${batchIndex + 1}/${totalBatches})`
+            }));
+            
+          } catch (err) {
+            console.error('Error saving batch:', err);
+            setImportProgress(prev => ({
+              ...prev,
+              failed: prev.failed + batch.length,
+              status: `خطأ في الدفعة ${batchIndex + 1}`
+            }));
           }
           
-          await firestoreBatch.commit();
-          
-          // تحديث التقدم
+        } else if (type === 'progress') {
           setImportProgress(prev => ({
             ...prev,
-            processed: prev.processed + batch.length,
-            currentBatch: batchIndex + 1,
-            status: `جاري الاستيراد... ${Math.round(((batchIndex + 1) / totalBatches) * 100)}% (${batchIndex + 1}/${totalBatches})`
+            processed,
+            failed,
+            status: `معالجة البيانات... ${processed}/${total}`
           }));
           
-        } catch (err) {
-          console.error('Error saving batch:', err);
-          setImportProgress(prev => ({
-            ...prev,
-            failed: prev.failed + batch.length,
-            status: `خطأ في الدفعة ${batchIndex + 1}`
-          }));
+        } else if (type === 'complete') {
+          await logUserActivity(appUser, 'استيراد أصناف', `استيراد ${processed} صنف (فشل ${failed})`);
+          
+          if (failed === 0) {
+            showSuccess(`✅ تم استيراد ${processed} صنف بنجاح`);
+          } else {
+            showWarning(`⚠️ تم استيراد ${processed} صنف، فشل ${failed} صنف`);
+          }
+          
+          setLastDoc(null);
+          await loadItems(false);
+          
+          setGlobalLoading(false);
+          worker.terminate();
+          
+        } else if (type === 'error') {
+          showError(`❌ خطأ في الاستيراد: ${error}`);
+          setGlobalLoading(false);
+          worker.terminate();
         }
-        
-      } else if (type === 'progress') {
-        // تحديث التقدم
-        setImportProgress(prev => ({
-          ...prev,
-          processed,
-          failed,
-          status: `معالجة البيانات... ${processed}/${total}`
-        }));
-        
-      } else if (type === 'complete') {
-        // ✅ اكتمل الاستيراد بنجاح
-        await logUserActivity(appUser, 'استيراد أصناف', `استيراد ${processed} صنف (فشل ${failed})`);
-        
-        if (failed === 0) {
-          showSuccess(`✅ تم استيراد ${processed} صنف بنجاح`);
-        } else {
-          showWarning(`⚠️ تم استيراد ${processed} صنف، فشل ${failed} صنف`);
-        }
-        
-        // إعادة تحميل البيانات
-        setLastDoc(null);
-        await loadItems(false);
-        
-        // تنظيف
-        setGlobalLoading(false);
-        worker.terminate();
-        
-      } else if (type === 'error') {
-        showError(`❌ خطأ في الاستيراد: ${error}`);
-        setGlobalLoading(false);
-        worker.terminate();
-      }
-    };
+      };
 
-    worker.onerror = (error) => {
-      console.error("Worker error:", error);
-      showError("حدث خطأ في عملية الاستيراد");
+      worker.onerror = (error) => {
+        console.error("Worker error:", error);
+        showError("حدث خطأ في عملية الاستيراد");
+        setGlobalLoading(false);
+        worker.terminate();
+      };
+      
+    } catch (err) {
+      console.error("Import error:", err);
+      showError("حدث خطأ أثناء الاستيراد: " + err.message);
       setGlobalLoading(false);
-      worker.terminate();
-    };
-    
-  } catch (err) {
-    console.error("Import error:", err);
-    showError("حدث خطأ أثناء الاستيراد: " + err.message);
-    setGlobalLoading(false);
-  }
+    }
 
-  setImportData([]);
-};
+    setImportData([]);
+  };
+
   // دالة معالجة الملف المحسنة
   const handleFileSelect = (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+    const file = e.target.files[0];
+    if (!file) return;
 
-  // ✅ تحذير للملفات الكبيرة
-  if (file.size > 10 * 1024 * 1024) { // 10MB
-    showWarning(`حجم الملف كبير (${(file.size / (1024*1024)).toFixed(2)} MB). قد يستغرق الاستيراد بعض الوقت.`);
-  }
-
-  setGlobalLoading(true);
-  
-  const reader = new FileReader();
-  reader.onload = async (event) => {
-    try {
-      const text = event.target.result;
-      
-      // ✅ استخدام Worker لتحليل CSV لو الملف كبير
-      if (text.length > 500000) { // 500KB
-        const csvWorker = new Worker('/workers/csvParser.js');
-        
-        csvWorker.postMessage(text);
-        
-        csvWorker.onmessage = (e) => {
-          const data = e.data;
-          processParsedData(data);
-          csvWorker.terminate();
-        };
-        
-        csvWorker.onerror = (error) => {
-          console.error("CSV Worker error:", error);
-          showError("خطأ في تحليل الملف");
-          setGlobalLoading(false);
-        };
-        
-      } else {
-        // ملف صغير - حلل عادي
-        const data = parseCSV(text);
-        processParsedData(data);
-      }
-      
-    } catch (error) {
-      console.error("File parse error:", error);
-      showError("خطأ في قراءة الملف: " + error.message);
-      setGlobalLoading(false);
-    }
-  };
-  
-  const processParsedData = (data) => {
-    if (data.length > 50000) {
-      showError("عدد الأصناف كبير جداً. الحد الأقصى 50000 صنف");
-      e.target.value = null;
-      setGlobalLoading(false);
-      return;
+    if (file.size > 50 * 1024 * 1024) {
+      showWarning(`حجم الملف كبير (${(file.size / (1024*1024)).toFixed(2)} MB). قد يستغرق الاستيراد بعض الوقت.`);
     }
 
-    const errors = [];
-    const validData = [];
-
-    // معالجة سريعة للبيانات
-    data.forEach((row, index) => {
-      if (!row.serialNumber || !row.name) {
-        errors.push(`الصف ${index + 2}: السيريال أو الاسم مطلوب`);
-        return;
-      }
-
-      const serial = normalizeSerial(row.serialNumber);
-      const quantity = parseInt(row.quantity) || 1;
-      const price = parseFloat(row.price) || 0;
-
-      if (quantity < 0 || price < 0) {
-        errors.push(`الصف ${index + 2}: قيم غير صالحة`);
-        return;
-      }
-
-      validData.push({
-        serialNumber: serial,
-        name: row.name,
-        quantity,
-        price,
-        minStock: parseInt(row.minStock) || 2,
-        category: row.category || 'عام',
-        location: row.location || '',
-        notes: row.notes || ''
-      });
-    });
-
-    if (errors.length > 0) {
-      setImportErrors(errors);
-      setImportData([]);
-      showWarning(`تم العثور على ${errors.length} خطأ في الملف`);
-    } else {
-      setImportData(validData);
-      setImportErrors([]);
-      setShowImportModal(true);
-      showSuccess(`تم تحميل ${validData.length} صنف بنجاح`);
-    }
+    setGlobalLoading(true);
     
-    setGlobalLoading(false);
-    e.target.value = null;
-  };
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target.result;
+        
+        let data;
+        if (text.length > 500000) {
+          const csvWorker = new Worker('/workers/csvParser.js');
+          csvWorker.postMessage(text);
+          data = await new Promise((resolve) => {
+            csvWorker.onmessage = (e) => {
+              resolve(e.data);
+              csvWorker.terminate();
+            };
+          });
+        } else {
+          data = parseCSV(text);
+        }
+        
+        processParsedData(data);
+        
+      } catch (error) {
+        console.error("File parse error:", error);
+        showError("خطأ في قراءة الملف: " + error.message);
+        setGlobalLoading(false);
+      }
+    };
+    
+    const processParsedData = (data) => {
+      if (data.length > 50000) {
+        showError("عدد الأصناف كبير جداً. الحد الأقصى 50000 صنف");
+        e.target.value = null;
+        setGlobalLoading(false);
+        return;
+      }
 
-  reader.readAsText(file);
-};
+      const errors = [];
+      const validData = [];
+
+      data.forEach((row, index) => {
+        if (!row.serialNumber || !row.name) {
+          errors.push(`الصف ${index + 2}: السيريال أو الاسم مطلوب`);
+          return;
+        }
+
+        const serial = normalizeSerial(row.serialNumber);
+        const quantity = parseInt(row.quantity) || 1;
+        const price = parseFloat(row.price) || 0;
+
+        if (quantity < 0 || price < 0) {
+          errors.push(`الصف ${index + 2}: قيم غير صالحة`);
+          return;
+        }
+
+        validData.push({
+          serialNumber: serial,
+          name: row.name,
+          quantity,
+          price,
+          minStock: parseInt(row.minStock) || 2,
+          category: row.category || 'عام',
+          location: row.location || '',
+          tags: row.tags ? row.tags.split(',').map(t => t.trim()) : [],
+          notes: row.notes || '',
+          warehouseId: appUser.assignedWarehouseId || 'main'
+        });
+      });
+
+      if (errors.length > 0) {
+        setImportErrors(errors);
+        setImportData([]);
+        showWarning(`تم العثور على ${errors.length} خطأ في الملف`);
+      } else {
+        setImportData(validData);
+        setImportErrors([]);
+        setShowImportModal(true);
+        showSuccess(`تم تحميل ${validData.length} صنف بنجاح`);
+      }
+      
+      setGlobalLoading(false);
+      e.target.value = null;
+    };
+
+    reader.readAsText(file);
+  };
 
   const downloadTemplate = () => {
     const template = [
@@ -3394,6 +3448,7 @@ const handleImportConfirm = async () => {
     showSuccess("تم تحميل قالب الاستيراد");
   };
 
+  // دالة الإضافة المحسنة
   const handleAdd = async (e) => {
     e.preventDefault();
     
@@ -3409,38 +3464,37 @@ const handleImportConfirm = async () => {
     const qtyNum = Number(newItem.quantity) || 1;
 
     try {
-      await runTransaction(db, async (t) => {
-        const regRef = doc(db, 'serial_registry', serial);
-        const regSnap = await t.get(regRef);
-        if (regSnap.exists()) throw new Error("السيريال مسجل بالفعل لمنتج آخر!");
-        
-        const warehouseToUse = appUser.permissions?.viewAllWarehouses ? newItem.warehouseId : (appUser.assignedWarehouseId || 'main');
-        
-        // تحديث استخدام الوسوم
-        if (newItem.tags && newItem.tags.length > 0) {
-          for (const tag of newItem.tags) {
-            await tagManager.incrementUsage(tag);
-          }
+      const isAvailable = await checkSerialAvailability(serial);
+      
+      if (!isAvailable) {
+        throw new Error("السيريال مستخدم بالفعل في صنف نشط!");
+      }
+      
+      const warehouseToUse = appUser.permissions?.viewAllWarehouses ? newItem.warehouseId : (appUser.assignedWarehouseId || 'main');
+      
+      if (newItem.tags && newItem.tags.length > 0) {
+        for (const tag of newItem.tags) {
+          await tagManager.incrementUsage(tag);
         }
-        
-        const docData = { 
-          serialNumber: serial, 
-          name: newItem.name,
-          price: priceNum,
-          quantity: qtyNum,
-          minStock: Number(newItem.minStock) || 2,
-          category: newItem.category || 'عام',
-          location: newItem.location || '',
-          tags: newItem.tags || [],
-          notes: newItem.notes || '',
-          warehouseId: warehouseToUse,
-          searchKey: normalizeSearch(`${newItem.name} ${serial} ${newItem.category} ${(newItem.tags || []).join(' ')}`), 
-          createdAt: serverTimestamp(), 
-          isDeleted: false
-        };
-        t.set(doc(collection(db, 'inventory')), docData);
-        t.set(regRef, { exists: true, usedAt: serverTimestamp() });
-      });
+      }
+      
+      const docData = { 
+        serialNumber: serial, 
+        name: newItem.name,
+        price: priceNum,
+        quantity: qtyNum,
+        minStock: Number(newItem.minStock) || 2,
+        category: newItem.category || 'عام',
+        location: newItem.location || '',
+        tags: newItem.tags || [],
+        notes: newItem.notes || '',
+        warehouseId: warehouseToUse,
+        searchKey: normalizeSearch(`${newItem.name} ${serial} ${newItem.category} ${(newItem.tags || []).join(' ')}`), 
+        createdAt: serverTimestamp(), 
+        isDeleted: false
+      };
+      
+      await addDoc(collection(db, 'inventory'), docData);
       
       await logUserActivity(appUser, 'إضافة صنف', `إضافة ${qtyNum} قطعة من ${newItem.name} (S/N: ${serial})`);
       showSuccess("تم إضافة الصنف بنجاح"); 
@@ -3518,43 +3572,40 @@ const handleImportConfirm = async () => {
     setGlobalLoading(false);
   };
 
-  // ==========================================================================
-// 📦 دالة حذف الصنف
-// ==========================================================================
-const handleDeleteItem = async (item) => {
-  const confirmed = await showConfirm(
-    'تأكيد حذف الصنف',
-    `هل أنت متأكد من حذف "${item.name}"؟`,
-    'warning',
-    'نعم، احذف'
-  );
-  
-  if (!confirmed) return;
-  
-  setGlobalLoading(true);
-  try {
-    // Soft delete
-    await updateDoc(doc(db, 'inventory', item.id), { 
-      isDeleted: true, 
-      quantity: 0, 
-      deletedAt: serverTimestamp(),
-      deletedBy: appUser.name
-    });
+  // دالة حذف الصنف المحسنة
+  const handleDeleteItem = async (item) => {
+    const confirmed = await showConfirm(
+      'تأكيد حذف الصنف',
+      `هل أنت متأكد من حذف "${item.name}"؟`,
+      'warning',
+      'نعم، احذف'
+    );
     
-    await logUserActivity(appUser, 'حذف صنف', `تم حذف صنف: ${item.name} (S/N: ${item.serialNumber})`);
-    setItems(prev => prev.filter(i => i.id !== item.id));
-    showSuccess(`✅ تم حذف "${item.name}" بنجاح`);
+    if (!confirmed) return;
     
-  } catch (error) {
-    console.error("Delete error:", error);
-    if (error.code === 'permission-denied') {
-      showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
-    } else {
-      showError("فشل حذف الصنف: " + error.message);
+    setGlobalLoading(true);
+    try {
+      await updateDoc(doc(db, 'inventory', item.id), { 
+        isDeleted: true, 
+        quantity: 0, 
+        deletedAt: serverTimestamp(),
+        deletedBy: appUser.name
+      });
+      
+      await logUserActivity(appUser, 'حذف صنف', `تم حذف صنف: ${item.name} (S/N: ${item.serialNumber})`);
+      setItems(prev => prev.filter(i => i.id !== item.id));
+      showSuccess(`✅ تم حذف "${item.name}" بنجاح`);
+      
+    } catch (error) {
+      console.error("Delete error:", error);
+      if (error.code === 'permission-denied') {
+        showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
+      } else {
+        showError("فشل حذف الصنف: " + error.message);
+      }
     }
-  }
-  setGlobalLoading(false);
-};
+    setGlobalLoading(false);
+  };
 
   const handleBulkUpdate = async () => {
     if (!bulkPercent || bulkPercent === 0) {
@@ -3669,17 +3720,17 @@ const handleDeleteItem = async (item) => {
     },
     {
       field: 'name',
-      width: '20%',
+      width: '15%',
       render: (item) => <span className="font-bold text-slate-800 dark:text-white">{item.name}</span>
     },
     {
       field: 'category',
-      width: '10%',
+      width: '8%',
       render: (item) => <span className="text-slate-600 dark:text-slate-400">{item.category || 'عام'}</span>
     },
     {
       field: 'warehouse',
-      width: '10%',
+      width: '8%',
       render: (item) => <span className="font-bold text-indigo-500">{warehouseMap[item.warehouseId] || item.warehouseId}</span>
     },
     {
@@ -3689,7 +3740,7 @@ const handleDeleteItem = async (item) => {
     },
     {
       field: 'quantity',
-      width: '8%',
+      width: '6%',
       render: (item) => (
         <span className={`px-2 py-1 rounded-md font-bold ${
           item.quantity <= (item.minStock||2) 
@@ -3712,7 +3763,7 @@ const handleDeleteItem = async (item) => {
     },
     {
       field: 'tags',
-      width: '8%',
+      width: '10%',
       render: (item) => (
         <div className="flex flex-wrap gap-1">
           {item.tags?.slice(0, 2).map(tag => (
@@ -3730,7 +3781,7 @@ const handleDeleteItem = async (item) => {
     },
     {
       field: 'actions',
-      width: '5%',
+      width: '8%',
       render: (item) => (
         <div className="flex justify-center gap-2">
           <button 
@@ -3804,7 +3855,7 @@ const handleDeleteItem = async (item) => {
       {/* مودال الاستيراد */}
       {showImportModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-3xl shadow-2xl max-h-[80vh] overflow-y-auto">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-4xl shadow-2xl max-h-[80vh] overflow-y-auto">
             <h3 className="font-black text-lg mb-2 text-slate-800 dark:text-white">معاينة بيانات الاستيراد</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">عدد العناصر: {importData.length}</p>
             
@@ -3830,7 +3881,7 @@ const handleDeleteItem = async (item) => {
                       <td className="p-2 text-center">{item.quantity}</td>
                       <td className="p-2 text-center">{item.price}</td>
                       <td className="p-2">{item.location}</td>
-                      <td className="p-2">{item.tags?.join(', ')}</td>
+                      <td className="p-2">{(item.tags || []).join(', ')}</td>
                     </tr>
                   ))}
                   {importData.length > 10 && (
@@ -3952,41 +4003,39 @@ const handleDeleteItem = async (item) => {
               أدخل النسبة المئوية (استخدم علامة - للخصم)
             </p>
             
-            // في قسم الـ JSX، بعد importErrors
-{importProgress.status && (
-  <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-    <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 w-full max-w-md shadow-2xl text-center">
-      <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mx-auto mb-4" />
-      <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">
-        استيراد البيانات
-      </h3>
-      <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-        {importProgress.status}
-      </p>
-      
-      {/* شريط التقدم */}
-      {importProgress.total > 0 && (
-        <>
-          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-4 mb-2">
-            <div 
-              className="bg-indigo-600 h-4 rounded-full transition-all duration-300"
-              style={{ width: `${(importProgress.processed / importProgress.total) * 100}%` }}
-            />
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-500">
-            {importProgress.processed} من {importProgress.total} عنصر
-            {importProgress.failed > 0 && ` (فشل ${importProgress.failed})`}
-          </p>
-          {importProgress.totalBatches > 1 && (
-            <p className="text-xs text-indigo-500 mt-2">
-              الدفعة {importProgress.currentBatch} من {importProgress.totalBatches}
-            </p>
-          )}
-        </>
-      )}
-    </div>
-  </div>
-)}
+            {importProgress.status && (
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 w-full max-w-md shadow-2xl text-center">
+                  <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mx-auto mb-4" />
+                  <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">
+                    استيراد البيانات
+                  </h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                    {importProgress.status}
+                  </p>
+                  
+                  {importProgress.total > 0 && (
+                    <>
+                      <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-4 mb-2">
+                        <div 
+                          className="bg-indigo-600 h-4 rounded-full transition-all duration-300"
+                          style={{ width: `${(importProgress.processed / importProgress.total) * 100}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-500">
+                        {importProgress.processed} من {importProgress.total} عنصر
+                        {importProgress.failed > 0 && ` (فشل ${importProgress.failed})`}
+                      </p>
+                      {importProgress.totalBatches > 1 && (
+                        <p className="text-xs text-indigo-500 mt-2">
+                          الدفعة {importProgress.currentBatch} من {importProgress.totalBatches}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
             
             <div className="space-y-4">
                <div className="relative">
@@ -4592,7 +4641,6 @@ function ReportsManager({ notify }) {
   const [chartData, setChartData] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
 
-  // تحميل المخازن
   useEffect(() => {
     const loadWarehouses = async () => {
       const snap = await getDocs(collection(db, 'warehouses'));
@@ -4641,7 +4689,6 @@ function ReportsManager({ notify }) {
            setTransactions(fetched);
         }
         
-        // حساب الملخص
         let total = 0;
         let values = [];
         fetched.forEach(t => {
@@ -4658,7 +4705,6 @@ function ReportsManager({ notify }) {
           max: values.length > 0 ? Math.max(...values) : 0
         });
 
-        // تجميع البيانات للرسم البياني
         const dailyTotals = {};
         fetched.forEach(t => {
           const date = formatDate(t.timestamp).split(' ')[0];
@@ -4827,7 +4873,6 @@ function ReportsManager({ notify }) {
          </div>
        )}
        
-       {/* ملخص إحصائي */}
        {transactions.length > 0 && (
          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-4 bg-gradient-to-l from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 border-b">
            <div className="bg-white dark:bg-slate-900 p-3 rounded-xl text-center">
@@ -4853,7 +4898,6 @@ function ReportsManager({ notify }) {
          </div>
        )}
        
-       {/* رسم بياني متقدم */}
        {chartData.length > 0 && (
          <div className="p-4 border-b">
            <h3 className="font-bold text-sm text-slate-700 dark:text-slate-300 mb-3">تحليل المبيعات</h3>
@@ -5551,7 +5595,6 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
         const snap = await getDocs(q);
         let fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        // تطبيق الفلاتر
         if (filterGovernorate) {
           fetched = fetched.filter(c => c.governorate === filterGovernorate);
         }
@@ -5591,7 +5634,6 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
     loadCustomers(false);
   }, [debouncedSearch, filterGovernorate, filterCity, filterTechnician, filterTag]);
 
-  // دوال التحديد المتعدد
   const toggleSelectItem = (itemId) => {
     const newSelected = new Set(selectedItems);
     if (newSelected.has(itemId)) {
@@ -5610,7 +5652,6 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
     }
   };
 
-  // دالة الحذف المجمع
   const handleBulkDelete = async () => {
     if (selectedItems.size === 0) {
       showError("لم يتم تحديد أي عملاء للحذف");
@@ -5680,7 +5721,6 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
      
      setGlobalLoading(true);
      try {
-        // تحديث استخدام الوسوم
         if (newCust.tags && newCust.tags.length > 0) {
           for (const tag of newCust.tags) {
             await tagManager.incrementUsage(tag);
@@ -5854,7 +5894,6 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
   return (
     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden text-right" dir="rtl">
       
-      {/* مودال إضافة عميل */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-4xl shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
@@ -6089,7 +6128,6 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
         </div>
       )}
 
-      {/* مودال الحذف المجمع */}
       {showBulkDeleteModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
@@ -6332,6 +6370,7 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
     </div>
   );
 }
+
 // ==========================================================================
 // 👤 عرض ملف العميل المحسن مع السجل الكامل والتذاكر
 // ==========================================================================
@@ -6377,7 +6416,6 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
         const fetchData = async () => {
             setGlobalLoading(true);
             try {
-                // جلب المشتريات
                 const q = query(
                   collection(db, 'transactions'), 
                   where('phone', '==', customer.phone), 
@@ -6388,7 +6426,6 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
                 const transactions = snap.docs.map(d => ({id: d.id, ...d.data()}));
                 setHistory(transactions);
                 
-                // جلب التذاكر
                 const tq = query(
                   collection(db, 'tickets'),
                   where('customerPhone', '==', customer.phone),
@@ -6399,11 +6436,9 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
                 const ticketsData = tSnap.docs.map(d => ({id: d.id, ...d.data()}));
                 setTickets(ticketsData);
                 
-                // حساب الإحصائيات
                 const total = transactions.reduce((sum, t) => sum + (Number(t.finalTotal) || 0), 0);
                 const returns = transactions.filter(t => t.type === 'return').length;
                 
-                // تجميع المنتجات المفضلة
                 const productCount = {};
                 transactions.forEach(t => {
                   if (t.type === 'sell') {
@@ -6559,7 +6594,6 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
                  timestamp: serverTimestamp()
              });
              
-             // تحديث إحصائيات العميل
              const customerRef = doc(db, 'customers', customer.id);
              t.update(customerRef, {
                totalPurchases: increment(1),
@@ -6587,7 +6621,6 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
   };
 
   const handleSendSMS = async () => {
-    // تكامل مع SMS API
     showInfo("سيتم تفعيل خدمة SMS قريباً");
   };
 
@@ -6697,7 +6730,6 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
           <div className="p-6 flex-1 overflow-y-auto custom-scrollbar">
               {activeTab === 'info' && (
                 <div className="space-y-6">
-                  {/* إحصائيات سريعة */}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl">
                       <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-1">إجمالي المشتريات</p>
@@ -6717,7 +6749,6 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
                     </div>
                   </div>
                   
-                  {/* المنتجات المفضلة */}
                   {stats.favoriteProducts.length > 0 && (
                     <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
                       <h3 className="font-bold mb-3 flex items-center gap-2">
@@ -6734,7 +6765,6 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
                     </div>
                   )}
                   
-                  {/* بيانات العميل (قابلة للتعديل) */}
                   {editingCustomer ? (
                     <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
                       <h3 className="font-bold mb-3 flex items-center gap-2"><Edit size={16}/> تعديل البيانات</h3>
@@ -7096,7 +7126,6 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
       </div>
   );
 }
-
 // ==========================================================================
 // 🎫 مكون عرض التذكرة في القائمة
 // ==========================================================================
@@ -7173,6 +7202,7 @@ function TicketCard({ ticket, onStatusChange, onView }) {
     </div>
   );
 }
+
 // ==========================================================================
 // 🎫 مدير التذاكر المحسن مع إدارة كاملة للصيانة
 // ==========================================================================
@@ -7285,7 +7315,6 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
         const snap = await getDocs(q);
         let fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        // تطبيق فلتر التاريخ
         if (dateRange.from) {
           const fromDate = new Date(dateRange.from);
           fromDate.setHours(0,0,0,0);
@@ -7303,12 +7332,10 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
           });
         }
 
-        // تطبيق فلتر الفني
         if (filterTechnician !== 'all') {
           fetched = fetched.filter(t => t.assignedTechnician === filterTechnician);
         }
 
-        // تطبيق فلتر الوسم
         if (filterTag !== 'all') {
           fetched = fetched.filter(t => t.tags?.includes(filterTag));
         }
@@ -7419,7 +7446,6 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
      
      setGlobalLoading(true);
      try {
-        // تحديث استخدام الوسوم
         if (newTicket.tags && newTicket.tags.length > 0) {
           for (const tag of newTicket.tags) {
             await tagManager.incrementUsage(tag);
@@ -7452,7 +7478,6 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
 
         const docRef = await addDoc(collection(db, 'tickets'), ticketData);
         
-        // تحديث العميل
         if (newTicket.customerPhone) {
           const customerQuery = query(collection(db, 'customers'), where('phone', '==', newTicket.customerPhone));
           const customerSnap = await getDocs(customerQuery);
@@ -7845,7 +7870,6 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
             <div className="space-y-6">
               <p className="text-sm font-bold text-slate-600 dark:text-slate-400">العميل: {selectedTicket.customerName}</p>
               
-              {/* قائمة قطع الغيار الحالية */}
               <div className="border rounded-xl overflow-hidden">
                 <table className="w-full text-right text-sm">
                   <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -7874,7 +7898,6 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
                 </table>
               </div>
 
-              {/* نموذج إضافة قطعة غيار جديدة */}
               <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
                 <h4 className="font-bold mb-3">إضافة قطعة غيار جديدة</h4>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -7921,7 +7944,6 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
                 </button>
               </div>
 
-              {/* ملخص التكاليف */}
               <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl">
                 <div className="flex justify-between items-center">
                   <span className="font-bold">إجمالي التكاليف:</span>
@@ -7937,7 +7959,6 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
                 </div>
               </div>
 
-              {/* إضافة دفعة */}
               <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
                 <h4 className="font-bold mb-3">إضافة دفعة</h4>
                 <div className="flex gap-3">
@@ -9258,6 +9279,7 @@ function EnhancedUserManagement({ appUser, warehouses, notify, setGlobalLoading,
     </div>
   );
 }
+
 // ==========================================================================
 // 🏪 مدير الفروع المحسن مع إدارة كاملة
 // ==========================================================================
@@ -9296,7 +9318,6 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
        const fetchData = async () => {
          setGlobalLoading(true);
          try {
-           // جلب المستخدمين
            const usersSnap = await getDocs(query(collection(db, 'employees'), where('isDisabled', '==', false)));
            const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
            setAllUsers(users);
@@ -9304,12 +9325,10 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
            const assigned = users.filter(u => u.assignedWarehouseId === selectedWarehouse.id);
            setAssignedUsers(assigned);
 
-           // جلب المخزون
            const invSnap = await getDocs(query(collection(db, 'inventory'), where('warehouseId', '==', selectedWarehouse.id), where('isDeleted', '==', false)));
            const invData = invSnap.docs.map(d => ({ id: d.id, ...d.data() }));
            setInventory(invData);
            
-           // جلب المعاملات
            const thirtyDaysAgo = new Date();
            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
            const transSnap = await getDocs(query(
@@ -9318,7 +9337,6 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
              where('timestamp', '>=', thirtyDaysAgo)
            ));
            
-           // حساب الإحصائيات
            const totalItems = invData.reduce((sum, item) => sum + (item.quantity || 0), 0);
            const totalValue = invData.reduce((sum, item) => sum + ((item.quantity || 0) * (item.price || 0)), 0);
            const categories = new Set(invData.map(item => item.category).filter(Boolean));
@@ -9421,7 +9439,6 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
        setShowBulkDeleteModal(false);
        setBulkDeleteConfirm('');
        
-       // إعادة تحميل البيانات
        if (selectedWarehouse) {
          const invSnap = await getDocs(query(collection(db, 'inventory'), where('warehouseId', '==', selectedWarehouse.id), where('isDeleted', '==', false)));
          setInventory(invSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -9460,7 +9477,6 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
        const itemsToTransfer = Array.from(selectedItems).map(id => inventory.find(i => i.id === id));
        
        for (const item of itemsToTransfer) {
-         // إنشاء نسخة في الفرع الجديد
          await addDoc(collection(db, 'inventory'), {
            ...item,
            warehouseId: transferData.toWarehouse,
@@ -9468,7 +9484,6 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
            createdAt: serverTimestamp()
          });
          
-         // حذف أو تقليل الكمية من الفرع الحالي
          await updateDoc(doc(db, 'inventory', item.id), {
            quantity: 0,
            isDeleted: true
@@ -9482,7 +9497,6 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
        setShowTransferModal(false);
        setTransferData({ toWarehouse: '', items: [] });
        
-       // إعادة تحميل البيانات
        if (selectedWarehouse) {
          const invSnap = await getDocs(query(collection(db, 'inventory'), where('warehouseId', '==', selectedWarehouse.id), where('isDeleted', '==', false)));
          setInventory(invSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -9494,22 +9508,6 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
      }
      setGlobalLoading(false);
    };
-
-
-        // دالة التحقق من السيريال - بتشوف إذا كان السيريال مستخدم في صنف نشط
-    const checkSerialAvailability = async (serial) => {
-      // دور على السيريال في الأصناف النشطة فقط (isDeleted = false)
-      const q = query(
-        collection(db, 'inventory'), 
-        where('serialNumber', '==', serial),
-        where('isDeleted', '==', false)
-      );
-      const snap = await getDocs(q);
-      
-      // لو لقى صنف نشط بنفس السيريال → مش متاح
-      // لو ملقاش → متاح للإضافة
-      return snap.empty; // true = متاح, false = غير متاح
-    };
 
    const handleAdd = async (e) => {
       e.preventDefault(); 
@@ -9547,32 +9545,30 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
       setGlobalLoading(false);
    };
 
-   // ==========================================================================
-// 🏪 دالة حذف الفرع
-// ==========================================================================
-const handleDeleteWarehouse = async (id) => {
-  const confirmed = await showConfirm(
-    'تأكيد حذف الفرع',
-    'هل أنت متأكد من حذف هذا الفرع؟'
-  );
-  
-  if (!confirmed) return;
-  
-  setGlobalLoading(true);
-  try {
-    await deleteDoc(doc(db, 'warehouses', id));
-    showSuccess("تم حذف الفرع بنجاح");
-    setSelectedWarehouse(null);
-  } catch(e) {
-    console.error(e);
-    if (e.code === 'permission-denied') {
-      showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
-    } else {
-      showError("فشل حذف الفرع: " + e.message);
-    }
-  }
-  setGlobalLoading(false);
-};
+   // دالة حذف الفرع
+   const handleDeleteWarehouse = async (id) => {
+     const confirmed = await showConfirm(
+       'تأكيد حذف الفرع',
+       'هل أنت متأكد من حذف هذا الفرع؟'
+     );
+     
+     if (!confirmed) return;
+     
+     setGlobalLoading(true);
+     try {
+       await deleteDoc(doc(db, 'warehouses', id));
+       showSuccess("تم حذف الفرع بنجاح");
+       setSelectedWarehouse(null);
+     } catch(e) {
+       console.error(e);
+       if (e.code === 'permission-denied') {
+         showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
+       } else {
+         showError("فشل حذف الفرع: " + e.message);
+       }
+     }
+     setGlobalLoading(false);
+   };
 
    const handleUpdateWarehouse = async () => {
       if (!editingWarehouse) return;
@@ -9850,7 +9846,6 @@ const handleDeleteWarehouse = async (id) => {
                         )}
                      </div>
 
-                     {/* إحصائيات سريعة */}
                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
                         <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-xl text-center">
                            <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-1">إجمالي القطع</p>
@@ -10152,7 +10147,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrcode, setQrcode] = useState('');
 
-  // جلب آخر العملاء
   useEffect(() => {
     const fetchRecentCustomers = async () => {
       try {
@@ -10223,7 +10217,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
               showError(`المنتج غير متاح في فرعك (${warehouseMap[userWarehouse]})`); 
               setFoundItem(null);
            } else { 
-              // إضافة للسلة بدلاً من استبدال
               setCart([...cart, item]);
               setSearch('');
               setFoundItem(null);
@@ -10309,7 +10302,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
   };
 
   const handleGenerateQR = () => {
-    // إنشاء رمز QR للفاتورة
     const qrData = {
       invoiceNumber: 'INV-' + Date.now().toString().slice(-8),
       total: calculations.finalTotal,
@@ -10336,7 +10328,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
     const invId = 'INV-' + Date.now().toString().slice(-8);
     try {
        await runTransaction(db, async (t) => {
-          // تحديث المخزون
           const itemsToProcess = foundItem ? [foundItem] : cart;
           
           for (const item of itemsToProcess) {
@@ -10378,7 +10369,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
           
           t.set(doc(collection(db, 'transactions')), transactionData);
           
-          // تحديث العميل
           if (invoice.phone) {
             const customerQuery = query(collection(db, 'customers'), where('phone', '==', invoice.phone));
             const customerSnap = await getDocs(customerQuery);
@@ -10435,7 +10425,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
   return (
     <div className="max-w-6xl mx-auto space-y-6" dir="rtl">
       
-      {/* مودال الدفع */}
       {paymentModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
@@ -10514,7 +10503,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
         </div>
       )}
 
-      {/* مودال إضافة عميل جديد */}
       {showCustomerModal && (
          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
            <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
@@ -10560,7 +10548,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
          </div>
       )}
 
-      {/* مودال QR Code */}
       {showQrModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-sm shadow-2xl">
@@ -10583,7 +10570,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
             <Receipt className="text-indigo-600" size={26}/> نقطة البيع POS
           </h2>
           
-          {/* شريط البحث */}
           <form onSubmit={handleSearch} className="flex gap-3 mb-8 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
              <input 
                className="flex-1 border-none bg-transparent p-3 outline-none text-xl font-mono text-center tracking-widest text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600" 
@@ -10600,7 +10586,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
              </button>
           </form>
 
-          {/* السلة */}
           {cart.length > 0 && (
             <div className="mb-6 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
               <div className="bg-slate-50 dark:bg-slate-900/50 p-3 border-b flex justify-between items-center">
@@ -10634,7 +10619,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
             </div>
           )}
 
-          {/* بيانات العميل */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
              <div>
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 block">العميل</label>
@@ -10658,7 +10642,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
                    </button>
                 </div>
                 
-                {/* قائمة العملاء الأخيرين */}
                 {recentCustomers.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     <span className="text-[9px] text-slate-400 dark:text-slate-500">أخر العملاء:</span>
@@ -10688,7 +10671,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
              </div>
           </div>
 
-          {/* إعدادات الفاتورة */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 mb-6">
               <div>
                  <label className="block text-xs font-bold text-indigo-900 dark:text-indigo-300 mb-1">الفني</label>
@@ -10756,7 +10738,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
               </div>
           </div>
 
-          {/* ملخص الفاتورة */}
           <div className="bg-gradient-to-l from-indigo-900 to-purple-900 text-white p-8 rounded-2xl shadow-lg flex flex-col md:flex-row justify-between items-center border-t-4 border-emerald-500 mb-6">
              <div className="text-right text-xs font-bold text-indigo-100 space-y-1.5">
                 <p>المجموع الفرعي: <span className="text-white mr-2">{calculations.subtotal}</span></p>
@@ -10776,7 +10757,6 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
              </div>
           </div>
 
-          {/* أزرار الإجراءات */}
           <div className="flex flex-wrap gap-3">
             <button 
               onClick={handleProcessPayment}
@@ -10810,7 +10790,6 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [newApiKey, setNewApiKey] = useState({ name: '', permissions: [] });
 
-  // تحميل قائمة النسخ الاحتياطي
   useEffect(() => {
     const loadBackups = async () => {
       const backups = await offlineDB.getAll('backups');
@@ -10819,7 +10798,6 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
     loadBackups();
   }, []);
 
-  // تصدير الإعدادات
   const handleExportSettings = () => {
     const exportData = {
       systemName: settings.systemName,
@@ -10843,7 +10821,6 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
     showSuccess("تم تصدير الإعدادات بنجاح");
   };
 
-  // استيراد الإعدادات
   const handleImportSettings = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -10862,7 +10839,6 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
     e.target.value = null;
   };
 
-  // إنشاء نسخة احتياطية
   const handleCreateBackup = async () => {
     setGlobalLoading(true);
     try {
@@ -10890,7 +10866,6 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
     setGlobalLoading(false);
   };
 
-  // استعادة نسخة احتياطية
   const handleRestoreBackup = async (backup) => {
     const confirmed = await showConfirm(
       'تأكيد الاستعادة',
@@ -10901,14 +10876,12 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
     
     setGlobalLoading(true);
     try {
-      // استعادة الإعدادات
       if (backup.settings) {
         setLocalSettings(backup.settings);
         setSettings(backup.settings);
         await setDoc(doc(db, 'settings', 'general'), backup.settings, { merge: true });
       }
       
-      // استعادة المستخدمين
       if (backup.users) {
         for (const user of backup.users) {
           await setDoc(doc(db, 'employees', user.id), user);
@@ -10924,7 +10897,6 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
     setGlobalLoading(false);
   };
 
-  // إنشاء مفتاح API جديد
   const handleCreateApiKey = () => {
     const key = generateAPIKey(appUser, newApiKey.permissions);
     setApiKeys([...apiKeys, key]);
@@ -10979,7 +10951,6 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
   return (
     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden text-right" dir="rtl">
       
-      {/* مودال إنشاء مفتاح API */}
       {showApiKeyModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
@@ -11029,7 +11000,6 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
         </div>
       )}
 
-      {/* Header */}
       <div className="bg-gradient-to-l from-indigo-600 to-purple-600 p-6 text-white">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -11066,7 +11036,6 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex border-b bg-slate-50 dark:bg-slate-900/50 overflow-x-auto">
         {[
           { id: 'general', label: 'عام', icon: SettingsIcon },
@@ -11092,7 +11061,6 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
         ))}
       </div>
 
-      {/* Content */}
       <div className="p-8 max-h-[70vh] overflow-y-auto custom-scrollbar bg-gradient-to-b from-white to-slate-50 dark:from-slate-800 dark:to-slate-900">
         {activeTab === 'general' && (
           <div className="space-y-6 max-w-3xl">
@@ -11371,7 +11339,6 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
           </div>
         )}
 
-        {/* Save Button */}
         <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-4">
           <button 
             onClick={() => setLocalSettings(systemSettings)}
@@ -11390,6 +11357,19 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
     </div>
   );
 }
+// ==========================================================================
+// 👤 دوال مساعدة لجلب البيانات للنسخ الاحتياطي
+// ==========================================================================
+const getAllDocs = async (collectionName) => {
+  try {
+    const snap = await getDocs(collection(db, collectionName));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (error) {
+    console.error(`Error fetching ${collectionName}:`, error);
+    return [];
+  }
+};
+
 // ==========================================================================
 // 🚀 المكون الرئيسي للتطبيق (مع حل مشكلة الرفريش والتكامل الكامل)
 // ==========================================================================
@@ -11507,7 +11487,6 @@ export default function App() {
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      // محاولة مزامنة البيانات عند العودة للاتصال
       syncManager.syncAll().then(result => {
         if (result.synced > 0) {
           showSuccess(`تمت مزامنة ${result.synced} عملية بنجاح`);
@@ -11519,13 +11498,10 @@ export default function App() {
     window.addEventListener('online', handleOnline); 
     window.addEventListener('offline', handleOffline);
     
-    // بدء المزامنة التلقائية
     syncManager.startAutoSync();
     
-    // طلب إذن الإشعارات
     requestNotificationPermission();
     
-    // الاستماع للإشعارات الفورية
     onMessageListener().then(payload => {
       showInfo(payload.notification.body, payload.notification.title);
     });
