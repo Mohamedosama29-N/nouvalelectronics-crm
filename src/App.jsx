@@ -10260,7 +10260,7 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
      
      setGlobalLoading(true);
      try {
-        const searchTerm = normalizeSerial(search);
+        const searchTerm = search.trim().toLowerCase();
         const q = query(
           collection(db, 'inventory'), 
           where('serialNumber', '==', searchTerm), 
