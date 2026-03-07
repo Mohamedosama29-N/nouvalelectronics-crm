@@ -373,7 +373,7 @@ class RateLimiter {
   constructor(limit, windowMs) {
     this.limit = limit;
     this.windowMs = windowMs;
-    this.requests = new Map();
+    this.requests = new globalThis.Map();
   }
 
   check(key) {
@@ -9477,13 +9477,16 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
        const itemsToTransfer = Array.from(selectedItems).map(id => inventory.find(i => i.id === id));
        
        for (const item of itemsToTransfer) {
-         await addDoc(collection(db, 'inventory'), {
-           ...item,
-           warehouseId: transferData.toWarehouse,
-           id: undefined,
-           createdAt: serverTimestamp()
+  
+      await addDoc(collection(db, 'inventory'), {
+        ...item,
+      warehouseId: transferData.toWarehouse,
+      id: undefined,
+      createdAt: serverTimestamp(),
+      isDeleted: false,
+      quantity: item.quantity || 1
          });
-         
+       }
          await updateDoc(doc(db, 'inventory', item.id), {
            quantity: 0,
            isDeleted: true
@@ -10781,7 +10784,7 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
 // ==========================================================================
 // ⚙️ صفحة الإعدادات المركزية المتكاملة
 // ==========================================================================
-function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading }) {
+function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading, appUser }) {
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setLocalSettings] = useState(systemSettings);
   const [logoPreview, setLogoPreview] = useState(systemSettings.invoiceLogo || '');
@@ -11443,7 +11446,7 @@ export default function App() {
       setIsConnecting(true);
       setFirebaseError(null);
       
-      await getDocs(collection(db, 'settings'));
+      await getDoc(doc(db,'settings','general'));
       console.log("Firebase connection successful");
       return true;
     } catch (error) {
@@ -11872,10 +11875,11 @@ export default function App() {
                 
                 {currentView === 'settings' && appUser.role === 'admin' && 
                   <SettingsManager 
-                    systemSettings={systemSettings}
-                    setSettings={setSystemSettings}
-                    notify={notify}
-                    setGlobalLoading={setGlobalLoading}
+                     systemSettings={systemSettings}
+                     setSettings={setSystemSettings}
+                     notify={notify}
+                     setGlobalLoading={setGlobalLoading}
+                     appUser={appUser}
                   />
                 }
                 
