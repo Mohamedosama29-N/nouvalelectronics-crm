@@ -3220,7 +3220,6 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
     setShowImportModal(false);
     setGlobalLoading(true);
     
-    const BATCH_SIZE = 200;
     const totalItems = importData.length;
 
     const BATCH_SIZE = 400;
