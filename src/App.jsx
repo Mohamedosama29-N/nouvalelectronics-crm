@@ -9452,83 +9452,90 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
    };
 
    // دالة نقل الأصناف بين الفروع
-   const handleTransferItems = async () => {
-     if (selectedItems.size === 0) {
-       showError("لم يتم تحديد أي أصناف للنقل");
-       return;
-     }
+  const handleTransferItems = async () => {
 
-     if (!transferData.toWarehouse) {
-       showError("يرجى اختيار الفرع المستهدف");
-       return;
-     }
-
-     const confirmed = await showConfirm(
-       'تأكيد النقل',
-       `هل أنت متأكد من نقل ${selectedItems.size} صنف إلى الفرع المحدد؟`,
-       'info',
-       'نعم، نقل'
-     );
-
-     if (!confirmed) return;
-
-     setGlobalLoading(true);
-     try {
- const itemsToTransfer = Array.from(selectedItems).map(id => inventory.find(i => i.id === id));
-
-try {
-
-  for (const item of itemsToTransfer) {
-
-    await addDoc(collection(db, 'inventory'), {
-      ...item,
-      warehouseId: transferData.toWarehouse,
-      createdAt: serverTimestamp(),
-      isDeleted: false,
-      quantity: item.quantity || 1
-    });
-
-    await updateDoc(doc(db, 'inventory', item.id), {
-      quantity: 0,
-      isDeleted: true
-    });
-
+  if (selectedItems.size === 0) {
+    showError("لم يتم تحديد أي أصناف للنقل");
+    return;
   }
 
-  await logUserActivity(
-    appUser,
-    'نقل مخزون بين فروع',
-    `نقل ${selectedItems.size} صنف من ${selectedWarehouse.name}`
+  if (!transferData.toWarehouse) {
+    showError("يرجى اختيار الفرع المستهدف");
+    return;
+  }
+
+  const confirmed = await showConfirm(
+    'تأكيد النقل',
+    `هل أنت متأكد من نقل ${selectedItems.size} صنف إلى الفرع المحدد؟`,
+    'info',
+    'نعم، نقل'
   );
 
-  showSuccess("تم نقل الأصناف بنجاح");
+  if (!confirmed) return;
 
-  setSelectedItems(new Set());
-  setShowTransferModal(false);
-  setTransferData({ toWarehouse: '', items: [] });
+  setGlobalLoading(true);
 
-  if (selectedWarehouse) {
-    const invSnap = await getDocs(
-      query(
-        collection(db, 'inventory'),
-        where('warehouseId', '==', selectedWarehouse.id),
-        where('isDeleted', '==', false)
-      )
+  try {
+
+    const itemsToTransfer = Array.from(selectedItems)
+      .map(id => inventory.find(i => i.id === id))
+      .filter(Boolean);
+
+    for (const item of itemsToTransfer) {
+
+      await addDoc(collection(db, 'inventory'), {
+        ...item,
+        warehouseId: transferData.toWarehouse,
+        createdAt: serverTimestamp(),
+        isDeleted: false,
+        quantity: item.quantity || 1
+      });
+
+      await updateDoc(doc(db, 'inventory', item.id), {
+        quantity: 0,
+        isDeleted: true
+      });
+
+    }
+
+    await logUserActivity(
+      appUser,
+      'نقل مخزون بين فروع',
+      `نقل ${selectedItems.size} صنف من ${selectedWarehouse.name}`
     );
 
-    setInventory(invSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    showSuccess("تم نقل الأصناف بنجاح");
+
+    setSelectedItems(new Set());
+    setShowTransferModal(false);
+    setTransferData({ toWarehouse: '', items: [] });
+
+    if (selectedWarehouse) {
+
+      const invSnap = await getDocs(
+        query(
+          collection(db, 'inventory'),
+          where('warehouseId', '==', selectedWarehouse.id),
+          where('isDeleted', '==', false)
+        )
+      );
+
+      setInventory(invSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+    }
+
+  } catch (error) {
+
+    console.error("Transfer error:", error);
+    showError("حدث خطأ أثناء نقل الأصناف");
+
+  } finally {
+
+    setGlobalLoading(false);
+
   }
 
-} catch (error) {
-
-  console.error("Transfer error:", error);
-  showError("حدث خطأ أثناء نقل الأصناف");
-
-} finally {
-
-  setGlobalLoading(false);
-
-}
+};
    const handleAdd = async (e) => {
       e.preventDefault(); 
       if(!name) return;
