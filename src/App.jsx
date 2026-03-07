@@ -3222,6 +3222,38 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
     
     const BATCH_SIZE = 200;
     const totalItems = importData.length;
+
+    const BATCH_SIZE = 400;
+
+for (let i = 0; i < importData.length; i += BATCH_SIZE) {
+
+  const chunk = importData.slice(i, i + BATCH_SIZE);
+
+  const batch = writeBatch(db);
+
+  chunk.forEach((item) => {
+
+    const ref = doc(collection(db, "inventory"));
+
+    batch.set(ref, {
+      ...item,
+      serialNumber: (item.serialNumber || "").toLowerCase().trim(),
+      quantity: item.quantity || 1,
+      isDeleted: false,
+      createdAt: serverTimestamp()
+    });
+
+  });
+
+  await batch.commit();
+
+  setImportProgress(prev => ({
+    ...prev,
+    processed: Math.min(prev.processed + chunk.length, totalItems),
+    currentBatch: prev.currentBatch + 1
+  }));
+
+}
     
     setImportProgress({ 
       total: totalItems, 
