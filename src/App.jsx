@@ -9478,28 +9478,34 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
        
        for (const item of itemsToTransfer) {
   
-      await addDoc(collection(db, 'inventory'), {
-        ...item,
-      warehouseId: transferData.toWarehouse,
-      id: undefined,
-      createdAt: serverTimestamp(),
-      isDeleted: false,
-      quantity: item.quantity || 1
-         });
-       }
-         await updateDoc(doc(db, 'inventory', item.id), {
-           quantity: 0,
-           isDeleted: true
-         });
-       }
+      for (const item of itemsToTransfer) {
 
-       await logUserActivity(appUser, 'نقل مخزون بين فروع', `نقل ${selectedItems.size} صنف من ${selectedWarehouse.name}`);
-       showSuccess("تم نقل الأصناف بنجاح");
-       
-       setSelectedItems(new Set());
-       setShowTransferModal(false);
-       setTransferData({ toWarehouse: '', items: [] });
-       
+  await addDoc(collection(db, 'inventory'), {
+    ...item,
+    warehouseId: transferData.toWarehouse,
+    createdAt: serverTimestamp(),
+    isDeleted: false,
+    quantity: item.quantity || 1
+  });
+
+  await updateDoc(doc(db, 'inventory', item.id), {
+    quantity: 0,
+    isDeleted: true
+  });
+
+}
+
+await logUserActivity(
+  appUser,
+  'نقل مخزون بين فروع',
+  `نقل ${selectedItems.size} صنف من ${selectedWarehouse.name}`
+);
+
+showSuccess("تم نقل الأصناف بنجاح");
+
+setSelectedItems(new Set());
+setShowTransferModal(false);
+setTransferData({ toWarehouse: '', items: [] });   
        if (selectedWarehouse) {
          const invSnap = await getDocs(query(collection(db, 'inventory'), where('warehouseId', '==', selectedWarehouse.id), where('isDeleted', '==', false)));
          setInventory(invSnap.docs.map(d => ({ id: d.id, ...d.data() })));
