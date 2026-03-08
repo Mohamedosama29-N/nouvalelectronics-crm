@@ -15,6 +15,7 @@ import CryptoJS from 'crypto-js';
 import { openDB } from 'idb';
 import Swal from 'sweetalert2';
 import html2canvas from "html2canvas";
+import { FileText } from "lucide-react";
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getAuth, signInAnonymously 
@@ -11874,6 +11875,7 @@ export default function App() {
                { id: 'transactions', label: 'نقطة البيع', icon: Receipt, permission: 'viewPOS' },
                { id: 'customers', label: 'سجل العملاء', icon: Users, permission: 'viewCustomers' },
                { id: 'tickets', label: 'تذاكر الصيانة', icon: MessageSquare, permission: 'manageTickets' },
+               { id: 'invoices', label: 'أرشيف الفواتير', icon: FileText, permission: 'viewPOS' },
                { id: 'reports', label: 'التقارير', icon: History, permission: 'viewReports' },
                { id: 'lowstock', label: 'النواقص', icon: AlertOctagon, permission: 'viewLowStock' }
              ].map(item => {
@@ -11972,6 +11974,7 @@ export default function App() {
                 {currentView === 'transactions' && 'نقطة البيع'}
                 {currentView === 'customers' && 'إدارة العملاء'}
                 {currentView === 'tickets' && 'تذاكر الصيانة'}
+                {currentView === 'invoices' && 'أرشيف الفواتير'}
                 {currentView === 'reports' && 'التقارير'}
                 {currentView === 'lowstock' && 'النواقص'}
                 {currentView === 'settings' && 'الإعدادات المركزية'}
@@ -12023,6 +12026,15 @@ export default function App() {
                   <EnhancedTicketManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} onGenerateInvoice={handleGenerateInvoiceFromTicket} />
                 }
                 
+                {currentView === 'invoices' && appUser.permissions?.viewPOS && 
+                  <InvoicesManager 
+                     appUser={appUser}
+                     systemSettings={systemSettings}
+                     notify={notify}
+                     setGlobalLoading={setGlobalLoading}
+                  />
+                }
+
                 {currentView === 'reports' && appUser.permissions?.viewReports && 
                   <ReportsManager notify={notify} />
                 }
@@ -12056,7 +12068,7 @@ export default function App() {
                 {/* رسالة عدم الصلاحية */}
                 {currentView !== 'dashboard' && 
                  currentView !== 'user_profile' && 
-                 !['inventory','transfers','transactions','customers','tickets','reports','lowstock','settings','warehouses','users'].includes(currentView) && 
+                 !['inventory','transfers','transactions','customers','invoices','tickets','reports','lowstock','settings','warehouses','users'].includes(currentView) && 
                  appUser.role !== 'admin' && 
                  !appUser.permissions?.[`view${currentView.charAt(0).toUpperCase() + currentView.slice(1)}`] && (
                   <div className="flex flex-col items-center justify-center h-96 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
@@ -12071,4 +12083,166 @@ export default function App() {
       </div>
     </ThemeProvider>
   );
+}
+
+//ارشيف الفواتير - voice archive //
+
+function InvoicesManager({ systemSettings }) {
+
+  const [invoices,setInvoices] = useState([]);
+  const [search,setSearch] = useState("");
+  const [loading,setLoading] = useState(true);
+  const [invoiceData,setInvoiceData] = useState(null);
+
+  useEffect(()=>{
+
+    const loadInvoices = async()=>{
+
+      try{
+
+        const q = query(
+          collection(db,"transactions"),
+          where("type","==","sell"),
+          orderBy("timestamp","desc"),
+          limit(500)
+        );
+
+        const snap = await getDocs(q);
+
+        const data = snap.docs.map(d=>({
+          id:d.id,
+          ...d.data()
+        }));
+
+        setInvoices(data);
+
+      }catch(e){
+
+        console.error(e);
+
+      }
+
+      setLoading(false);
+
+    };
+
+    loadInvoices();
+
+  },[]);
+
+  const filtered = invoices.filter(inv=>{
+
+    const term = search.toLowerCase();
+
+    return(
+      inv.invoiceNumber?.toLowerCase().includes(term) ||
+      inv.customerName?.toLowerCase().includes(term) ||
+      inv.serialNumber?.toLowerCase().includes(term)
+    );
+
+  });
+
+  if(invoiceData){
+
+    return(
+      <InvoiceRenderer
+        data={invoiceData}
+        systemSettings={systemSettings}
+        onBack={()=>setInvoiceData(null)}
+      />
+    );
+
+  }
+
+  return(
+
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
+
+      <h2 className="text-2xl font-black">
+        أرشيف الفواتير
+      </h2>
+
+      <input
+        placeholder="بحث برقم الفاتورة أو السيريال أو العميل..."
+        className="w-full border p-3 rounded-xl"
+        value={search}
+        onChange={e=>setSearch(e.target.value)}
+      />
+
+      {loading && <p>جاري التحميل...</p>}
+
+      {!loading && (
+
+        <div className="overflow-x-auto">
+
+          <table className="w-full text-sm">
+
+            <thead className="bg-slate-100">
+
+              <tr>
+
+                <th className="p-2">رقم الفاتورة</th>
+                <th className="p-2">العميل</th>
+                <th className="p-2">الهاتف</th>
+                <th className="p-2">الإجمالي</th>
+                <th className="p-2">التاريخ</th>
+                <th className="p-2">عرض</th>
+
+              </tr>
+
+            </thead>
+
+            <tbody>
+
+              {filtered.map(inv=>(
+                
+                <tr key={inv.id} className="border-b">
+
+                  <td className="p-2 font-bold">
+                    {inv.invoiceNumber}
+                  </td>
+
+                  <td className="p-2">
+                    {inv.customerName}
+                  </td>
+
+                  <td className="p-2">
+                    {inv.phone}
+                  </td>
+
+                  <td className="p-2 font-bold">
+                    {inv.finalTotal} ج
+                  </td>
+
+                  <td className="p-2">
+                    {formatDate(inv.timestamp)}
+                  </td>
+
+                  <td className="p-2">
+
+                    <button
+                      onClick={()=>setInvoiceData(inv)}
+                      className="bg-indigo-600 text-white px-3 py-1 rounded"
+                    >
+                      فتح
+                    </button>
+
+                  </td>
+
+                </tr>
+
+              ))}
+
+            </tbody>
+
+          </table>
+
+        </div>
+
+      )}
+
+    </div>
+
+  );
+
 }
