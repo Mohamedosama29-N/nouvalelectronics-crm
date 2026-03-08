@@ -3076,6 +3076,44 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
   const [availableTags, setAvailableTags] = useState([]);
   const [selectedTags, setSelectedTags] = useState([]);
 
+//تعديل السيرش - serach serial upadte//
+  // دالة لتحديث كل الأصناف (مرة واحدة فقط)
+const fixSearchKeys = async () => {
+  setGlobalLoading(true);
+  try {
+    const snap = await getDocs(collection(db, 'inventory'));
+    const batch = writeBatch(db);
+    let count = 0;
+    
+    snap.docs.forEach(doc => {
+      const data = doc.data();
+      // إضافة السيريال لـ searchKey
+      const newSearchKey = normalizeSearch(`${data.name || ''} ${data.serialNumber || ''} ${data.category || ''}`);
+      
+      batch.update(doc.ref, { searchKey: newSearchKey });
+      count++;
+    });
+    
+    await batch.commit();
+    showSuccess(`✅ تم تحديث ${count} صنف`);
+    loadItems(false); // إعادة تحميل البيانات
+  } catch (error) {
+    console.error('Error:', error);
+    showError('❌ فشل التحديث');
+  }
+  setGlobalLoading(false);
+};
+
+
+{/* في جزء الأزرار */}
+<button
+  onClick={fixSearchKeys}
+  className="bg-purple-600 text-white px-4 py-2 rounded-lg text-xs font-bold"
+>
+  <RefreshCw size={14} /> تحديث مفاتيح البحث
+</button>
+
+
   // تحميل الوسوم
   useEffect(() => {
     const loadTags = async () => {
