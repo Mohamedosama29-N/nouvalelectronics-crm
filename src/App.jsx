@@ -3212,7 +3212,14 @@ const fixSearchKeys = async () => {
 
   setLoadingData(false);
 
-},[debouncedSearch,appUser,searchFilters]);
+},[debouncedSearch,appUser,searchFilters,selectedTags]);
+  
+useEffect(() => {
+
+  loadItems();
+
+}, [debouncedSearch, appUser, searchFilters, selectedTags]);
+
   useEffect(() => {
     const uniqueCategories = [...new Set(items.map(item => item.category).filter(Boolean))];
     setCategories(uniqueCategories);
