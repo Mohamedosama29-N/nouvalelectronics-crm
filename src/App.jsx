@@ -4522,27 +4522,21 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
 
 
 
-  const filteredItems = items.filter(item => {
+  const filteredItems = (items || []).filter(item => {
 
-  const term = normalizeSerial(search);
+    const term = (search || "").toLowerCase().trim();
 
-  const name = (item.name || "").toLowerCase();
-  const serial = normalizeSerial(item.serialNumber);
-  const category = (item.category || "").toLowerCase();
+    const warehouseMatch =
+      selectedWarehouse === "all" ||
+      item.warehouseId === selectedWarehouse;
 
-  const warehouseMatch =
-    selectedWarehouse === "all" ||
-    item.warehouseId === selectedWarehouse;
+    const searchMatch =
+      term === "" ||
+      (item.searchKey || "").toLowerCase().includes(term);
 
-  const searchMatch =
-    term === "" ||
-    name.includes(term) ||
-    serial.includes(term) ||
-    category.includes(term);
+    return warehouseMatch && searchMatch;
 
-  return warehouseMatch && searchMatch;
-
-});
+  });
 
 
   const warehouses = [...new Set(items.map(i=>i.warehouseId))];
