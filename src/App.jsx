@@ -2699,17 +2699,23 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
   }, [appUser, warehouses, refreshKey, selectedWarehouse]);
 
   const handleStatClick = (type) => {
+
     if (type === 'inventory') {
-      onNavigateToInventory();
+      onNavigateToInventory('inventory');
+
     } else if (type === 'lowstock') {
-      window.dispatchEvent(new CustomEvent('navigateToLowStock', { detail: lowStockItems }));
+      onNavigateToInventory('lowstock');
+
     } else if (type === 'tickets') {
-      window.dispatchEvent(new CustomEvent('navigateToTickets'));
+      onNavigateToInventory('tickets');
+
     } else if (type === 'sales') {
-      window.dispatchEvent(new CustomEvent('navigateToReports'));
+      onNavigateToInventory('reports');
+
     } else if (type === 'products') {
-      window.dispatchEvent(new CustomEvent('navigateToInventory', { detail: { tab: 'top' } }));
+      onNavigateToInventory('inventory');
     }
+
   };
 
   if (loading) {
@@ -4414,8 +4420,9 @@ for (let i = 0; i < importData.length; i += BATCH_SIZE) {
 // ==========================================================================
 // 📦 عرض النواقص المحسن
 // ==========================================================================
-function LowStockView({ lowStockItems, appUser, warehouseMap }) {
+function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
   const [items, setItems] = useState(lowStockItems || []);
+  const [search, setSearch] = useState("");
   const [selectedWarehouse, setSelectedWarehouse] = useState('all');
   const [sortBy, setSortBy] = useState('quantity');
   const [loading, setLoading] = useState(false);
@@ -4423,6 +4430,14 @@ function LowStockView({ lowStockItems, appUser, warehouseMap }) {
   const [exportFormat, setExportFormat] = useState('csv');
 
   useEffect(() => {
+    if (loading) {
+      return (
+        <div className="flex justify-center items-center h-64 text-slate-500">
+         جاري تحميل النواقص...
+        </div>
+      );
+    }
+
     if (!lowStockItems || lowStockItems.length === 0) {
       const fetchLowStock = async () => {
         setLoading(true);
@@ -4465,13 +4480,13 @@ function LowStockView({ lowStockItems, appUser, warehouseMap }) {
     }
   }, [lowStockItems, appUser]);
 
-    const filteredItems = items.filter(item => {
+    const filteredItems = (items || []).filter(item => {
 
-      const term = (search || "").toString().toLowerCase().trim();
+      const term = (search || "").toLowerCase().trim();
 
-      const name = (item.name || "").toString().toLowerCase();
-      const serial = (item.serialNumber || "").toString().toLowerCase();
-      const category = (item.category || "").toString().toLowerCase();
+      const name = (item.name || "").toLowerCase();
+      const serial = (item.serialNumber || "").toLowerCase();
+      const category = (item.category || "").toLowerCase();
 
       const warehouseMatch =
         selectedWarehouse === "all" ||
@@ -4577,7 +4592,19 @@ function LowStockView({ lowStockItems, appUser, warehouseMap }) {
               {filteredItems.length}
             </span>
           </div>
-          
+
+          <div className="flex gap-2">
+
+            <input
+            type="text"
+            placeholder="بحث باسم المنتج أو السيريال..."
+            className="border border-slate-200 p-2 rounded-lg w-full max-w-md"
+            value={search}
+            onChange={(e)=>setSearch(e.target.value)}
+            />
+
+          </div>
+              
           <div className="flex flex-wrap gap-3 w-full md:w-auto">
             <select 
               className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm font-bold bg-white dark:bg-slate-900 focus:border-indigo-500 outline-none"
