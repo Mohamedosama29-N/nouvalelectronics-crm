@@ -4449,9 +4449,11 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
             const data = doc.data();
             if (!data.isDeleted) {
               if (appUser.permissions?.viewAllWarehouses || data.warehouseId === (appUser.assignedWarehouseId || 'main')) {
-                const qty = Number(data.quantity) || 0;
-                const minStock = Number(data.minStock) || 2;
-                if (qty <= minStock) {
+                const qty = Number(data.quantity ?? 0);
+                const minStock = Number(data.minStock ?? 0);
+
+                // إظهار فقط المنتجات التي لها حد أدنى حقيقي
+                if (minStock > 0 && qty <= minStock) {
                   lowList.push({
                     id: doc.id,
                     name: data.name,
