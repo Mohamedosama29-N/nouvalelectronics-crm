@@ -4524,20 +4524,26 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
 
   const filteredItems = (items || []).filter(item => {
 
-    const term = (search || "").toLowerCase().trim();
+  const term = (search || "").toString().trim().toLowerCase();
 
-    const warehouseMatch =
-      selectedWarehouse === "all" ||
-      item.warehouseId === selectedWarehouse;
+  const name = (item.name || "").toString().toLowerCase();
+  const serial = (item.serialNumber || "").toString().toLowerCase();
+  const category = (item.category || "").toString().toLowerCase();
 
-    const searchMatch =
-      term === "" ||
-      (item.searchKey || "").toLowerCase().includes(term);
+  const warehouseMatch =
+    selectedWarehouse === "all" ||
+    item.warehouseId === selectedWarehouse;
 
-    return warehouseMatch && searchMatch;
+  if (!term) return warehouseMatch;
 
-  });
-  console.log(items);
+  const searchMatch =
+    name.includes(term) ||
+    serial.includes(term) ||
+    category.includes(term);
+
+  return warehouseMatch && searchMatch;
+
+});
   
   const warehouses = [...new Set(items.map(i=>i.warehouseId))];
 
@@ -4671,7 +4677,9 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
                   </td>
                 </tr>
 
-              ):filteredItems.map(item=>(
+              ):
+
+              filteredItems.map(item=>(
 
                 <tr key={item.id} className="hover:bg-slate-50">
 
