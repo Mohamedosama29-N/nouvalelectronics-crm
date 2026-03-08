@@ -3124,52 +3124,42 @@ const fixSearchKeys = async () => {
     loadTags();
   }, []);
 
-  const loadItems = useCallback(async (isNextPage = false) => {
+  const loadItems = useCallback(async () => {
+
   if (!appUser) return;
 
   setLoadingData(true);
 
   try {
 
-    let q;
+    const snap = await getDocs(collection(db,"inventory"));
 
-    if (isNextPage && lastDoc) {
-      q = query(
-        collection(db, "inventory"),
-        orderBy("name"),
-        startAfter(lastDoc),
-        limit(100)
-      );
-    } else {
-      q = query(
-        collection(db, "inventory"),
-        orderBy("name"),
-        limit(100)
-      );
-    }
-
-    const snap = await getDocs(q);
-
-    let fetched = snap.docs.map(d => ({
-      id: d.id,
+    let fetched = snap.docs.map(d=>({
+      id:d.id,
       ...d.data()
     }));
 
-    // حذف العناصر المحذوفة
-    fetched = fetched.filter(i => !i.isDeleted);
+
+    // حذف المحذوف
+    fetched = fetched.filter(i=>!i.isDeleted);
+
 
     // صلاحيات المخازن
-    if (!appUser.permissions?.viewAllWarehouses) {
+    if(!appUser.permissions?.viewAllWarehouses){
+
       fetched = fetched.filter(
-        i => i.warehouseId === (appUser.assignedWarehouseId || "main")
+        i=>i.warehouseId === (appUser.assignedWarehouseId || "main")
       );
+
     }
 
-    // البحث المحلي (الأهم)
+
+    // البحث
     const term = (debouncedSearch || "").toLowerCase().trim();
 
-    if (term) {
-      fetched = fetched.filter(item => {
+    if(term){
+
+      fetched = fetched.filter(item=>{
 
         const name = (item.name || "").toLowerCase();
         const serial = (item.serialNumber || "").toLowerCase();
@@ -3177,7 +3167,7 @@ const fixSearchKeys = async () => {
         const location = (item.location || "").toLowerCase();
         const tags = (item.tags || []).join(" ").toLowerCase();
 
-        return (
+        return(
           name.includes(term) ||
           serial.includes(term) ||
           category.includes(term) ||
@@ -3186,63 +3176,43 @@ const fixSearchKeys = async () => {
         );
 
       });
+
     }
+
 
     // الفلاتر
-    if (searchFilters.warehouse) {
-      fetched = fetched.filter(i => i.warehouseId === searchFilters.warehouse);
+    if(searchFilters.warehouse){
+      fetched = fetched.filter(i=>i.warehouseId === searchFilters.warehouse);
     }
 
-    if (searchFilters.category) {
-      fetched = fetched.filter(i => i.category === searchFilters.category);
+    if(searchFilters.category){
+      fetched = fetched.filter(i=>i.category === searchFilters.category);
     }
 
-    if (searchFilters.minPrice) {
-      fetched = fetched.filter(i => i.price >= searchFilters.minPrice);
-    }
 
-    if (searchFilters.maxPrice) {
-      fetched = fetched.filter(i => i.price <= searchFilters.maxPrice);
-    }
+    // ترتيب محلي
+    fetched.sort((a,b)=>{
 
-    if (searchFilters.inStock) {
-      fetched = fetched.filter(i => i.quantity > 0);
-    }
+      const nameA = (a.name || "").toLowerCase();
+      const nameB = (b.name || "").toLowerCase();
 
-    if (searchFilters.lowStock) {
-      fetched = fetched.filter(i => i.quantity <= (i.minStock || 2));
-    }
+      return nameA.localeCompare(nameB);
 
-    if (selectedTags.length > 0) {
-      fetched = fetched.filter(i =>
-        i.tags?.some(tag => selectedTags.includes(tag))
-      );
-    }
+    });
 
-    if (isNextPage) {
-      setItems(prev => [...prev, ...fetched]);
-    } else {
-      setItems(fetched);
-    }
 
-    setLastDoc(snap.docs[snap.docs.length - 1] || null);
-    setHasMore(snap.docs.length === 100);
+    setItems(fetched);
 
-  } catch (e) {
+  }catch(e){
 
     console.error(e);
-
-    if (e.code === "permission-denied") {
-      showError("خطأ في الصلاحيات في Firebase");
-    } else {
-      showError("فشل تحميل البيانات");
-    }
+    showError("فشل تحميل المخزون");
 
   }
 
   setLoadingData(false);
 
-}, [debouncedSearch, appUser, lastDoc, searchFilters, selectedTags]);
+},[debouncedSearch,appUser,searchFilters]);
   useEffect(() => {
     const uniqueCategories = [...new Set(items.map(item => item.category).filter(Boolean))];
     setCategories(uniqueCategories);
