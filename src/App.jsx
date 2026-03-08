@@ -4468,11 +4468,11 @@ const filteredItems = items
   .filter(i => selectedWarehouse === 'all' || i.warehouseId === selectedWarehouse)
   .filter(item => {
 
-    const term = (search || "").toLowerCase().trim();
+    const term = search?.toString().toLowerCase().trim();
 
-    const name = (item.name || "").toString().toLowerCase();
-    const serial = (item.serialNumber || "").toString().toLowerCase();
-    const category = (item.category || "").toString().toLowerCase();
+    const name = item.name?.toString().toLowerCase() || "";
+    const serial = item.serialNumber?.toString().toLowerCase() || "";
+    const category = item.category?.toString().toLowerCase() || "";
 
     return (
       name.includes(term) ||
@@ -9591,25 +9591,19 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
   try {
 
     const itemsToTransfer = Array.from(selectedItems)
-      .map(id => inventory.find(i => i.id === id))
-      .filter(Boolean);
+  .map(id => inventory.find(i => i.id === id))
+  .filter(Boolean);
 
-    for (const item of itemsToTransfer) {
+for (const item of itemsToTransfer) {
 
-      await addDoc(collection(db, 'inventory'), {
-        ...item,
-        warehouseId: transferData.toWarehouse,
-        createdAt: serverTimestamp(),
-        isDeleted: false,
-        quantity: item.quantity || 1
-      });
+  const itemRef = doc(db, 'inventory', item.id);
 
-      await updateDoc(doc(db, 'inventory', item.id), {
-        quantity: 0,
-        isDeleted: true
-      });
+  await updateDoc(itemRef, {
+    warehouseId: transferData.toWarehouse,
+    updatedAt: serverTimestamp()
+  });
 
-    }
+}
 
     await logUserActivity(
       appUser,
