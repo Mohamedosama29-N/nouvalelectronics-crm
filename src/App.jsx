@@ -3136,14 +3136,14 @@ const fixSearchKeys = async () => {
     if (isNextPage && lastDoc) {
       q = query(
         collection(db, "inventory"),
-        orderBy("createdAt", "desc"),
+        orderBy("name"),
         startAfter(lastDoc),
         limit(100)
       );
     } else {
       q = query(
         collection(db, "inventory"),
-        orderBy("createdAt", "desc"),
+        orderBy("name"),
         limit(100)
       );
     }
@@ -5765,7 +5765,7 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
               orderBy('searchKey')
            );
         } else {
-           q = query(q, orderBy('createdAt', 'desc'));
+           q = query(q, orderBy("name"));
         }
 
         if (isNextPage && lastDoc) {
@@ -6611,7 +6611,7 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
                 const tq = query(
                   collection(db, 'tickets'),
                   where('customerPhone', '==', customer.phone),
-                  orderBy('createdAt', 'desc'),
+                  orderBy("name"),
                   limit(50)
                 );
                 const tSnap = await getDocs(tq);
