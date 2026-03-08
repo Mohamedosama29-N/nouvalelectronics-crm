@@ -409,15 +409,6 @@ class RateLimiter {
 
 export const apiLimiter = new RateLimiter(60, 60000);
 
-//------------------------------------------//
-//دالة البحث  - serial//
-const normalizeSerial = (value) => {
-  return (value || "")
-    .toString()
-    .trim()
-    .toLowerCase();
-};
-//--------------------------------------------//
 
 // ==========================================================================
 // 👤 USER IP & LOCATION TRACKING
@@ -1212,10 +1203,15 @@ const normalizeSearch = (str) => {
   return String(str).toLowerCase().trim().replace(/\s+/g, ' ');
 };
 
-const normalizeSerial = (str) => {
-  if (!str) return '';
-  return String(str).trim().toUpperCase();
+//------------------------------------------//
+//دالة البحث  - serial//
+const normalizeSerial = (value) => {
+  return (value || "")
+    .toString()
+    .trim()
+    .toLowerCase();
 };
+//--------------------------------------------//
 
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
