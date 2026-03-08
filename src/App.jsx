@@ -4537,8 +4537,8 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
     return warehouseMatch && searchMatch;
 
   });
-
-
+  console.log(items);
+  
   const warehouses = [...new Set(items.map(i=>i.warehouseId))];
 
 
