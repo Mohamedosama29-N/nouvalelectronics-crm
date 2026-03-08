@@ -2198,37 +2198,37 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
 
           <div className="mt-8 flex flex-wrap gap-2 print:hidden">
 
-  <button 
-    onClick={() => window.print()} 
-    className="flex-1 bg-black text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-gray-800"
-  >
-    <Printer size={16}/> طباعة
-  </button>
+            <button 
+              onClick={() => window.print()} 
+              className="flex-1 bg-black text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-gray-800"
+            >
+              <Printer size={16}/> طباعة
+            </button>
 
-  <button
-    onClick={exportInvoiceImage}
-    className="flex-1 bg-indigo-600 text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-indigo-700"
-  >
-    تحميل صورة
-  </button>
+            <button
+              onClick={exportInvoiceImage}
+              className="flex-1 bg-indigo-600 text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-indigo-700"
+            >
+              تحميل صورة
+            </button>
 
-  {data.phone && (
-    <button onClick={handleSendWhatsApp} className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-green-700">
-      <MessageCircle size={16}/> واتساب
-    </button>
-  )}
+            {data.phone && (
+              <button onClick={handleSendWhatsApp} className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-green-700">
+                <MessageCircle size={16}/> واتساب
+              </button>
+            )}
 
-  {data.email && (
-    <button onClick={handleSendEmail} className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-blue-700">
-      <Mail size={16}/> بريد
-    </button>
-  )}
+            {data.email && (
+              <button onClick={handleSendEmail} className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-blue-700">
+                <Mail size={16}/> بريد
+              </button>
+            )}
 
-  <button onClick={onBack} className="flex-1 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-slate-300 dark:hover:bg-slate-600">
-    <ArrowRightLeft size={16}/> إغلاق
-  </button>
+            <button onClick={onBack} className="flex-1 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-slate-300 dark:hover:bg-slate-600">
+              <ArrowRightLeft size={16}/> إغلاق
+            </button>
 
-</div>
+          </div>
 
 // ==========================================================================
 // 📝 مدير قالب الفاتورة
