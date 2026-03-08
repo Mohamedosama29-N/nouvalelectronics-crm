@@ -2030,7 +2030,7 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
 
   link.click();
 
-};
+  };
 
   useEffect(() => { 
     const timer = setTimeout(() => window.print(), 800); 
