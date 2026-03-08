@@ -4464,11 +4464,11 @@ function LowStockView({ lowStockItems, appUser, warehouseMap }) {
     }
   }, [lowStockItems, appUser]);
 
- const filteredItems = items
+const filteredItems = items
   .filter(i => selectedWarehouse === 'all' || i.warehouseId === selectedWarehouse)
   .filter(item => {
 
-    const term = (search || "").toString().toLowerCase().trim();
+    const term = (search || "").toLowerCase().trim();
 
     const name = (item.name || "").toString().toLowerCase();
     const serial = (item.serialNumber || "").toString().toLowerCase();
@@ -6501,9 +6501,10 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
             setGlobalLoading(true);
             try {
                 const q = query(
-                  collection(db, 'transactions'), 
-                  where('phone', '==', customer.phone), 
-                  orderBy('timestamp', 'desc'), 
+                  collection(db, 'transactions'),
+                  where('phone', '==', customer.phone),
+                  where('type', '==', 'sell'),
+                  orderBy('timestamp', 'desc'),
                   limit(100)
                 );
                 const snap = await getDocs(q);
