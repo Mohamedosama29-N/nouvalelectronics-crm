@@ -3125,87 +3125,124 @@ const fixSearchKeys = async () => {
   }, []);
 
   const loadItems = useCallback(async (isNextPage = false) => {
-    if (!appUser) return;
-    setLoadingData(true);
-    try {
-      let q = collection(db, 'inventory');
-      const term = normalizeSearch(debouncedSearch);
+  if (!appUser) return;
 
-      if (term) {
-         q = query(q, 
-            where('searchKey', '>=', term), 
-            where('searchKey', '<=', term + '\uf8ff'),
-            orderBy('searchKey')
-         );
-      } else {
-         q = query(q, orderBy('createdAt', 'desc'));
-      }
+  setLoadingData(true);
 
-      if (isNextPage && lastDoc) {
-         q = query(q, startAfter(lastDoc));
-      }
+  try {
 
-      q = query(q, limit(100));
-      const snap = await getDocs(q);
-      
-      let fetched = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    let q;
 
-      fetched = fetched.filter(i => !i.isDeleted);
-      if (!appUser.permissions?.viewAllWarehouses) {
-         fetched = fetched.filter(i => i.warehouseId === (appUser.assignedWarehouseId || 'main'));
-      }
-
-      // تطبيق الفلاتر
-      if (searchFilters.warehouse) {
-        fetched = fetched.filter(i => i.warehouseId === searchFilters.warehouse);
-      }
-      if (searchFilters.category) {
-        fetched = fetched.filter(i => i.category === searchFilters.category);
-      }
-      if (searchFilters.minPrice) {
-        fetched = fetched.filter(i => i.price >= searchFilters.minPrice);
-      }
-      if (searchFilters.maxPrice) {
-        fetched = fetched.filter(i => i.price <= searchFilters.maxPrice);
-      }
-      if (searchFilters.inStock) {
-        fetched = fetched.filter(i => i.quantity > 0);
-      }
-      if (searchFilters.lowStock) {
-        fetched = fetched.filter(i => i.quantity <= (i.minStock || 2));
-      }
-      if (selectedTags.length > 0) {
-        fetched = fetched.filter(i => 
-          i.tags?.some(tag => selectedTags.includes(tag))
-        );
-      }
-
-      if (isNextPage) {
-         setItems(prev => [...prev, ...fetched]);
-      } else {
-         setItems(fetched);
-      }
-
-      setLastDoc(snap.docs[snap.docs.length - 1] || null);
-      setHasMore(snap.docs.length === 100);
-    } catch (e) { 
-      console.error(e);
-      if (e.code === 'permission-denied') {
-         showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
-      } else if (e.message.includes('index')) {
-         showError("يرجى مراجعة إعدادات فهارس قاعدة البيانات (Indexes)");
-      } else {
-         showError("خطأ في جلب البيانات: " + e.message); 
-      }
+    if (isNextPage && lastDoc) {
+      q = query(
+        collection(db, "inventory"),
+        orderBy("createdAt", "desc"),
+        startAfter(lastDoc),
+        limit(100)
+      );
+    } else {
+      q = query(
+        collection(db, "inventory"),
+        orderBy("createdAt", "desc"),
+        limit(100)
+      );
     }
-    setLoadingData(false);
-  }, [debouncedSearch, appUser, lastDoc, searchFilters, selectedTags]);
 
-  useEffect(() => { 
-    setLastDoc(null);
-    loadItems(false); 
-  }, [debouncedSearch, appUser, searchFilters, selectedTags]);
+    const snap = await getDocs(q);
 
+    let fetched = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data()
+    }));
+
+    // حذف العناصر المحذوفة
+    fetched = fetched.filter(i => !i.isDeleted);
+
+    // صلاحيات المخازن
+    if (!appUser.permissions?.viewAllWarehouses) {
+      fetched = fetched.filter(
+        i => i.warehouseId === (appUser.assignedWarehouseId || "main")
+      );
+    }
+
+    // البحث المحلي (الأهم)
+    const term = (debouncedSearch || "").toLowerCase().trim();
+
+    if (term) {
+      fetched = fetched.filter(item => {
+
+        const name = (item.name || "").toLowerCase();
+        const serial = (item.serialNumber || "").toLowerCase();
+        const category = (item.category || "").toLowerCase();
+        const location = (item.location || "").toLowerCase();
+        const tags = (item.tags || []).join(" ").toLowerCase();
+
+        return (
+          name.includes(term) ||
+          serial.includes(term) ||
+          category.includes(term) ||
+          location.includes(term) ||
+          tags.includes(term)
+        );
+
+      });
+    }
+
+    // الفلاتر
+    if (searchFilters.warehouse) {
+      fetched = fetched.filter(i => i.warehouseId === searchFilters.warehouse);
+    }
+
+    if (searchFilters.category) {
+      fetched = fetched.filter(i => i.category === searchFilters.category);
+    }
+
+    if (searchFilters.minPrice) {
+      fetched = fetched.filter(i => i.price >= searchFilters.minPrice);
+    }
+
+    if (searchFilters.maxPrice) {
+      fetched = fetched.filter(i => i.price <= searchFilters.maxPrice);
+    }
+
+    if (searchFilters.inStock) {
+      fetched = fetched.filter(i => i.quantity > 0);
+    }
+
+    if (searchFilters.lowStock) {
+      fetched = fetched.filter(i => i.quantity <= (i.minStock || 2));
+    }
+
+    if (selectedTags.length > 0) {
+      fetched = fetched.filter(i =>
+        i.tags?.some(tag => selectedTags.includes(tag))
+      );
+    }
+
+    if (isNextPage) {
+      setItems(prev => [...prev, ...fetched]);
+    } else {
+      setItems(fetched);
+    }
+
+    setLastDoc(snap.docs[snap.docs.length - 1] || null);
+    setHasMore(snap.docs.length === 100);
+
+  } catch (e) {
+
+    console.error(e);
+
+    if (e.code === "permission-denied") {
+      showError("خطأ في الصلاحيات في Firebase");
+    } else {
+      showError("فشل تحميل البيانات");
+    }
+
+  }
+
+  setLoadingData(false);
+
+}, [debouncedSearch, appUser, lastDoc, searchFilters, selectedTags]);
   useEffect(() => {
     const uniqueCategories = [...new Set(items.map(item => item.category).filter(Boolean))];
     setCategories(uniqueCategories);
@@ -3329,7 +3366,7 @@ for (let i = 0; i < importData.length; i += BATCH_SIZE) {
 
     batch.set(ref, {
       ...item,
-      serialNumber: (item.serialNumber || "").toLowerCase().trim(),
+      serialNumber: normalizeSerial(item.serialNumber),
       quantity: item.quantity || 1,
       isDeleted: false,
       createdAt: serverTimestamp()
