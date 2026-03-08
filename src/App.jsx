@@ -409,6 +409,16 @@ class RateLimiter {
 
 export const apiLimiter = new RateLimiter(60, 60000);
 
+//------------------------------------------//
+//دالة البحث  - serial//
+const normalizeSerial = (value) => {
+  return (value || "")
+    .toString()
+    .trim()
+    .toLowerCase();
+};
+//--------------------------------------------//
+
 // ==========================================================================
 // 👤 USER IP & LOCATION TRACKING
 // ==========================================================================
@@ -3247,14 +3257,20 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
 
   // دالة التحقق من السيريال
   const checkSerialAvailability = async (serial) => {
-    const q = query(
-      collection(db, 'inventory'), 
-      where('serialNumber', '==', serial),
-      where('isDeleted', '==', false)
-    );
-    const snap = await getDocs(q);
-    return snap.empty;
-  };
+
+  const normalized = normalizeSerial(serial);
+
+  const q = query(
+    collection(db,'inventory'),
+    where('serialNumber','==',normalized),
+    where('isDeleted','==',false)
+  );
+
+  const snap = await getDocs(q);
+
+  return snap.empty;
+
+};
 
   // دالة الاستيراد المحسنة مع Web Worker
   const handleImportConfirm = async () => {
@@ -3552,40 +3568,49 @@ for (let i = 0; i < importData.length; i += BATCH_SIZE) {
         }
       }
       
-      const docData = { 
-        serialNumber: serial, 
-        name: newItem.name,
-        price: priceNum,
-        quantity: qtyNum,
-        minStock: Number(newItem.minStock) || 2,
-        category: newItem.category || 'عام',
-        location: newItem.location || '',
-        tags: newItem.tags || [],
-        notes: newItem.notes || '',
-        warehouseId: warehouseToUse,
-        searchKey: normalizeSearch(`${newItem.name} ${serial} ${newItem.category} ${(newItem.tags || []).join(' ')}`), 
-        createdAt: serverTimestamp(), 
-        isDeleted: false
-      };
-      
-      await addDoc(collection(db, 'inventory'), docData);
-      
-      await logUserActivity(appUser, 'إضافة صنف', `إضافة ${qtyNum} قطعة من ${newItem.name} (S/N: ${serial})`);
-      showSuccess("تم إضافة الصنف بنجاح"); 
-      setLastDoc(null);
-      loadItems(false); 
-      setNewItem({ 
-        serialNumber: '', 
-        name: '', 
-        quantity: 1, 
-        price: 0, 
-        minStock: 2, 
-        category: 'عام',
-        location: '',
-        tags: [],
-        notes: '',
-        warehouseId: appUser?.assignedWarehouseId || 'main' 
-      });
+      const serialNormalized = normalizeSerial(serial);
+
+    const docData = { 
+      serialNumber: serialNormalized,
+      name: newItem.name,
+      price: priceNum,
+      quantity: qtyNum,
+      minStock: Number(newItem.minStock) || 2,
+      category: newItem.category || 'عام',
+      location: newItem.location || '',
+      tags: newItem.tags || [],
+      notes: newItem.notes || '',
+      warehouseId: warehouseToUse,
+      searchKey: normalizeSearch(`${newItem.name} ${serialNormalized} ${newItem.category} ${(newItem.tags || []).join(' ')}`),
+      createdAt: serverTimestamp(),
+      isDeleted: false
+    };
+
+    await addDoc(collection(db, 'inventory'), docData);
+
+    await logUserActivity(
+      appUser,
+      'إضافة صنف',
+      `إضافة ${qtyNum} قطعة من ${newItem.name} (S/N: ${serialNormalized})`
+    );
+
+    showSuccess("تم إضافة الصنف بنجاح");
+
+    setLastDoc(null);
+    loadItems(false);
+
+    setNewItem({ 
+      serialNumber: '',
+      name: '',
+      quantity: 1,
+      price: 0,
+      minStock: 2,
+      category: 'عام',
+      location: '',
+      tags: [],
+      notes: '',
+      warehouseId: appUser?.assignedWarehouseId || 'main'
+    });
     } catch(err) { 
       showError(err.message || "فشل الإضافة"); 
     }
@@ -4503,11 +4528,11 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
 
   const filteredItems = items.filter(item => {
 
-  const term = (search || "").toString().trim().toLowerCase();
+  const term = normalizeSerial(search);
 
-  const name = (item.name || "").toString().trim().toLowerCase();
-  const serial = (item.serialNumber || "").toString().trim().toLowerCase();
-  const category = (item.category || "").toString().trim().toLowerCase();
+  const name = (item.name || "").toLowerCase();
+  const serial = normalizeSerial(item.serialNumber);
+  const category = (item.category || "").toLowerCase();
 
   const warehouseMatch =
     selectedWarehouse === "all" ||
@@ -12120,7 +12145,7 @@ function InvoicesManager({ systemSettings }) {
 
   const filtered = invoices.filter(inv=>{
 
-    const term = search.toLowerCase();
+    const term = normalizeSerial(search);
 
     return(
       inv.invoiceNumber?.toLowerCase().includes(term) ||
