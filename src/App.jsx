@@ -14,7 +14,7 @@ import autoTable from 'jspdf-autotable';
 import CryptoJS from 'crypto-js';
 import { openDB } from 'idb';
 import Swal from 'sweetalert2';
-
+import html2canvas from "html2canvas";
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getAuth, signInAnonymously 
@@ -2013,6 +2013,25 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
   const { darkMode } = useTheme();
   const printRef = useRef();
 
+  const exportInvoiceImage = async () => {
+
+  const element = document.getElementById("invoice-print");
+
+  if (!element) return;
+
+  const canvas = await html2canvas(element);
+
+  const image = canvas.toDataURL("image/png");
+
+  const link = document.createElement("a");
+
+  link.href = image;
+  link.download = `invoice-${data.invoiceNumber}.png`;
+
+  link.click();
+
+};
+
   useEffect(() => { 
     const timer = setTimeout(() => window.print(), 800); 
     return () => clearTimeout(timer);
@@ -2059,7 +2078,9 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
   const handleSendWhatsApp = () => {
     if (data.phone) {
       const message = `فاتورة رقم ${data.invoiceNumber}\n`;
-      const items = data.items.map(item => `- ${item.name} : ${item.price} ج`).join('\n');
+      const items = data.items
+  .map(item => `- ${item.name} × ${item.quantity || 1} = ${(item.price * (item.quantity || 1))} ج`)
+  .join('\n');
       sendWhatsApp(data.phone, message + items + `\nالإجمالي: ${data.finalTotal} ج`);
     }
   };
@@ -2073,7 +2094,7 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
   };
 
   return (
-    <div className="flex justify-center p-6 bg-slate-100 dark:bg-slate-900 min-h-full" dir="rtl">
+    <div id="invoice-print" className="flex justify-center p-6 bg-slate-100 dark:bg-slate-900 min-h-full" dir="rtl">
        <div ref={printRef} className={`bg-white dark:bg-slate-800 ${getPaperWidth()} w-full p-6 text-black dark:text-white border shadow-lg print:shadow-none print:border-none print:m-0 ${getFontSize()}`}>
           
           {template.showLogo && systemSettings.invoiceLogo && (
@@ -2176,27 +2197,38 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
           )}
 
           <div className="mt-8 flex flex-wrap gap-2 print:hidden">
-             <button onClick={() => window.print()} className="flex-1 bg-black text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-gray-800">
-               <Printer size={16}/> طباعة
-             </button>
-             {data.phone && (
-               <button onClick={handleSendWhatsApp} className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-green-700">
-                 <MessageCircle size={16}/> واتساب
-               </button>
-             )}
-             {data.email && (
-               <button onClick={handleSendEmail} className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-blue-700">
-                 <Mail size={16}/> بريد
-               </button>
-             )}
-             <button onClick={onBack} className="flex-1 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-slate-300 dark:hover:bg-slate-600">
-               <ArrowRightLeft size={16}/> إغلاق
-             </button>
-          </div>
-       </div>
-    </div>
-  );
-}
+
+  <button 
+    onClick={() => window.print()} 
+    className="flex-1 bg-black text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-gray-800"
+  >
+    <Printer size={16}/> طباعة
+  </button>
+
+  <button
+    onClick={exportInvoiceImage}
+    className="flex-1 bg-indigo-600 text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-indigo-700"
+  >
+    تحميل صورة
+  </button>
+
+  {data.phone && (
+    <button onClick={handleSendWhatsApp} className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-green-700">
+      <MessageCircle size={16}/> واتساب
+    </button>
+  )}
+
+  {data.email && (
+    <button onClick={handleSendEmail} className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-blue-700">
+      <Mail size={16}/> بريد
+    </button>
+  )}
+
+  <button onClick={onBack} className="flex-1 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-slate-300 dark:hover:bg-slate-600">
+    <ArrowRightLeft size={16}/> إغلاق
+  </button>
+
+</div>
 
 // ==========================================================================
 // 📝 مدير قالب الفاتورة
@@ -6532,7 +6564,10 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
   };
 
   const calculations = useMemo(() => {
-      const subtotal = cart.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
+      const subtotal = cart.reduce(
+  (sum, item) => sum + ((Number(item.price) || 0) * (item.quantity || 1)),
+  0
+   );
       const discountVal = Number(invoice.discount) || 0;
       let discountAmount = 0;
       if (invoice.discountType === 'percent') {
@@ -6555,35 +6590,60 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
   }, [cart, invoice, systemSettings]);
 
   const handleSearchItem = async (e) => {
-      e.preventDefault();
-      if(!search.trim()) return;
-      setGlobalLoading(true);
-      try {
-          const searchTerm = normalizeSerial(search);
-          if (cart.find(i => i.serialNumber === searchTerm)) {
-              showError("المنتج مضاف بالفعل في الفاتورة");
-              setGlobalLoading(false);
-              return;
-          }
-          const q = query(
-            collection(db, 'inventory'), 
-            where('serialNumber', '==', searchTerm), 
-            where('isDeleted', '==', false), 
-            where('quantity', '>', 0)
-          );
-          const snap = await getDocs(q);
-          if(!snap.empty) {
-              const item = {id: snap.docs[0].id, ...snap.docs[0].data()};
-              setCart([...cart, item]);
-              setSearch('');
-          } else {
-              showError("الباركود غير صحيح أو الكمية غير متوفرة");
-          }
-      } catch(err) {
-          showError("خطأ في البحث");
+
+  e.preventDefault();
+
+  if (!search.trim()) return;
+
+  setGlobalLoading(true);
+
+  try {
+
+    const searchTerm = normalizeSerial(search);
+
+    const q = query(
+      collection(db, 'inventory'),
+      where('serialNumber', '==', searchTerm),
+      where('isDeleted', '==', false),
+      where('quantity', '>', 0)
+    );
+
+    const snap = await getDocs(q);
+
+    if (!snap.empty) {
+
+      const item = { id: snap.docs[0].id, ...snap.docs[0].data() };
+
+      const existing = cart.find(i => i.id === item.id);
+
+      if (existing) {
+        setCart(cart.map(i =>
+          i.id === item.id
+            ? { ...i, quantity: (i.quantity || 1) + 1 }
+            : i
+        ));
+      } else {
+        setCart([...cart, { ...item, quantity: 1 }]);
       }
-      setGlobalLoading(false);
-  };
+
+      setSearch('');
+
+    } else {
+
+      showError("الباركود غير صحيح أو الكمية غير متوفرة");
+
+    }
+
+  } catch (err) {
+
+    console.error(err);
+    showError("خطأ في البحث");
+
+  }
+
+  setGlobalLoading(false);
+
+};
 
   const handleCheckout = async () => {
       if (cart.length === 0) return showError("يرجى إضافة منتج واحد على الأقل");
@@ -6964,8 +7024,8 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
                                         <span className="text-[10px] text-slate-400 font-mono mt-0.5 inline-block">{item.serialNumber}</span>
                                       </td>
                                       <td className="p-3 text-center font-bold text-slate-600 dark:text-slate-400">1</td>
-                                      <td className="p-3 text-center font-black text-indigo-600 dark:text-indigo-400">{item.price} ج</td>
-                                      <td className="p-3 text-center font-black text-emerald-600 dark:text-emerald-400">{item.price} ج</td>
+                                      <td className="p-3 text-center font-black text-indigo-600 dark:text-indigo-400">{item.price * item.quantity} ج</td>
+                                      <td className="p-3 text-center font-black text-emerald-600 dark:text-emerald-400">{item.price * item.quantity} ج</td>
                                       <td className="p-3 text-center">
                                         <button 
                                           onClick={() => setCart(cart.filter(i => i.serialNumber !== item.serialNumber))} 
@@ -10160,7 +10220,7 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
                                       <td className="p-2 font-bold">{item.name}</td>
                                       <td className="p-2 text-slate-600 dark:text-slate-400">{item.category || 'عام'}</td>
                                       <td className="p-2 text-center">{item.quantity}</td>
-                                      <td className="p-2 text-center">{item.price} ج</td>
+                                      <td className="p-2 text-center">{item.price * item.quantity} ج</td>
                                       <td className="p-2 text-center font-black text-indigo-600 dark:text-indigo-400">{(item.quantity * item.price).toLocaleString()} ج</td>
                                     </tr>
                                   ))}
@@ -10238,7 +10298,10 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
     if (foundItem) {
       subtotal = Number(foundItem.price) || 0;
     } else if (cart.length > 0) {
-      subtotal = cart.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
+      subtotal = cart.reduce(
+  (sum, item) => sum + ((Number(item.price) || 0) * (item.quantity || 1)),
+  0
+   );
     }
 
     const discountVal = Number(invoice.discount) || 0;
@@ -10266,47 +10329,65 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
   }, [foundItem, cart, invoice, systemSettings]);
 
   const handleSearch = async (e) => {
-     e.preventDefault(); 
-     if (!search.trim()) return;
-     
-     setSearchHistory(prev => [search, ...prev.slice(0, 4)]);
-     
-     setGlobalLoading(true);
-     try {
-        const searchTerm = search.trim().toLowerCase();
-        const q = query(
-          collection(db, 'inventory'), 
-          where('serialNumber', '==', searchTerm), 
-          where('isDeleted', '==', false),
-          where('quantity', '>', 0) 
-        );
-        const snap = await getDocs(q);
-        if(!snap.empty) {
-           const item = {id: snap.docs[0].id, ...snap.docs[0].data()};
-           const userWarehouse = appUser.assignedWarehouseId || 'main';
-           if (!appUser.permissions?.viewAllWarehouses && item.warehouseId !== userWarehouse) {
-              showError(`المنتج غير متاح في فرعك (${warehouseMap[userWarehouse]})`); 
-              setFoundItem(null);
-           } else { 
-              setCart([...cart, item]);
-              setSearch('');
-              setFoundItem(null);
-           }
-        } else { 
-           showError("الباركود غير صحيح أو الكمية غير متوفرة"); 
-           setFoundItem(null); 
-        }
-     } catch(err) { 
-        console.error(err);
-        if (err.code === 'permission-denied') {
-          showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
-        } else {
-          showError("خطأ في البحث: " + err.message); 
-        }
-     }
-     setGlobalLoading(false);
-  };
+  e.preventDefault();
+  if (!search.trim()) return;
 
+  setSearchHistory(prev => [search, ...prev.slice(0, 4)]);
+  setGlobalLoading(true);
+
+  try {
+
+    const searchTerm = search.trim().toLowerCase();
+
+    const q = query(
+      collection(db, 'inventory'),
+      where('serialNumber', '==', searchTerm),
+      where('isDeleted', '==', false),
+      where('quantity', '>', 0)
+    );
+
+    const snap = await getDocs(q);
+
+    if (!snap.empty) {
+
+      const item = { id: snap.docs[0].id, ...snap.docs[0].data() };
+
+      const existing = cart.find(i => i.id === item.id);
+
+      if (existing) {
+        setCart(cart.map(i =>
+          i.id === item.id
+            ? { ...i, quantity: (i.quantity || 1) + 1 }
+            : i
+        ));
+      } else {
+        setCart([...cart, { ...item, quantity: 1 }]);
+      }
+
+      setSearch('');
+      setFoundItem(null);
+
+    } else {
+
+      showError("الباركود غير صحيح أو الكمية غير متوفرة");
+      setFoundItem(null);
+
+    }
+
+  } catch (err) {
+
+    console.error(err);
+
+    if (err.code === 'permission-denied') {
+      showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
+    } else {
+      showError("خطأ في البحث: " + err.message);
+    }
+
+  }
+
+  setGlobalLoading(false);
+};
   const handleSelectCustomer = (customer) => {
     setInvoice({
       ...invoice,
@@ -10676,7 +10757,7 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
                       <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{item.serialNumber}</p>
                     </div>
                     <div className="flex items-center gap-4">
-                      <span className="font-black text-indigo-600 dark:text-indigo-400">{item.price} ج</span>
+                      <span className="font-black text-indigo-600 dark:text-indigo-400">{item.price * item.quantity} ج</span>
                       <button
                         onClick={() => handleRemoveFromCart(item)}
                         className="text-rose-500 hover:text-rose-700"
