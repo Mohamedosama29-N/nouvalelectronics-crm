@@ -4464,30 +4464,34 @@ function LowStockView({ lowStockItems, appUser, warehouseMap }) {
     }
   }, [lowStockItems, appUser]);
 
-const filteredItems = items
-  .filter(i => selectedWarehouse === 'all' || i.warehouseId === selectedWarehouse)
-  .filter(item => {
+const filteredItems = items.filter(item => {
 
-    const term = search?.toString().toLowerCase().trim();
+  const term = (search || "").toString().toLowerCase().trim();
 
-    const name = item.name?.toString().toLowerCase() || "";
-    const serial = item.serialNumber?.toString().toLowerCase() || "";
-    const category = item.category?.toString().toLowerCase() || "";
+  const name = (item.name || "").toString().toLowerCase();
+  const serial = (item.serialNumber || "").toString().toLowerCase();
+  const category = (item.category || "").toString().toLowerCase();
 
-    return (
-      name.includes(term) ||
-      serial.includes(term) ||
-      category.includes(term)
-    );
+  const warehouseMatch =
+    selectedWarehouse === "all" ||
+    item.warehouseId === selectedWarehouse;
 
-  });
+  const searchMatch =
+    term === "" ||
+    name.includes(term) ||
+    serial.includes(term) ||
+    category.includes(term);
+
+  return warehouseMatch && searchMatch;
+
+});
 
 const sortedItems = [...filteredItems].sort((a, b) => {
-  if (sortBy === 'quantity') return a.quantity - b.quantity;
-  if (sortBy === 'name') return a.name.localeCompare(b.name);
-  if (sortBy === 'warehouse') return a.warehouseId.localeCompare(b.warehouseId);
-  if (sortBy === 'shortage') return (a.minStock - a.quantity) - (b.minStock - b.quantity);
-  if (sortBy === 'value') return (a.price * a.quantity) - (b.price * b.quantity);
+  if (sortBy === 'quantity') return (a.quantity || 0) - (b.quantity || 0);
+  if (sortBy === 'name') return (a.name || "").localeCompare(b.name || "");
+  if (sortBy === 'warehouse') return (a.warehouseId || "").localeCompare(b.warehouseId || "");
+  if (sortBy === 'shortage') return ((a.minStock || 0) - (a.quantity || 0)) - ((b.minStock || 0) - (b.quantity || 0));
+  if (sortBy === 'value') return ((a.price || 0) * (a.quantity || 0)) - ((b.price || 0) * (b.quantity || 0));
   return 0;
 });
   const warehouses = [...new Set(items.map(i => i.warehouseId))];
