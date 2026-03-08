@@ -845,6 +845,7 @@ const ALL_PERMISSIONS = [
   { key: 'viewTransactions', label: 'عرض المعاملات', category: 'مبيعات' },
   { key: 'printInvoice', label: 'طباعة الفاتورة', category: 'مبيعات' },
   { key: 'exportTransactions', label: 'تصدير المعاملات', category: 'مبيعات' },
+  { key: 'viewInvoices', label: 'عرض أرشيف الفواتير', category: 'المبيعات' },
   
   // عملاء
   { key: 'viewCustomers', label: 'عرض العملاء', category: 'عملاء' },
@@ -4464,36 +4465,36 @@ function LowStockView({ lowStockItems, appUser, warehouseMap }) {
     }
   }, [lowStockItems, appUser]);
 
-const filteredItems = items.filter(item => {
+    const filteredItems = items.filter(item => {
 
-  const term = (search || "").toString().toLowerCase().trim();
+      const term = (search || "").toString().toLowerCase().trim();
 
-  const name = (item.name || "").toString().toLowerCase();
-  const serial = (item.serialNumber || "").toString().toLowerCase();
-  const category = (item.category || "").toString().toLowerCase();
+      const name = (item.name || "").toString().toLowerCase();
+      const serial = (item.serialNumber || "").toString().toLowerCase();
+      const category = (item.category || "").toString().toLowerCase();
 
-  const warehouseMatch =
-    selectedWarehouse === "all" ||
-    item.warehouseId === selectedWarehouse;
+      const warehouseMatch =
+        selectedWarehouse === "all" ||
+        item.warehouseId === selectedWarehouse;
 
-  const searchMatch =
-    term === "" ||
-    name.includes(term) ||
-    serial.includes(term) ||
-    category.includes(term);
+      const searchMatch =
+        term === "" ||
+        name.includes(term) ||
+        serial.includes(term) ||
+        category.includes(term);
 
-  return warehouseMatch && searchMatch;
+      return warehouseMatch && searchMatch;
 
-});
+    });
 
-const sortedItems = [...filteredItems].sort((a, b) => {
-  if (sortBy === 'quantity') return (a.quantity || 0) - (b.quantity || 0);
-  if (sortBy === 'name') return (a.name || "").localeCompare(b.name || "");
-  if (sortBy === 'warehouse') return (a.warehouseId || "").localeCompare(b.warehouseId || "");
-  if (sortBy === 'shortage') return ((a.minStock || 0) - (a.quantity || 0)) - ((b.minStock || 0) - (b.quantity || 0));
-  if (sortBy === 'value') return ((a.price || 0) * (a.quantity || 0)) - ((b.price || 0) * (b.quantity || 0));
-  return 0;
-});
+    const sortedItems = [...filteredItems].sort((a, b) => {
+      if (sortBy === 'quantity') return (a.quantity || 0) - (b.quantity || 0);
+      if (sortBy === 'name') return (a.name || "").localeCompare(b.name || "");
+      if (sortBy === 'warehouse') return (a.warehouseId || "").localeCompare(b.warehouseId || "");
+      if (sortBy === 'shortage') return ((a.minStock || 0) - (a.quantity || 0)) - ((b.minStock || 0) - (b.quantity || 0));
+      if (sortBy === 'value') return ((a.price || 0) * (a.quantity || 0)) - ((b.price || 0) * (b.quantity || 0));
+      return 0;
+    });
   const warehouses = [...new Set(items.map(i => i.warehouseId))];
 
   const handleCreateTransfer = (item) => {
@@ -8670,6 +8671,7 @@ function EnhancedUserManagement({ appUser, warehouses, notify, setGlobalLoading,
         }
         
         const defaultPermissions = ROLE_DEFAULT_PERMISSIONS[newUser.role] || {};
+        defaultPermissions.viewInvoices = newUser.role === 'admin';
 
         await addDoc(collection(db, 'employees'), {
             email: emailToSave,
@@ -12023,7 +12025,7 @@ export default function App() {
                   <EnhancedTicketManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} onGenerateInvoice={handleGenerateInvoiceFromTicket} />
                 }
                 
-                {currentView === 'invoices' && appUser.permissions?.viewPOS && 
+               {currentView === 'invoices' && appUser.permissions?.viewInvoices && 
                   <InvoicesManager 
                      appUser={appUser}
                      systemSettings={systemSettings}
