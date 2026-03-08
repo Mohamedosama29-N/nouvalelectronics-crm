@@ -2472,9 +2472,9 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
              const data = doc.data();
              if (!data.isDeleted) {
                 if (appUser.permissions?.viewAllWarehouses || data.warehouseId === (appUser.assignedWarehouseId || 'main')) {
-                   const qty = Number(data.quantity) || 0;
-                   const price = Number(data.price) || 0;
-                   const minStock = Number(data.minStock) || 2;
+                   const qty = Number(data.quantity ?? 0);
+                   const price = Number(data.price ?? 0);
+                   const minStock = Number(data.minStock ?? 0);
                    
                    totalQty += qty;
                    totalVal += qty * price;
@@ -2484,7 +2484,7 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
                    const category = data.category || 'عام';
                    categoryCount[category] = (categoryCount[category] || 0) + qty;
                    
-                   if (qty <= minStock) {
+                   if (minStock > 0 && qty <= minStock) {
                      lowStock++;
                      lowStockList.push({
                        id: doc.id,
@@ -3222,11 +3222,7 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
         
         chunk.forEach(itemId => {
           const ref = doc(db, 'inventory', itemId);
-          batch.update(ref, { 
-            isDeleted: true, 
-            quantity: 0, 
-            deletedAt: serverTimestamp() 
-          });
+          batch.delete(ref);
         });
 
         await batch.commit();
@@ -4449,36 +4445,43 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
 
         let lowList = [];
 
-        snap.docs.forEach(doc=>{
+        snap.docs.forEach(doc => {
 
-          const data = doc.data();
+        const data = doc.data();
 
-          const qty = Number(data.quantity ?? 0);
-          const minStock = Number(data.minStock ?? 0);
+        if(data.isDeleted) return;
 
-          if(minStock > 0 && qty <= minStock){
+        if(
+          !appUser.permissions?.viewAllWarehouses &&
+          data.warehouseId !== (appUser.assignedWarehouseId || 'main')
+        ){
+          return;
+        }
 
-            if(
-              appUser.permissions?.viewAllWarehouses ||
-              data.warehouseId === (appUser.assignedWarehouseId || 'main')
-            ){
+        const qty = parseFloat(data.quantity) || 0;
+        const minStock = parseFloat(data.minStock);
 
-              lowList.push({
-                id:doc.id,
-                name:data.name || "",
-                serialNumber:data.serialNumber || "",
-                quantity:qty,
-                minStock:minStock,
-                warehouseId:data.warehouseId || "main",
-                price:Number(data.price ?? 0),
-                category:data.category || "عام"
-              });
+        if(
+          minStock !== undefined &&
+          minStock !== null &&
+          !isNaN(minStock) &&
+          qty <= minStock
+        ){
 
-            }
+          lowList.push({
+            id:doc.id,
+            name:data.name || "",
+            serialNumber:data.serialNumber || "",
+            quantity:qty,
+            minStock:minStock,
+            warehouseId:data.warehouseId || "main",
+            price:Number(data.price || 0),
+            category:data.category || "عام"
+          });
 
-          }
+        }
 
-        });
+      });
 
         setItems(lowList);
 
@@ -9531,11 +9534,7 @@ function EnhancedWarehouseManager({ warehouses, appUser, notify, setGlobalLoadin
          
          chunk.forEach(itemId => {
            const ref = doc(db, 'inventory', itemId);
-           batch.update(ref, { 
-             isDeleted: true, 
-             quantity: 0, 
-             deletedAt: serverTimestamp() 
-           });
+           batch.delete(ref);
          });
 
          await batch.commit();
