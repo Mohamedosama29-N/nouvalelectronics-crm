@@ -2702,18 +2702,18 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
 
     if (type === 'inventory') {
       onNavigateToInventory('inventory');
+    }
 
-    } else if (type === 'lowstock') {
+    if (type === 'lowstock') {
       onNavigateToInventory('lowstock');
+    }
 
-    } else if (type === 'tickets') {
+    if (type === 'tickets') {
       onNavigateToInventory('tickets');
+    }
 
-    } else if (type === 'sales') {
+    if (type === 'sales') {
       onNavigateToInventory('reports');
-
-    } else if (type === 'products') {
-      onNavigateToInventory('inventory');
     }
 
   };
@@ -11693,10 +11693,10 @@ export default function App() {
     };
   }, []);
 
-  const handleNavigateToInventory = () => {
-    setCurrentView('inventory');
-    setIsMobileOpen(false);
-  };
+  const handleNavigateToInventory = (view = 'inventory') => {
+  setCurrentView(view);
+  setIsMobileOpen(false);
+};
 
   const handleGenerateInvoiceFromTicket = (ticket) => {
     setCurrentView('transactions');
