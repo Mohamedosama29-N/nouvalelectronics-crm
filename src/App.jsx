@@ -4520,7 +4520,8 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
 
   },[lowStockItems,appUser]);
 
-
+ console.log("SEARCH VALUE:", search);
+ console.log("ITEMS:", items);
 
   const filteredItems = (items || []).filter(item => {
 
