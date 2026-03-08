@@ -4424,16 +4424,20 @@ function LowStockView({ lowStockItems, appUser, warehouseMap }) {
     }
   }, [lowStockItems, appUser]);
 
-  const filteredItems = items
+ const filteredItems = items
   .filter(i => selectedWarehouse === 'all' || i.warehouseId === selectedWarehouse)
   .filter(item => {
 
-    const term = search.toLowerCase().trim();
+    const term = (search || "").toString().toLowerCase().trim();
+
+    const name = (item.name || "").toString().toLowerCase();
+    const serial = (item.serialNumber || "").toString().toLowerCase();
+    const category = (item.category || "").toString().toLowerCase();
 
     return (
-      item.name?.toLowerCase().includes(term) ||
-      item.serialNumber?.toLowerCase().includes(term) ||
-      item.category?.toLowerCase().includes(term)
+      name.includes(term) ||
+      serial.includes(term) ||
+      category.includes(term)
     );
 
   });
@@ -4446,7 +4450,6 @@ const sortedItems = [...filteredItems].sort((a, b) => {
   if (sortBy === 'value') return (a.price * a.quantity) - (b.price * b.quantity);
   return 0;
 });
-
   const warehouses = [...new Set(items.map(i => i.warehouseId))];
 
   const handleCreateTransfer = (item) => {
