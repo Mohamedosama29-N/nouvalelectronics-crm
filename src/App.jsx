@@ -15,7 +15,6 @@ import CryptoJS from 'crypto-js';
 import { openDB } from 'idb';
 import Swal from 'sweetalert2';
 import html2canvas from "html2canvas";
-import { FileText } from "lucide-react";
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getAuth, signInAnonymously 
