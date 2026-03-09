@@ -425,7 +425,7 @@ const getUserIP = async () => {
 
 const getUserLocation = async (ip) => {
   try {
-    const response = await fetch(`http://ip-api.com/json/${ip}`);
+    const response = await fetch(`https://ip-api.com/json/${ip}`);
     const data = await response.json();
     if (data.status === 'success') {
       return {
@@ -7652,13 +7652,13 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
            remaining: 0,
            statusHistory: [{
              status: 'created',
-             timestamp: serverTimestamp(),
+             timestamp: new Date(),
              by: appUser.name,
              notes: 'تم إنشاء التذكرة'
            }],
            history: [{
              action: 'إنشاء تذكرة',
-             timestamp: serverTimestamp(),
+             timestamp: new Date(),
              by: appUser.name
            }]
         };
@@ -7711,7 +7711,7 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       const statusHistory = currentTicket.statusHistory || [];
       statusHistory.push({
         status: newStatus,
-        timestamp: serverTimestamp(),
+        timestamp: new Date(),
         by: appUser.name,
         notes: notes
       });
@@ -7719,7 +7719,7 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       const history = currentTicket.history || [];
       history.push({
         action: `تغيير الحالة إلى ${TICKET_STATUSES.find(s => s.value === newStatus)?.label || newStatus}`,
-        timestamp: serverTimestamp(),
+        timestamp: new Date(),
         by: appUser.name,
         notes: notes
       });
@@ -7769,7 +7769,7 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       const history = currentTicket.history || [];
       history.push({
         action: `إضافة قطعة غيار: ${part.name} (${part.quantity} x ${part.price} ج)`,
-        timestamp: serverTimestamp(),
+        timestamp: new Date(),
         by: appUser.name
       });
 
@@ -7812,7 +7812,7 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       const history = currentTicket.history || [];
       history.push({
         action: `إضافة دفعة: ${amount} ج`,
-        timestamp: serverTimestamp(),
+        timestamp: new Date(),
         by: appUser.name
       });
 
@@ -7841,21 +7841,21 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       if (assignData.technician) {
         history.push({
           action: `تعيين الفني: ${technicians.find(t => t.id === assignData.technician)?.name}`,
-          timestamp: serverTimestamp(),
+          timestamp: new Date(),
           by: appUser.name
         });
       }
       if (assignData.center) {
         history.push({
           action: `تعيين مركز صيانة: ${maintenanceCenters.find(c => c.id === assignData.center)?.name}`,
-          timestamp: serverTimestamp(),
+          timestamp: new Date(),
           by: appUser.name
         });
       }
       if (assignData.callCenter) {
         history.push({
           action: `تعيين كول سنتر: ${callCenters.find(c => c.id === assignData.callCenter)?.name}`,
-          timestamp: serverTimestamp(),
+          timestamp: new Date(),
           by: appUser.name
         });
       }
