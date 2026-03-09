@@ -4671,14 +4671,6 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
               onChange={e=>setSearch(e.target.value)}
             />
 
-            <input
-              type="number"
-              min="1"
-              className="w-20 border border-slate-200 p-2 rounded-lg text-center font-bold"
-              value={sellQty}
-              onChange={(e)=>setSellQty(Number(e.target.value) || 1)}
-            />
-
             <select
               className="border border-slate-200 p-2 rounded-lg text-sm font-bold"
               value={selectedWarehouse}
@@ -10852,6 +10844,16 @@ setSearch('');
                onChange={e=>setSearch(e.target.value)} 
                autoFocus 
              />
+
+              {/* حقل الكمية */}
+            <input
+              type="number"
+              min="1"
+              className="w-24 border border-slate-200 dark:border-slate-700 rounded-lg text-center font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-white"
+              value={sellQty}
+              onChange={e => setSellQty(Number(e.target.value) || 1)}
+            />
+             
              <button 
                type="submit" 
                className="bg-indigo-600 text-white px-8 rounded-lg font-bold text-sm shadow-sm hover:bg-indigo-700 transition-colors flex items-center gap-2"
