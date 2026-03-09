@@ -4671,6 +4671,14 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
               onChange={e=>setSearch(e.target.value)}
             />
 
+            <input
+              type="number"
+              min="1"
+              className="w-20 border border-slate-200 p-2 rounded-lg text-center font-bold"
+              value={sellQty}
+              onChange={(e)=>setSellQty(Number(e.target.value) || 1)}
+            />
+
             <select
               className="border border-slate-200 p-2 rounded-lg text-sm font-bold"
               value={selectedWarehouse}
@@ -10324,6 +10332,7 @@ for (const item of itemsToTransfer) {
 // 🏪 نقطة البيع POS المحسنة مع تكامل كامل
 // ==========================================================================
 function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehouseMap }) { 
+  const [sellQty, setSellQty] = useState(1);
   const [search, setSearch] = useState('');
   const [foundItem, setFoundItem] = useState(null);
   const [invoice, setInvoice] = useState({ 
@@ -10435,7 +10444,45 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
             : i
         ));
       } else {
-        setCart([...cart, { ...item, quantity: 1 }]);
+        const qtyRequested = Number(sellQty) || 1;
+const availableQty = Number(item.quantity) || 0;
+
+if(qtyRequested > availableQty){
+
+  showError(`❌ الكمية المطلوبة (${qtyRequested}) أكبر من المتاح (${availableQty})`);
+  setGlobalLoading(false);
+  return;
+
+}
+
+const existing = cart.find(i => i.id === item.id);
+
+if(existing){
+
+  const newQty = existing.quantity + qtyRequested;
+
+  if(newQty > availableQty){
+
+    showError(`❌ تم تجاوز الحد المتاح في المخزن (${availableQty})`);
+    setGlobalLoading(false);
+    return;
+
+  }
+
+  setCart(cart.map(i =>
+    i.id === item.id
+      ? { ...i, quantity: newQty }
+      : i
+  ));
+
+}else{
+
+  setCart([...cart, { ...item, quantity: qtyRequested }]);
+
+}
+
+setSellQty(1);
+setSearch('');
       }
 
       setSearch('');
@@ -10462,6 +10509,7 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
 
   setGlobalLoading(false);
 };
+
   const handleSelectCustomer = (customer) => {
     setInvoice({
       ...invoice,
