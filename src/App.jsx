@@ -5735,33 +5735,6 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
     setLoadingData(true);
   
 
-        const loadCustomerTickets = async () => {
-
-          const q = query(
-            collection(db, "tickets"),
-            where("customerId","==",customer.id),
-            orderBy("createdAt","desc")
-          );
-
-          const snap = await getDocs(q);
-
-          const tickets = snap.docs.map(d => ({
-            id:d.id,
-            ...d.data()
-          }));
-
-          setCustomerTickets(tickets);
-
-       };   
-
-        useEffect(() => {
-
-          if(customer?.id){
-            loadCustomerTickets();
-          }
-
-        }, [customer]);
-
     try {
         let q = collection(db, 'customers');
         const term = normalizeSearch(debouncedSearch);
