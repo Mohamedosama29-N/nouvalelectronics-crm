@@ -5694,6 +5694,8 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
   const [hasMore, setHasMore] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
   
+  const [customerTickets, setCustomerTickets] = useState([]);
+
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [invoiceData, setInvoiceData] = useState(null);
   const [filterCity, setFilterCity] = useState('');
@@ -5731,6 +5733,35 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
 
   const loadCustomers = useCallback(async (isNextPage = false) => {
     setLoadingData(true);
+  
+
+        const loadCustomerTickets = async () => {
+
+          const q = query(
+            collection(db, "tickets"),
+            where("customerId","==",customer.id),
+            orderBy("createdAt","desc")
+          );
+
+          const snap = await getDocs(q);
+
+          const tickets = snap.docs.map(d => ({
+            id:d.id,
+            ...d.data()
+          }));
+
+          setCustomerTickets(tickets);
+
+       };   
+
+        useEffect(() => {
+
+          if(customer?.id){
+            loadCustomerTickets();
+          }
+
+        }, [customer]);
+
     try {
         let q = collection(db, 'customers');
         const term = normalizeSearch(debouncedSearch);
@@ -7274,6 +7305,7 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
                           ticket={ticket}
                           onStatusChange={() => {}}
                           onView={() => {}}
+                          onEdit={(t)=>setEditingTicket(t)}
                         />
                       ))
                     )}
@@ -7316,7 +7348,7 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
 // ==========================================================================
 // 🎫 مكون عرض التذكرة في القائمة
 // ==========================================================================
-function TicketCard({ ticket, onStatusChange, onView }) {
+function TicketCard({ ticket, onStatusChange, onView, onEdit }) {
   const statusInfo = TICKET_STATUSES.find(s => s.value === ticket.status) || { label: ticket.status, color: 'gray' };
   
   const getPriorityColor = (priority) => {
@@ -7368,7 +7400,8 @@ function TicketCard({ ticket, onStatusChange, onView }) {
           <p>تاريخ الإنشاء: {formatDate(ticket.createdAt)}</p>
           {ticket.estimatedCost > 0 && <p>التكلفة: {ticket.estimatedCost} ج</p>}
         </div>
-        <div className="flex gap-2">
+       <div className="flex gap-2">
+
           <select
             className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 bg-white dark:bg-slate-900"
             value={ticket.status}
@@ -7378,12 +7411,21 @@ function TicketCard({ ticket, onStatusChange, onView }) {
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
+
           <button
             onClick={() => onView(ticket)}
             className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded"
           >
             <Eye size={14} />
           </button>
+
+          <button
+            onClick={() => onEdit(ticket)}
+            className="p-1.5 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded"
+          >
+            <Edit size={14} />
+          </button>
+
         </div>
       </div>
     </div>
@@ -7395,6 +7437,7 @@ function TicketCard({ ticket, onStatusChange, onView }) {
 // ==========================================================================
 function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUser, warehouseMap, onGenerateInvoice }) {
   const [tickets, setTickets] = useState([]);
+  const [editingTicket,setEditingTicket] = useState(null)
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 700);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -7436,6 +7479,7 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     attachments: []
   });
 
+  const [customers,setCustomers] = useState([]);
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
@@ -7444,6 +7488,28 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const [filterTechnician, setFilterTechnician] = useState('all');
   const [filterTag, setFilterTag] = useState('all');
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
+
+  
+
+
+  useEffect(()=>{
+
+     const loadCustomers = async ()=>{
+
+       const snap = await getDocs(collection(db,"customers"));
+
+       const data = snap.docs.map(d=>({
+         id:d.id,
+         ...d.data()
+       }));
+
+       setCustomers(data);
+
+     };
+
+     loadCustomers();
+
+   },[])
 
   // جلب الموظفين
   useEffect(() => {
@@ -7639,8 +7705,43 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
           }
         }
         
+        
+        let customerId = newTicket.customerId;
+
+          if(!customerId && newTicket.customerPhone){
+
+          const q = query(
+          collection(db,"customers"),
+          where("phone","==",newTicket.customerPhone)
+          )
+
+          const snap = await getDocs(q)
+
+          if(!snap.empty){
+
+          customerId = snap.docs[0].id
+
+          }else{
+
+          const newCustomer = await addDoc(collection(db,"customers"),{
+          name:newTicket.customerName,
+          phone:newTicket.customerPhone,
+          email:newTicket.customerEmail || "",
+          createdAt:serverTimestamp()
+          })
+
+          customerId = newCustomer.id
+
+          }
+
+          }
+
         const ticketData = {
            ...newTicket,
+           customerId: customerId,
+           customerId: selectedCustomer?.id || null,
+           customerName: newTicket.customerName,
+           customerPhone: newTicket.customerPhone,
            ticketNumber: 'TKT-' + Date.now().toString().slice(-8),
            createdAt: serverTimestamp(),
            createdBy: appUser.id,
@@ -7944,6 +8045,35 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">اسم العميل *</label>
+                  <select
+                      className="border p-2 rounded-lg w-full mb-2"
+                      value={newTicket.customerId || ""}
+                      onChange={(e)=>{
+
+                      const customer = customers.find(c=>c.id === e.target.value)
+
+                      if(!customer) return
+
+                      setNewTicket({
+                       ...newTicket,
+                       customerId: customer.id,
+                       customerName: customer.name,
+                       customerPhone: customer.phone,
+                       customerEmail: customer.email || ""
+                      })
+
+                      }}
+                      >
+
+                      <option value="">اختر عميل من السجل</option>
+
+                      {customers.map(c=>(
+                      <option key={c.id} value={c.id}>
+                      {c.name} - {c.phone}
+                      </option>
+                      ))}
+
+                      </select>
                   <input required className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" value={newTicket.customerName} onChange={e=>setNewTicket({...newTicket, customerName:e.target.value})} />
                 </div>
                 <div>
