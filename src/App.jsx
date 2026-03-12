@@ -7679,39 +7679,50 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
         }
         
         
-        let customerId = newTicket.customerId;
+        let customerId = newTicket.customerId || null;
 
-          if(!customerId && newTicket.customerPhone){
+          if (!customerId && newTicket.customerPhone) {
 
-          const q = query(
-          collection(db,"customers"),
-          where("phone","==",newTicket.customerPhone)
-          )
+            const q = query(
+              collection(db, "customers"),
+              where("phone", "==", newTicket.customerPhone)
+            );
 
-          const snap = await getDocs(q)
+            const snap = await getDocs(q);
 
-          if(!snap.empty){
+            if (!snap.empty) {
 
-          customerId = snap.docs[0].id
+              // العميل موجود
+              customerId = snap.docs[0].id;
 
-          }else{
+            } else {
 
-          const newCustomer = await addDoc(collection(db,"customers"),{
-          name:newTicket.customerName,
-          phone:newTicket.customerPhone,
-          email:newTicket.customerEmail || "",
-          createdAt:serverTimestamp()
-          })
+              // إنشاء عميل جديد
+              const newCustomerRef = await addDoc(collection(db, "customers"), {
 
-          customerId = newCustomer.id
+                name: newTicket.customerName,
+                phone: newTicket.customerPhone,
+                email: newTicket.customerEmail || "",
+                createdAt: serverTimestamp(),
 
-          }
+                // مهم للبحث
+                searchKey: normalizeSearch(
+                  `${newTicket.customerName} ${newTicket.customerPhone}`
+                ),
+
+                ticketsCount: 0
+
+              });
+
+              customerId = newCustomerRef.id;
+
+            }
 
           }
 
         const ticketData = {
            ...newTicket,
-           customerId: customerId,
+           
            customerId: selectedCustomer?.id || null,
            customerName: newTicket.customerName,
            customerPhone: newTicket.customerPhone,
