@@ -7532,14 +7532,15 @@ function TicketCard({ ticket, onStatusChange, onView, onEdit }) {
 // 🎫 مدير التذاكر المحسن مع فتح كامل للتذكرة وإدارة متكاملة
 // ==========================================================================
 
+// ==========================================================================
+// 🎫 مدير التذاكر المحسن - كامل مع كل الإضافات
+// ==========================================================================
 function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUser, warehouseMap, onGenerateInvoice }) {
   const [tickets, setTickets] = useState([]);
-  const [editingTicket, setEditingTicket] = useState(null);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 700);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const [spareParts, setSpareParts] = useState([]);
   const [showSparePartsModal, setShowSparePartsModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [ticketHistory, setTicketHistory] = useState([]);
@@ -7547,7 +7548,7 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState('');
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [assignData, setAssignData] = useState({ assignTo: [], technician: '', center: '', callCenter: '' });
+  const [assignData, setAssignData] = useState({ technician: '', center: '', callCenter: '' });
   const [showFullTicketModal, setShowFullTicketModal] = useState(false);
   const [fullTicketView, setFullTicketView] = useState(null);
   const [ticketComments, setTicketComments] = useState([]);
@@ -7558,48 +7559,23 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const [technicians, setTechnicians] = useState([]);
   const [maintenanceCenters, setMaintenanceCenters] = useState([]);
   const [callCenters, setCallCenters] = useState([]);
-  const [allEmployees, setAllEmployees] = useState([]);
   const [availableTags, setAvailableTags] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   
-  // فلاتر إضافية
   const [filterWarranty, setFilterWarranty] = useState('all');
   const [filterTicketType, setFilterTicketType] = useState('all');
   const [filterSource, setFilterSource] = useState('all');
   const [filterBranch, setFilterBranch] = useState('all');
   
   const [newTicket, setNewTicket] = useState({
-    customerId: '',
-    customerName: '',
-    customerPhone: '',
-    secondPhone: '',
-    landline: '',
-    customerEmail: '',
-    customerAddress: '',
-    device: '',
-    deviceType: '',
-    deviceModel: '',
-    deviceSerial: '',
-    issue: '',
-    status: 'created',
-    priority: 'medium',
-    warrantyStatus: '',
-    ticketType: '',
-    source: '',
-    nearestBranch: '',
-    assignedTechnician: '',
-    assignedMaintenanceCenter: '',
-    assignedCallCenter: '',
-    assignTo: [],
-    estimatedCost: 0,
-    estimatedDuration: '',
-    notes: '',
-    spareParts: [],
-    tags: [],
-    attachments: [],
-    comments: []
+    customerId: '', customerName: '', customerPhone: '', secondPhone: '', landline: '',
+    customerEmail: '', customerAddress: '', device: '', deviceType: '', deviceModel: '',
+    deviceSerial: '', issue: '', status: 'created', priority: 'medium',
+    warrantyStatus: '', ticketType: '', source: '', nearestBranch: '',
+    assignedTechnician: '', assignedMaintenanceCenter: '', assignedCallCenter: '',
+    estimatedCost: 0, estimatedDuration: '', notes: '', spareParts: [], tags: [], attachments: []
   });
 
   const [lastDoc, setLastDoc] = useState(null);
@@ -7611,7 +7587,6 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const [filterTag, setFilterTag] = useState('all');
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
 
-  // خيارات نوع التذكرة
   const TICKET_TYPES = [
     { value: 'complaint', label: 'شكوى' },
     { value: 'inquiry', label: 'استفسار' },
@@ -7619,29 +7594,23 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     { value: 'replacement', label: 'طلب استبدال' },
     { value: 'purchase', label: 'طلب شراء' },
     { value: 'after_sales', label: 'ما بعد البيع' },
-    { value: 'maintenance', label: 'الصيانة' },
-    { value: 'spare_parts_only', label: 'قطع غيار فقط' }
+    { value: 'maintenance', label: 'الصيانة' }
   ];
 
-  // خيارات المصدر
   const TICKET_SOURCES = [
     { value: 'hotline', label: 'HOTLINE' },
     { value: 'facebook', label: 'Facebook' },
     { value: 'whatsapp', label: 'WhatsApp' },
     { value: 'friend_referral', label: 'اقتراح صديق' },
     { value: 'store_visit', label: 'زيارة المتجر' },
-    { value: 'phone_call', label: 'مكالمة هاتفية' },
-    { value: 'email', label: 'بريد إلكتروني' }
+    { value: 'phone_call', label: 'مكالمة هاتفية' }
   ];
 
-  // خيارات الضمان
   const WARRANTY_OPTIONS = [
     { value: 'in_warranty', label: 'داخل الضمان' },
-    { value: 'out_of_warranty', label: 'خارج الضمان' },
-    { value: 'extended_warranty', label: 'ضمان ممتد' }
+    { value: 'out_of_warranty', label: 'خارج الضمان' }
   ];
 
-  // خيارات الفروع - يمكن تعديلها من الإعدادات
   const BRANCH_OPTIONS = systemSettings?.branches || [
     { value: 'main', label: 'الفرع الرئيسي' }
   ];
@@ -7651,14 +7620,8 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     const loadCustomers = async () => {
       try {
         const snap = await getDocs(collection(db, "customers"));
-        const data = snap.docs.map(d => ({
-          id: d.id,
-          ...d.data()
-        }));
-        setCustomers(data);
-      } catch (error) {
-        console.error("Error loading customers:", error);
-      }
+        setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (error) { console.error("Error loading customers:", error); }
     };
     loadCustomers();
   }, []);
@@ -7669,19 +7632,10 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       try {
         const allEmps = await getDocs(query(collection(db, 'employees'), where('isDisabled', '==', false)));
         const allData = allEmps.docs.map(d => ({ id: d.id, ...d.data() }));
-        setAllEmployees(allData);
-        
-        const techs = allData.filter(e => e.role === 'technician');
-        setTechnicians(techs);
-        
-        const centers = allData.filter(e => e.role === 'maintenance_center');
-        setMaintenanceCenters(centers);
-        
-        const calls = allData.filter(e => e.role === 'call_center');
-        setCallCenters(calls);
-      } catch (error) {
-        console.error("Error fetching employees:", error);
-      }
+        setTechnicians(allData.filter(e => e.role === 'technician'));
+        setMaintenanceCenters(allData.filter(e => e.role === 'maintenance_center'));
+        setCallCenters(allData.filter(e => e.role === 'call_center'));
+      } catch (error) { console.error("Error fetching employees:", error); }
     };
     fetchEmployees();
   }, []);
@@ -7690,8 +7644,7 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   useEffect(() => {
     const loadTags = async () => {
       await tagManager.loadTags();
-      const tags = tagManager.getTagsByCategory('ticket');
-      setAvailableTags(tags.map(t => t.name));
+      setAvailableTags(tagManager.getTagsByCategory('ticket').map(t => t.name));
     };
     loadTags();
   }, []);
@@ -7705,59 +7658,46 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     setLoadingData(true);
     try {
       let q = collection(db, 'tickets');
-      
-      if (filterStatus !== 'all') {
-        q = query(q, where('status', '==', filterStatus));
-      }
-      
-      if (filterPriority !== 'all') {
-        q = query(q, where('priority', '==', filterPriority));
-      }
-      
+      if (filterStatus !== 'all') q = query(q, where('status', '==', filterStatus));
+      if (filterPriority !== 'all') q = query(q, where('priority', '==', filterPriority));
       q = query(q, orderBy('createdAt', 'desc'));
-
-      if (isNextPage && lastDoc) {
-        q = query(q, startAfter(lastDoc));
-      }
-
+      if (isNextPage && lastDoc) q = query(q, startAfter(lastDoc));
       q = query(q, limit(30));
+      
       const snap = await getDocs(q);
       let fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      // تطبيق الفلاتر المحلية
-      if (filterWarranty !== 'all') {
-        fetched = fetched.filter(t => t.warrantyStatus === filterWarranty);
+      // فلاتر محلية
+      if (filterWarranty !== 'all') fetched = fetched.filter(t => t.warrantyStatus === filterWarranty);
+      if (filterTicketType !== 'all') fetched = fetched.filter(t => t.ticketType === filterTicketType);
+      if (filterSource !== 'all') fetched = fetched.filter(t => t.source === filterSource);
+      if (filterBranch !== 'all') fetched = fetched.filter(t => t.nearestBranch === filterBranch);
+      if (filterTechnician !== 'all') fetched = fetched.filter(t => t.assignedTechnician === filterTechnician);
+      if (filterTag !== 'all') fetched = fetched.filter(t => t.tags?.includes(filterTag));
+      
+      // فلتر البحث العام
+      const term = normalizeSearch(debouncedSearch);
+      if (term) {
+        fetched = fetched.filter(t => 
+          normalizeSearch(t.customerName || '').includes(term) ||
+          normalizeSearch(t.customerPhone || '').includes(term) ||
+          normalizeSearch(t.secondPhone || '').includes(term) ||
+          normalizeSearch(t.device || '').includes(term) ||
+          normalizeSearch(t.deviceType || '').includes(term) ||
+          normalizeSearch(t.deviceModel || '').includes(term) ||
+          normalizeSearch(t.deviceSerial || '').includes(term) ||
+          normalizeSearch(t.issue || '').includes(term) ||
+          normalizeSearch(t.ticketNumber || '').includes(term)
+        );
       }
-      if (filterTicketType !== 'all') {
-        fetched = fetched.filter(t => t.ticketType === filterTicketType);
-      }
-      if (filterSource !== 'all') {
-        fetched = fetched.filter(t => t.source === filterSource);
-      }
-      if (filterBranch !== 'all') {
-        fetched = fetched.filter(t => t.nearestBranch === filterBranch);
-      }
-      if (filterTechnician !== 'all') {
-        fetched = fetched.filter(t => t.assignedTechnician === filterTechnician);
-      }
-      if (filterTag !== 'all') {
-        fetched = fetched.filter(t => t.tags?.includes(filterTag));
-      }
+
       if (dateRange.from) {
-        const fromDate = new Date(dateRange.from);
-        fromDate.setHours(0,0,0,0);
-        fetched = fetched.filter(t => {
-          const ticketDate = t.createdAt?.toDate?.() || new Date(t.createdAt);
-          return ticketDate >= fromDate;
-        });
+        const fromDate = new Date(dateRange.from); fromDate.setHours(0,0,0,0);
+        fetched = fetched.filter(t => { const d = t.createdAt?.toDate?.() || new Date(t.createdAt); return d >= fromDate; });
       }
       if (dateRange.to) {
-        const toDate = new Date(dateRange.to);
-        toDate.setHours(23,59,59,999);
-        fetched = fetched.filter(t => {
-          const ticketDate = t.createdAt?.toDate?.() || new Date(t.createdAt);
-          return ticketDate <= toDate;
-        });
+        const toDate = new Date(dateRange.to); toDate.setHours(23,59,59,999);
+        fetched = fetched.filter(t => { const d = t.createdAt?.toDate?.() || new Date(t.createdAt); return d <= toDate; });
       }
 
       if (isNextPage) {
@@ -7770,34 +7710,20 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       setHasMore(snap.docs.length === 30);
     } catch (e) {
       console.error(e);
-      if (e.code === 'permission-denied') {
-        showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
-      } else if (e.message.includes('index')) {
-        showError("يحتاج هذا البحث لتهيئة الفهارس الخاصة بقاعدة البيانات");
-      } else {
-        showError("فشل جلب التذاكر: " + e.message);
-      }
+      showError("فشل جلب التذاكر: " + e.message);
     }
     setLoadingData(false);
-  }, [filterStatus, filterPriority, filterTechnician, filterTag, filterWarranty, filterTicketType, filterSource, filterBranch, lastDoc, dateRange]);
+  }, [debouncedSearch, filterStatus, filterPriority, filterTechnician, filterTag, filterWarranty, filterTicketType, filterSource, filterBranch, lastDoc, dateRange]);
 
-  // وظائف التحديد المتعدد
+  // دوال التحديد
   const toggleSelectItem = (itemId) => {
     const newSelected = new Set(selectedItems);
-    if (newSelected.has(itemId)) {
-      newSelected.delete(itemId);
-    } else {
-      newSelected.add(itemId);
-    }
+    newSelected.has(itemId) ? newSelected.delete(itemId) : newSelected.add(itemId);
     setSelectedItems(newSelected);
   };
 
   const toggleSelectAll = () => {
-    if (selectedItems.size === tickets.length) {
-      setSelectedItems(new Set());
-    } else {
-      setSelectedItems(new Set(tickets.map(t => t.id)));
-    }
+    setSelectedItems(selectedItems.size === tickets.length ? new Set() : new Set(tickets.map(t => t.id)));
   };
 
   // البحث عن العملاء
@@ -7805,10 +7731,8 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     if (!customerSearch.trim()) return [];
     const term = normalizeSearch(customerSearch);
     return customers.filter(c => 
-      normalizeSearch(c.name).includes(term) || 
-      normalizeSearch(c.phone).includes(term) ||
-      (c.email && normalizeSearch(c.email).includes(term))
-    ).slice(0, 10);
+      normalizeSearch(c.name).includes(term) || normalizeSearch(c.phone).includes(term)
+    ).slice(0, 8);
   }, [customerSearch, customers]);
 
   const selectCustomer = (customer) => {
@@ -7819,7 +7743,7 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       customerPhone: customer.phone || '',
       secondPhone: customer.secondPhone || '',
       customerEmail: customer.email || '',
-      customerAddress: customer.address || '',
+      customerAddress: customer.address || customer.addressFull || '',
       landline: customer.landline || ''
     });
     setCustomerSearch('');
@@ -7830,13 +7754,15 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const openFullTicket = (ticket) => {
     setFullTicketView(ticket);
     setTicketComments(ticket.comments || []);
+    setNewComment('');
+    setEditingCommentId(null);
+    setEditingCommentText('');
     setShowFullTicketModal(true);
   };
 
-  // إضافة تعليق
-  const addComment = async (ticketId) => {
-    if (!newComment.trim()) return;
-    
+  // التعليقات
+  const addComment = async () => {
+    if (!newComment.trim() || !fullTicketView) return;
     const comment = {
       id: Date.now().toString(),
       text: newComment,
@@ -7844,102 +7770,58 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       createdBy: appUser.name,
       createdById: appUser.id
     };
-    
-    const updatedComments = [...ticketComments, comment];
-    setTicketComments(updatedComments);
+    const updated = [...ticketComments, comment];
+    setTicketComments(updated);
     setNewComment('');
-    
-    // تحديث في قاعدة البيانات
     try {
-      const ticketRef = doc(db, 'tickets', ticketId);
-      await updateDoc(ticketRef, {
-        comments: updatedComments,
-        updatedAt: serverTimestamp()
-      });
-    } catch (error) {
-      console.error("Error adding comment:", error);
-      showError("فشل إضافة التعليق");
-    }
+      await updateDoc(doc(db, 'tickets', fullTicketView.id), { comments: updated, updatedAt: serverTimestamp() });
+    } catch(e) { console.error(e); showError("فشل إضافة التعليق"); }
   };
 
-  // تعديل تعليق
-  const editComment = async (ticketId, commentId) => {
-    if (!editingCommentText.trim()) return;
-    
-    const updatedComments = ticketComments.map(c => 
-      c.id === commentId ? { ...c, text: editingCommentText, editedAt: new Date().toISOString() } : c
-    );
-    
-    setTicketComments(updatedComments);
+  const editComment = async (commentId) => {
+    if (!editingCommentText.trim() || !fullTicketView) return;
+    const updated = ticketComments.map(c => c.id === commentId ? { ...c, text: editingCommentText, editedAt: new Date().toISOString() } : c);
+    setTicketComments(updated);
     setEditingCommentId(null);
     setEditingCommentText('');
-    
     try {
-      const ticketRef = doc(db, 'tickets', ticketId);
-      await updateDoc(ticketRef, {
-        comments: updatedComments,
-        updatedAt: serverTimestamp()
-      });
-    } catch (error) {
-      console.error("Error editing comment:", error);
-    }
+      await updateDoc(doc(db, 'tickets', fullTicketView.id), { comments: updated, updatedAt: serverTimestamp() });
+    } catch(e) { console.error(e); }
   };
 
-  // حذف تعليق
-  const deleteComment = async (ticketId, commentId) => {
-    const updatedComments = ticketComments.filter(c => c.id !== commentId);
-    setTicketComments(updatedComments);
-    
+  const deleteComment = async (commentId) => {
+    if (!fullTicketView) return;
+    const updated = ticketComments.filter(c => c.id !== commentId);
+    setTicketComments(updated);
     try {
-      const ticketRef = doc(db, 'tickets', ticketId);
-      await updateDoc(ticketRef, {
-        comments: updatedComments,
-        updatedAt: serverTimestamp()
-      });
-    } catch (error) {
-      console.error("Error deleting comment:", error);
-    }
+      await updateDoc(doc(db, 'tickets', fullTicketView.id), { comments: updated, updatedAt: serverTimestamp() });
+    } catch(e) { console.error(e); }
   };
 
-  // إضافة تذكرة جديدة
+  // إضافة تذكرة
   const handleAddTicket = async (e) => {
     e.preventDefault();
-
-    if (!newTicket.customerName || !newTicket.customerPhone) {
-      return showError("اسم العميل ورقم الهاتف مطلوبان");
-    }
+    if (!newTicket.customerName || !newTicket.customerPhone) return showError("اسم العميل ورقم الهاتف مطلوبان");
 
     setGlobalLoading(true);
-
     try {
-      if (newTicket.tags && newTicket.tags.length > 0) {
-        for (const tag of newTicket.tags) {
-          await tagManager.incrementUsage(tag);
-        }
+      if (newTicket.tags?.length > 0) {
+        for (const tag of newTicket.tags) await tagManager.incrementUsage(tag);
       }
 
       let customerId = newTicket.customerId || null;
-
       if (!customerId && newTicket.customerPhone) {
-        const q = query(
-          collection(db, "customers"),
-          where("phone", "==", newTicket.customerPhone)
-        );
+        const q = query(collection(db, "customers"), where("phone", "==", newTicket.customerPhone));
         const snap = await getDocs(q);
         if (!snap.empty) {
           customerId = snap.docs[0].id;
         } else {
           const newCustomerRef = await addDoc(collection(db, "customers"), {
-            name: newTicket.customerName,
-            phone: newTicket.customerPhone,
-            secondPhone: newTicket.secondPhone || '',
-            landline: newTicket.landline || '',
-            email: newTicket.customerEmail || "",
-            address: newTicket.customerAddress || '',
+            name: newTicket.customerName, phone: newTicket.customerPhone,
+            secondPhone: newTicket.secondPhone || '', landline: newTicket.landline || '',
+            email: newTicket.customerEmail || "", address: newTicket.customerAddress || '',
             createdAt: serverTimestamp(),
-            searchKey: normalizeSearch(
-              `${newTicket.customerName} ${newTicket.customerPhone} ${newTicket.secondPhone || ''}`
-            ),
+            searchKey: normalizeSearch(`${newTicket.customerName} ${newTicket.customerPhone} ${newTicket.secondPhone || ''}`),
             ticketsCount: 0
           });
           customerId = newCustomerRef.id;
@@ -7947,67 +7829,31 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       }
 
       const ticketData = {
-        ...newTicket,
-        customerId: customerId,
+        ...newTicket, customerId,
         ticketNumber: 'TKT-' + Date.now().toString().slice(-8),
-        assignedCenter: appUser?.assignedWarehouseId || "",
-        spareParts: [],
-        totalCost: 0,
-        totalPaid: 0,
-        remaining: 0,
-        comments: [],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        createdBy: appUser.id,
-        createdByName: appUser.name,
+        assignedCenter: appUser?.assignedWarehouseId || "main",
+        spareParts: [], totalCost: 0, totalPaid: 0, remaining: 0, comments: [],
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        createdBy: appUser.id, createdByName: appUser.name,
         status: "created",
-        statusHistory: [
-          {
-            status: 'created',
-            timestamp: new Date(),
-            by: appUser.name,
-            notes: 'تم إنشاء التذكرة'
-          }
-        ],
-        history: [
-          {
-            action: 'إنشاء تذكرة',
-            timestamp: new Date(),
-            by: appUser.name
-          }
-        ],
+        statusHistory: [{ status: 'created', timestamp: new Date().toISOString(), by: appUser.name }],
+        history: [{ action: 'إنشاء تذكرة', timestamp: new Date().toISOString(), by: appUser.name }],
         searchIndex: [
-          newTicket.customerName,
-          newTicket.customerPhone,
-          newTicket.secondPhone || "",
-          newTicket.device || "",
-          newTicket.deviceType || "",
-          newTicket.deviceModel || "",
-          newTicket.deviceSerial || "",
-          newTicket.customerAddress || "",
-          newTicket.issue || "",
-          newTicket.ticketType || "",
-          newTicket.source || "",
-          newTicket.warrantyStatus || ""
+          newTicket.customerName, newTicket.customerPhone, newTicket.secondPhone || "",
+          newTicket.device || "", newTicket.deviceType || "", newTicket.deviceModel || "",
+          newTicket.deviceSerial || "", newTicket.customerAddress || "", newTicket.issue || "",
+          newTicket.ticketType || "", newTicket.source || "", newTicket.warrantyStatus || ""
         ].join(" ").toLowerCase()
       };
 
       const docRef = await addDoc(collection(db, 'tickets'), ticketData);
-
-      // فتح التذكرة مباشرة بعد الإنشاء
-      setFullTicketView({
-        id: docRef.id,
-        ...ticketData
-      });
+      
+      setFullTicketView({ id: docRef.id, ...ticketData });
       setTicketComments([]);
       setShowFullTicketModal(true);
 
       if (customerId) {
-        const customerRef = doc(db, 'customers', customerId);
-        await updateDoc(customerRef, {
-          ticketsCount: increment(1),
-          lastTicket: serverTimestamp()
-        });
+        await updateDoc(doc(db, 'customers', customerId), { ticketsCount: increment(1), lastTicket: serverTimestamp() });
       }
 
       showSuccess("تم إنشاء التذكرة بنجاح");
@@ -8015,96 +7861,43 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       resetNewTicket();
       setLastDoc(null);
       loadTickets(false);
-
     } catch (error) {
       console.error(error);
       showError("حصل خطأ أثناء إنشاء التذكرة");
     }
-
     setGlobalLoading(false);
   };
 
   const resetNewTicket = () => {
     setNewTicket({
-      customerId: '',
-      customerName: '',
-      customerPhone: '',
-      secondPhone: '',
-      landline: '',
-      customerEmail: '',
-      customerAddress: '',
-      device: '',
-      deviceType: '',
-      deviceModel: '',
-      deviceSerial: '',
-      issue: '',
-      status: 'created',
-      priority: 'medium',
-      warrantyStatus: '',
-      ticketType: '',
-      source: '',
-      nearestBranch: '',
-      assignedTechnician: '',
-      assignedMaintenanceCenter: '',
-      assignedCallCenter: '',
-      assignTo: [],
-      estimatedCost: 0,
-      estimatedDuration: '',
-      notes: '',
-      spareParts: [],
-      tags: [],
-      attachments: [],
-      comments: []
+      customerId: '', customerName: '', customerPhone: '', secondPhone: '', landline: '',
+      customerEmail: '', customerAddress: '', device: '', deviceType: '', deviceModel: '',
+      deviceSerial: '', issue: '', status: 'created', priority: 'medium',
+      warrantyStatus: '', ticketType: '', source: '', nearestBranch: '',
+      assignedTechnician: '', assignedMaintenanceCenter: '', assignedCallCenter: '',
+      estimatedCost: 0, estimatedDuration: '', notes: '', spareParts: [], tags: [], attachments: []
     });
   };
 
-  // تحديث حالة التذكرة
-  const handleUpdateStatus = async (ticketId, newStatus, notes = '') => {
+  // تحديث حالة
+  const handleUpdateStatus = async (ticketId, newStatus) => {
     setGlobalLoading(true);
     try {
       const ticketRef = doc(db, 'tickets', ticketId);
-      const ticketSnap = await getDoc(ticketRef);
-      const currentTicket = ticketSnap.data();
-
-      const statusHistory = currentTicket.statusHistory || [];
-      statusHistory.push({
-        status: newStatus,
-        timestamp: new Date(),
-        by: appUser.name,
-        notes: notes
-      });
-
-      const history = currentTicket.history || [];
-      history.push({
-        action: `تغيير الحالة إلى ${TICKET_STATUSES.find(s => s.value === newStatus)?.label || newStatus}`,
-        timestamp: new Date(),
-        by: appUser.name,
-        notes: notes
-      });
-
-      await updateDoc(ticketRef, {
-        status: newStatus,
-        updatedAt: serverTimestamp(),
-        statusHistory,
-        history
-      });
-
+      const snap = await getDoc(ticketRef);
+      const current = snap.data();
+      const statusHistory = [...(current.statusHistory || []), { status: newStatus, timestamp: new Date().toISOString(), by: appUser.name }];
+      const history = [...(current.history || []), { action: `تغيير الحالة إلى ${TICKET_STATUSES.find(s => s.value === newStatus)?.label || newStatus}`, timestamp: new Date().toISOString(), by: appUser.name }];
+      
+      await updateDoc(ticketRef, { status: newStatus, updatedAt: serverTimestamp(), statusHistory, history });
       await logUserActivity(appUser, 'تحديث حالة تذكرة', `تغيير حالة التذكرة ${ticketId} إلى ${newStatus}`);
       showSuccess("تم تحديث حالة التذكرة");
 
-      // تحديث العرض المفتوح
       if (fullTicketView?.id === ticketId) {
-        setFullTicketView({
-          ...fullTicketView,
-          status: newStatus,
-          statusHistory,
-          history
-        });
+        setFullTicketView({ ...fullTicketView, status: newStatus, statusHistory, history });
       }
-    } catch (err) {
-      console.error(err);
-      showError("فشل تحديث الحالة: " + err.message);
-    }
+      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: newStatus } : t));
+    } catch(e) { showError("فشل تحديث الحالة: " + e.message); }
     setGlobalLoading(false);
   };
 
@@ -8113,53 +7906,21 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     setGlobalLoading(true);
     try {
       const ticketRef = doc(db, 'tickets', ticketId);
-      const ticketSnap = await getDoc(ticketRef);
-      const currentTicket = ticketSnap.data();
+      const snap = await getDoc(ticketRef);
+      const current = snap.data();
+      const spareParts = [...(current.spareParts || []), { ...part, id: Date.now().toString(), addedAt: new Date().toISOString(), addedBy: appUser.name }];
+      const totalCost = (current.totalCost || 0) + (part.price * part.quantity);
+      const remaining = totalCost - (current.totalPaid || 0);
+      const history = [...(current.history || []), { action: `إضافة قطعة غيار: ${part.name} (${part.quantity} x ${part.price} ج)`, timestamp: new Date().toISOString(), by: appUser.name }];
 
-      const spareParts = currentTicket.spareParts || [];
-      const newPart = {
-        ...part,
-        id: Date.now().toString(),
-        addedAt: new Date().toISOString(),
-        addedBy: appUser.name
-      };
-
-      spareParts.push(newPart);
-      const totalCost = (currentTicket.totalCost || 0) + (part.price * part.quantity);
-      const totalPaid = currentTicket.totalPaid || 0;
-      const remaining = totalCost - totalPaid;
-
-      const history = currentTicket.history || [];
-      history.push({
-        action: `إضافة قطعة غيار: ${part.name} (${part.quantity} x ${part.price} ج)`,
-        timestamp: new Date(),
-        by: appUser.name
-      });
-
-      await updateDoc(ticketRef, {
-        spareParts,
-        totalCost,
-        remaining,
-        updatedAt: serverTimestamp(),
-        history
-      });
-
+      await updateDoc(ticketRef, { spareParts, totalCost, remaining, updatedAt: serverTimestamp(), history });
       await logUserActivity(appUser, 'إضافة قطعة غيار', `إضافة ${part.name} للتذكرة ${ticketId}`);
       showSuccess("تم إضافة قطعة الغيار");
 
       if (fullTicketView?.id === ticketId) {
-        setFullTicketView({
-          ...fullTicketView,
-          spareParts,
-          totalCost,
-          remaining,
-          history
-        });
+        setFullTicketView({ ...fullTicketView, spareParts, totalCost, remaining, history });
       }
-    } catch (err) {
-      console.error(err);
-      showError("فشل إضافة قطعة الغيار: " + err.message);
-    }
+    } catch(e) { showError("فشل إضافة قطعة الغيار: " + e.message); }
     setGlobalLoading(false);
   };
 
@@ -8168,40 +7929,19 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     setGlobalLoading(true);
     try {
       const ticketRef = doc(db, 'tickets', ticketId);
-      const ticketSnap = await getDoc(ticketRef);
-      const currentTicket = ticketSnap.data();
+      const snap = await getDoc(ticketRef);
+      const current = snap.data();
+      const totalPaid = (current.totalPaid || 0) + amount;
+      const remaining = (current.totalCost || 0) - totalPaid;
+      const history = [...(current.history || []), { action: `إضافة دفعة: ${amount} ج`, timestamp: new Date().toISOString(), by: appUser.name }];
 
-      const totalPaid = (currentTicket.totalPaid || 0) + amount;
-      const remaining = currentTicket.totalCost - totalPaid;
-
-      const history = currentTicket.history || [];
-      history.push({
-        action: `إضافة دفعة: ${amount} ج`,
-        timestamp: new Date(),
-        by: appUser.name
-      });
-
-      await updateDoc(ticketRef, {
-        totalPaid,
-        remaining,
-        updatedAt: serverTimestamp(),
-        history
-      });
-
+      await updateDoc(ticketRef, { totalPaid, remaining, updatedAt: serverTimestamp(), history });
       showSuccess("تم إضافة الدفعة بنجاح");
 
       if (fullTicketView?.id === ticketId) {
-        setFullTicketView({
-          ...fullTicketView,
-          totalPaid,
-          remaining,
-          history
-        });
+        setFullTicketView({ ...fullTicketView, totalPaid, remaining, history });
       }
-    } catch (err) {
-      console.error(err);
-      showError("فشل إضافة الدفعة");
-    }
+    } catch(e) { showError("فشل إضافة الدفعة"); }
     setGlobalLoading(false);
   };
 
@@ -8210,307 +7950,340 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     setGlobalLoading(true);
     try {
       const ticketRef = doc(db, 'tickets', ticketId);
+      const snap = await getDoc(ticketRef);
+      const currentHistory = snap.data().history || [];
       const history = [];
+      const updates = {};
 
       if (assignData.technician) {
-        history.push({
-          action: `تعيين الفني: ${technicians.find(t => t.id === assignData.technician)?.name}`,
-          timestamp: new Date(),
-          by: appUser.name
-        });
+        updates.assignedTechnician = assignData.technician;
+        history.push({ action: `تعيين الفني: ${technicians.find(t => t.id === assignData.technician)?.name}`, timestamp: new Date().toISOString(), by: appUser.name });
       }
       if (assignData.center) {
-        history.push({
-          action: `تعيين مركز صيانة: ${maintenanceCenters.find(c => c.id === assignData.center)?.name}`,
-          timestamp: new Date(),
-          by: appUser.name
-        });
+        updates.assignedMaintenanceCenter = assignData.center;
+        history.push({ action: `تعيين مركز صيانة: ${maintenanceCenters.find(m => m.id === assignData.center)?.name}`, timestamp: new Date().toISOString(), by: appUser.name });
       }
       if (assignData.callCenter) {
-        history.push({
-          action: `تعيين كول سنتر: ${callCenters.find(c => c.id === assignData.callCenter)?.name}`,
-          timestamp: new Date(),
-          by: appUser.name
-        });
+        updates.assignedCallCenter = assignData.callCenter;
+        history.push({ action: `تعيين كول سنتر: ${callCenters.find(c => c.id === assignData.callCenter)?.name}`, timestamp: new Date().toISOString(), by: appUser.name });
       }
 
-      await updateDoc(ticketRef, {
-        ...assignData,
-        updatedAt: serverTimestamp(),
-        history: arrayUnion(...history)
-      });
-
+      await updateDoc(ticketRef, { ...updates, updatedAt: serverTimestamp(), history: [...currentHistory, ...history] });
+      await logUserActivity(appUser, 'تعيين مسؤولين', `تعيين مسؤولين للتذكرة ${ticketId}`);
       showSuccess("تم تعيين المسؤولين بنجاح");
       setShowAssignModal(false);
-      setAssignData({ assignTo: [], technician: '', center: '', callCenter: '' });
+      setAssignData({ technician: '', center: '', callCenter: '' });
 
       if (fullTicketView?.id === ticketId) {
-        setFullTicketView({
-          ...fullTicketView,
-          ...assignData,
-          history: [...(fullTicketView.history || []), ...history]
-        });
+        setFullTicketView({ ...fullTicketView, ...updates, history: [...(fullTicketView.history || []), ...history] });
       }
-    } catch (err) {
-      console.error(err);
-      showError("فشل تعيين المسؤولين");
-    }
+      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, ...updates } : t));
+    } catch(e) { showError("فشل تعيين المسؤولين: " + e.message); }
     setGlobalLoading(false);
   };
 
-  // إنشاء فاتورة من التذكرة
+  // إنشاء فاتورة
   const handleGenerateInvoice = (ticket) => {
     onGenerateInvoice({
       ...ticket,
       customerName: ticket.customerName,
       customerPhone: ticket.customerPhone,
-      items: ticket.spareParts?.map(p => ({
-        name: p.name,
-        price: p.price,
-        quantity: p.quantity
-      })) || [],
+      items: ticket.spareParts?.map(p => ({ name: p.name, price: p.price, quantity: p.quantity })) || [],
       totalCost: ticket.totalCost || 0
     });
   };
 
-  // ... (باقي الدوال المساعدة مثل getPriorityColor, StatusSelect الخ)
+  // حذف مجمع
+  const handleBulkDelete = async () => {
+    if (selectedItems.size === 0) return showError("لم يتم تحديد أي تذاكر");
+    if (bulkDeleteConfirm !== 'حذف') return showError("اكتب 'حذف' للتأكيد");
 
+    const confirmed = await showConfirm('تأكيد', `حذف ${selectedItems.size} تذكرة بشكل نهائي؟`);
+    if (!confirmed) return;
+
+    setGlobalLoading(true);
+    try {
+      const items = Array.from(selectedItems);
+      for (let i = 0; i < items.length; i += 400) {
+        const batch = writeBatch(db);
+        items.slice(i, i + 400).forEach(id => batch.delete(doc(db, 'tickets', id)));
+        await batch.commit();
+      }
+      await logUserActivity(appUser, 'حذف مجمع تذاكر', `تم حذف ${items.length} تذكرة`);
+      showSuccess(`تم حذف ${items.length} تذكرة`);
+      setSelectedItems(new Set());
+      setShowBulkDeleteModal(false);
+      setBulkDeleteConfirm('');
+      setLastDoc(null);
+      loadTickets(false);
+    } catch(e) { showError("فشل الحذف: " + e.message); }
+    setGlobalLoading(false);
+  };
+
+  // عرض السجل
+  const handleViewHistory = (ticket) => {
+    setSelectedTicket(ticket);
+    setTicketHistory(ticket.history || []);
+    setShowHistoryModal(true);
+  };
+
+  // ألوان مساعدة
+  const getPriorityColor = (p) => {
+    if (p === 'high') return 'text-rose-600 bg-rose-50 dark:bg-rose-900/30';
+    if (p === 'medium') return 'text-amber-600 bg-amber-50 dark:bg-amber-900/30';
+    return 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30';
+  };
+
+  const getStatusColor = (status) => {
+    const info = TICKET_STATUSES.find(s => s.value === status);
+    return info?.color || 'gray';
+  };
+
+  const resetFilters = () => {
+    setFilterStatus('all'); setFilterPriority('all'); setFilterWarranty('all');
+    setFilterTicketType('all'); setFilterSource('all'); setFilterBranch('all');
+    setFilterTechnician('all'); setFilterTag('all');
+    setDateRange({ from: '', to: '' }); setSearch('');
+  };
+
+  // مكون StatusSelect
+  const StatusSelectComp = ({ value, onChange, ticketId }) => (
+    <select
+      className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 bg-white dark:bg-slate-900 font-bold"
+      value={value}
+      onChange={(e) => onChange(ticketId, e.target.value)}
+    >
+      {TICKET_STATUSES.map(s => (
+        <option key={s.value} value={s.value}>{s.label}</option>
+      ))}
+    </select>
+  );
+
+  // ====================== RENDER ======================
   return (
     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden text-right" dir="rtl">
       
-      {/* مودال فتح التذكرة كاملة */}
+      {/* ===== مودال إضافة تذكرة ===== */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-4xl shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex justify-between items-center mb-6 border-b pb-4">
+              <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
+                <MessageSquare className="text-indigo-600"/> إنشاء تذكرة صيانة جديدة
+              </h3>
+              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-rose-600"><X size={24}/></button>
+            </div>
+            <form onSubmit={handleAddTicket} className="space-y-4">
+              
+              {/* البحث عن عميل */}
+              <div className="relative">
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">البحث عن عميل (بالاسم أو رقم الهاتف)</label>
+                <input 
+                  className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500"
+                  placeholder="ابحث عن عميل مسجل..."
+                  value={customerSearch}
+                  onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true); }}
+                  onFocus={() => setShowCustomerDropdown(true)}
+                />
+                {showCustomerDropdown && filteredCustomers.length > 0 && (
+                  <div className="absolute z-10 w-full bg-white dark:bg-slate-800 border rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
+                    {filteredCustomers.map(c => (
+                      <button key={c.id} type="button" onClick={() => selectCustomer(c)}
+                        className="w-full p-3 text-right hover:bg-slate-50 dark:hover:bg-slate-700 border-b last:border-0">
+                        <span className="font-bold block text-sm">{c.name}</span>
+                        <span className="text-xs text-slate-500">{c.phone}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* معلومات العميل */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div><label className="block text-xs font-bold mb-1">اسم العميل *</label><input required className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.customerName} onChange={e => setNewTicket({...newTicket, customerName: e.target.value})} /></div>
+                <div><label className="block text-xs font-bold mb-1">رقم الهاتف *</label><input required className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-mono" value={newTicket.customerPhone} onChange={e => setNewTicket({...newTicket, customerPhone: e.target.value})} dir="ltr" /></div>
+                <div><label className="block text-xs font-bold mb-1">رقم ثاني</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-mono" value={newTicket.secondPhone} onChange={e => setNewTicket({...newTicket, secondPhone: e.target.value})} dir="ltr" /></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div><label className="block text-xs font-bold mb-1">تليفون أرضي</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-mono" value={newTicket.landline} onChange={e => setNewTicket({...newTicket, landline: e.target.value})} dir="ltr" /></div>
+                <div><label className="block text-xs font-bold mb-1">البريد الإلكتروني</label><input type="email" className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" value={newTicket.customerEmail} onChange={e => setNewTicket({...newTicket, customerEmail: e.target.value})} /></div>
+                <div><label className="block text-xs font-bold mb-1">العنوان</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" value={newTicket.customerAddress} onChange={e => setNewTicket({...newTicket, customerAddress: e.target.value})} /></div>
+              </div>
+
+              {/* الجهاز */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div><label className="block text-xs font-bold mb-1">الجهاز</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.device} onChange={e => setNewTicket({...newTicket, device: e.target.value})} placeholder="مثال: شاشة LG" /></div>
+                <div><label className="block text-xs font-bold mb-1">الموديل</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" value={newTicket.deviceModel} onChange={e => setNewTicket({...newTicket, deviceModel: e.target.value})} /></div>
+                <div><label className="block text-xs font-bold mb-1">السيريال</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-mono" value={newTicket.deviceSerial} onChange={e => setNewTicket({...newTicket, deviceSerial: e.target.value})} /></div>
+              </div>
+
+              {/* الضمان - النوع - المصدر */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold mb-1">الضمان</label>
+                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.warrantyStatus} onChange={e => setNewTicket({...newTicket, warrantyStatus: e.target.value})}>
+                    <option value="">-- اختر --</option>
+                    {WARRANTY_OPTIONS.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1">نوع التذكرة</label>
+                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.ticketType} onChange={e => setNewTicket({...newTicket, ticketType: e.target.value})}>
+                    <option value="">-- اختر --</option>
+                    {TICKET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1">المصدر</label>
+                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.source} onChange={e => setNewTicket({...newTicket, source: e.target.value})}>
+                    <option value="">-- اختر --</option>
+                    {TICKET_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* الفرع - الأولوية - التكلفة */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold mb-1">أقرب فرع</label>
+                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.nearestBranch} onChange={e => setNewTicket({...newTicket, nearestBranch: e.target.value})}>
+                    <option value="">-- اختر --</option>
+                    {BRANCH_OPTIONS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1">الأولوية</label>
+                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.priority} onChange={e => setNewTicket({...newTicket, priority: e.target.value})}>
+                    <option value="low">منخفضة</option>
+                    <option value="medium">متوسطة</option>
+                    <option value="high">عالية</option>
+                  </select>
+                </div>
+                <div><label className="block text-xs font-bold mb-1">التكلفة التقديرية</label><input type="number" min="0" className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold text-center" value={newTicket.estimatedCost} onChange={e => setNewTicket({...newTicket, estimatedCost: Number(e.target.value)})} /></div>
+              </div>
+
+              {/* تعيين مسؤولين */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold mb-1">الفني المختص</label>
+                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.assignedTechnician} onChange={e => setNewTicket({...newTicket, assignedTechnician: e.target.value})}>
+                    <option value="">-- غير محدد --</option>
+                    {technicians.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1">مركز الصيانة</label>
+                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.assignedMaintenanceCenter} onChange={e => setNewTicket({...newTicket, assignedMaintenanceCenter: e.target.value})}>
+                    <option value="">-- غير محدد --</option>
+                    {maintenanceCenters.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1">الكول سنتر</label>
+                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.assignedCallCenter} onChange={e => setNewTicket({...newTicket, assignedCallCenter: e.target.value})}>
+                    <option value="">-- غير محدد --</option>
+                    {callCenters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* المشكلة والملاحظات */}
+              <div><label className="block text-xs font-bold mb-1">المشكلة *</label><textarea rows="3" className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold resize-none" value={newTicket.issue} onChange={e => setNewTicket({...newTicket, issue: e.target.value})} required /></div>
+              <div><label className="block text-xs font-bold mb-1">ملاحظات إضافية</label><textarea rows="2" className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold resize-none" value={newTicket.notes} onChange={e => setNewTicket({...newTicket, notes: e.target.value})} /></div>
+              <div><label className="block text-xs font-bold mb-1">الوسوم</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" value={newTicket.tags?.join(', ')} onChange={e => setNewTicket({...newTicket, tags: e.target.value.split(',').map(t => t.trim())})} placeholder="وسم1, وسم2" /></div>
+
+              <div className="flex gap-3 pt-4 border-t">
+                <button type="submit" className="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 shadow-md transition-colors flex items-center justify-center gap-2"><Save size={18}/> إنشاء التذكرة</button>
+                <button type="button" onClick={() => setShowAddModal(false)} className="px-6 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-3.5 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">إلغاء</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== مودال فتح التذكرة كاملة ===== */}
       {showFullTicketModal && fullTicketView && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] w-full max-w-5xl shadow-2xl max-h-[95vh] overflow-y-auto custom-scrollbar">
-            {/* هيدر التذكرة */}
-            <div className="sticky top-0 bg-gradient-to-l from-indigo-600 to-purple-600 p-6 rounded-t-[1.5rem] z-10">
+            <div className="sticky top-0 bg-gradient-to-l from-indigo-600 to-purple-600 p-6 rounded-t-[1.5rem] z-10 text-white">
               <div className="flex justify-between items-start">
                 <div>
                   <div className="flex items-center gap-3 mb-2">
                     <span className="text-white/80 text-sm font-mono">#{fullTicketView.ticketNumber}</span>
-                    <StatusSelect 
-                      value={fullTicketView.status} 
-                      onChange={(id, status) => {
-                        handleUpdateStatus(id, status);
-                        setFullTicketView({...fullTicketView, status});
-                      }}
-                      ticketId={fullTicketView.id}
-                    />
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      fullTicketView.priority === 'high' ? 'bg-rose-500 text-white' : 
-                      fullTicketView.priority === 'medium' ? 'bg-amber-500 text-white' : 
-                      'bg-emerald-500 text-white'
-                    }`}>
-                      {fullTicketView.priority === 'high' ? 'عالية' : 
-                       fullTicketView.priority === 'medium' ? 'متوسطة' : 'منخفضة'}
+                    <StatusSelectComp value={fullTicketView.status} onChange={(id, status) => { handleUpdateStatus(id, status); setFullTicketView({...fullTicketView, status}); }} ticketId={fullTicketView.id} />
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${fullTicketView.priority === 'high' ? 'bg-rose-500 text-white' : fullTicketView.priority === 'medium' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                      {fullTicketView.priority === 'high' ? 'عارية' : fullTicketView.priority === 'medium' ? 'متوسطة' : 'منخفضة'}
                     </span>
                   </div>
-                  <h2 className="text-2xl font-black text-white">{fullTicketView.customerName}</h2>
+                  <h2 className="text-2xl font-black">{fullTicketView.customerName}</h2>
                 </div>
-                <button onClick={() => setShowFullTicketModal(false)} className="text-white/70 hover:text-white">
-                  <X size={24}/>
-                </button>
+                <button onClick={() => setShowFullTicketModal(false)} className="text-white/70 hover:text-white"><X size={24}/></button>
               </div>
             </div>
 
-            {/* محتوى التذكرة */}
             <div className="p-6 space-y-6">
               {/* معلومات العميل */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">رقم الهاتف</label>
-                  <p className="font-bold font-mono" dir="ltr">{fullTicketView.customerPhone}</p>
-                </div>
-                {fullTicketView.secondPhone && (
-                  <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                    <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">رقم ثاني</label>
-                    <p className="font-bold font-mono" dir="ltr">{fullTicketView.secondPhone}</p>
-                  </div>
-                )}
-                {fullTicketView.landline && (
-                  <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                    <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">أرضي</label>
-                    <p className="font-bold font-mono" dir="ltr">{fullTicketView.landline}</p>
-                  </div>
-                )}
-                {fullTicketView.customerEmail && (
-                  <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                    <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">البريد الإلكتروني</label>
-                    <p className="font-bold">{fullTicketView.customerEmail}</p>
-                  </div>
-                )}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">رقم الهاتف</label><p className="font-bold font-mono" dir="ltr">{fullTicketView.customerPhone}</p></div>
+                {fullTicketView.secondPhone && <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">رقم ثاني</label><p className="font-bold font-mono" dir="ltr">{fullTicketView.secondPhone}</p></div>}
+                {fullTicketView.landline && <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">أرضي</label><p className="font-bold font-mono" dir="ltr">{fullTicketView.landline}</p></div>}
+                {fullTicketView.customerEmail && <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">البريد</label><p className="font-bold text-sm">{fullTicketView.customerEmail}</p></div>}
               </div>
 
-              {/* معلومات الجهاز والضمان */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">الجهاز</label>
-                  <p className="font-bold">{fullTicketView.device || '-'}</p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">النوع / الموديل</label>
-                  <p className="font-bold">{fullTicketView.deviceType || '-'} {fullTicketView.deviceModel || ''}</p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">السيريال</label>
-                  <p className="font-bold font-mono">{fullTicketView.deviceSerial || '-'}</p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">الضمان</label>
-                  <p className="font-bold">
-                    {WARRANTY_OPTIONS.find(w => w.value === fullTicketView.warrantyStatus)?.label || '-'}
-                  </p>
-                </div>
+              {/* الجهاز والضمان */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">الجهاز</label><p className="font-bold">{fullTicketView.device || '-'}</p></div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">الموديل</label><p className="font-bold">{fullTicketView.deviceModel || '-'}</p></div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">السيريال</label><p className="font-bold font-mono">{fullTicketView.deviceSerial || '-'}</p></div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">الضمان</label><p className="font-bold">{WARRANTY_OPTIONS.find(w => w.value === fullTicketView.warrantyStatus)?.label || '-'}</p></div>
               </div>
 
-              {/* نوع التذكرة والمصدر */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">نوع التذكرة</label>
-                  <p className="font-bold">
-                    {TICKET_TYPES.find(t => t.value === fullTicketView.ticketType)?.label || '-'}
-                  </p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">المصدر</label>
-                  <p className="font-bold">
-                    {TICKET_SOURCES.find(s => s.value === fullTicketView.source)?.label || '-'}
-                  </p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">أقرب فرع</label>
-                  <p className="font-bold">
-                    {BRANCH_OPTIONS.find(b => b.value === fullTicketView.nearestBranch)?.label || '-'}
-                  </p>
-                </div>
+              {/* النوع والمصدر والفرع */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">نوع التذكرة</label><p className="font-bold">{TICKET_TYPES.find(t => t.value === fullTicketView.ticketType)?.label || '-'}</p></div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">المصدر</label><p className="font-bold">{TICKET_SOURCES.find(s => s.value === fullTicketView.source)?.label || '-'}</p></div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">أقرب فرع</label><p className="font-bold">{BRANCH_OPTIONS.find(b => b.value === fullTicketView.nearestBranch)?.label || '-'}</p></div>
               </div>
 
               {/* العنوان والمشكلة */}
-              {fullTicketView.customerAddress && (
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">العنوان</label>
-                  <p className="font-bold">{fullTicketView.customerAddress}</p>
-                </div>
-              )}
-              
-              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">المشكلة</label>
-                <p className="font-bold">{fullTicketView.issue || '-'}</p>
-              </div>
+              {fullTicketView.customerAddress && <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">العنوان</label><p className="font-bold">{fullTicketView.customerAddress}</p></div>}
+              <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">المشكلة</label><p className="font-bold">{fullTicketView.issue || '-'}</p></div>
 
               {/* المسؤولون */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">الفني المختص</label>
-                  <p className="font-bold">
-                    {technicians.find(t => t.id === fullTicketView.assignedTechnician)?.name || '-'}
-                  </p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">مركز الصيانة</label>
-                  <p className="font-bold">
-                    {maintenanceCenters.find(m => m.id === fullTicketView.assignedMaintenanceCenter)?.name || '-'}
-                  </p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">الكول سنتر</label>
-                  <p className="font-bold">
-                    {callCenters.find(c => c.id === fullTicketView.assignedCallCenter)?.name || '-'}
-                  </p>
-                </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">الفني</label><p className="font-bold">{technicians.find(t => t.id === fullTicketView.assignedTechnician)?.name || '-'}</p></div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">مركز الصيانة</label><p className="font-bold">{maintenanceCenters.find(m => m.id === fullTicketView.assignedMaintenanceCenter)?.name || '-'}</p></div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl"><label className="text-xs text-slate-500 block mb-1">الكول سنتر</label><p className="font-bold">{callCenters.find(c => c.id === fullTicketView.assignedCallCenter)?.name || '-'}</p></div>
               </div>
 
               {/* المبالغ */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl text-center">
-                  <label className="text-xs block mb-1">التكلفة التقديرية</label>
-                  <p className="text-xl font-black">{fullTicketView.estimatedCost || 0} ج</p>
-                </div>
-                <div className="bg-emerald-50 dark:bg-emerald-900/30 p-4 rounded-xl text-center">
-                  <label className="text-xs block mb-1">إجمالي التكاليف</label>
-                  <p className="text-xl font-black">{fullTicketView.totalCost || 0} ج</p>
-                </div>
-                <div className="bg-emerald-50 dark:bg-emerald-900/30 p-4 rounded-xl text-center">
-                  <label className="text-xs block mb-1">المدفوع</label>
-                  <p className="text-xl font-black">{fullTicketView.totalPaid || 0} ج</p>
-                </div>
-                <div className="bg-amber-50 dark:bg-amber-900/30 p-4 rounded-xl text-center">
-                  <label className="text-xs block mb-1">المتبقي</label>
-                  <p className="text-xl font-black">{(fullTicketView.totalCost || 0) - (fullTicketView.totalPaid || 0)} ج</p>
-                </div>
-              </div>
-
-              {/* قطع الغيار */}
-              <div className="border rounded-xl p-4">
-                <h3 className="font-bold mb-3">قطع الغيار</h3>
-                {(fullTicketView.spareParts || []).map((part, idx) => (
-                  <div key={idx} className="flex justify-between p-2 border-b">
-                    <span>{part.name} × {part.quantity}</span>
-                    <span className="font-bold">{part.price * part.quantity} ج</span>
-                  </div>
-                ))}
-                <button 
-                  onClick={() => {
-                    setSelectedTicket(fullTicketView);
-                    setShowSparePartsModal(true);
-                  }}
-                  className="mt-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-4 py-2 rounded-lg text-sm font-bold"
-                >
-                  إدارة قطع الغيار
-                </button>
+              <div className="grid grid-cols-4 gap-3 text-center">
+                <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-xl"><label className="text-xs block mb-1">التكلفة</label><p className="font-black text-lg">{(fullTicketView.totalCost || fullTicketView.estimatedCost || 0).toLocaleString()} ج</p></div>
+                <div className="bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-xl"><label className="text-xs block mb-1">المدفوع</label><p className="font-black text-lg">{(fullTicketView.totalPaid || 0).toLocaleString()} ج</p></div>
+                <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-xl"><label className="text-xs block mb-1">المتبقي</label><p className="font-black text-lg">{((fullTicketView.totalCost || 0) - (fullTicketView.totalPaid || 0)).toLocaleString()} ج</p></div>
+                <div className="bg-purple-50 dark:bg-purple-900/30 p-3 rounded-xl"><label className="text-xs block mb-1">قطع الغيار</label><p className="font-black text-lg">{(fullTicketView.spareParts || []).length}</p></div>
               </div>
 
               {/* التعليقات */}
               <div className="border rounded-xl p-4">
-                <h3 className="font-bold mb-3">التعليقات ({ticketComments.length})</h3>
+                <h3 className="font-bold mb-3 flex items-center gap-2"><MessageSquare size={18} className="text-indigo-600"/> التعليقات ({ticketComments.length})</h3>
                 <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
                   {ticketComments.map(comment => (
                     <div key={comment.id} className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg">
                       {editingCommentId === comment.id ? (
                         <div className="flex gap-2">
-                          <input 
-                            className="flex-1 border p-2 rounded-lg text-sm"
-                            value={editingCommentText}
-                            onChange={e => setEditingCommentText(e.target.value)}
-                          />
-                          <button 
-                            onClick={() => editComment(fullTicketView.id, comment.id)}
-                            className="px-3 py-1 bg-indigo-600 text-white rounded text-xs"
-                          >
-                            حفظ
-                          </button>
-                          <button 
-                            onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }}
-                            className="px-3 py-1 bg-slate-200 dark:bg-slate-700 rounded text-xs"
-                          >
-                            إلغاء
-                          </button>
+                          <input className="flex-1 border p-2 rounded-lg text-sm" value={editingCommentText} onChange={e => setEditingCommentText(e.target.value)} />
+                          <button onClick={() => editComment(comment.id)} className="px-3 py-1 bg-indigo-600 text-white rounded text-xs">حفظ</button>
+                          <button onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }} className="px-3 py-1 bg-slate-200 rounded text-xs">إلغاء</button>
                         </div>
                       ) : (
                         <div>
                           <p className="text-sm">{comment.text}</p>
                           <div className="flex justify-between items-center mt-2">
-                            <div>
-                              <span className="text-xs text-slate-500">{comment.createdBy}</span>
-                              <span className="text-xs text-slate-400 mx-2">•</span>
-                              <span className="text-xs text-slate-400">
-                                {new Date(comment.createdAt).toLocaleString('ar-EG')}
-                              </span>
-                              {comment.editedAt && <span className="text-xs text-amber-500 mr-2">(معدل)</span>}
-                            </div>
+                            <div><span className="text-xs text-slate-500">{comment.createdBy}</span><span className="text-xs text-slate-400 mx-2">•</span><span className="text-xs text-slate-400">{new Date(comment.createdAt).toLocaleString('ar-EG')}</span>{comment.editedAt && <span className="text-xs text-amber-500 mr-2">(معدل)</span>}</div>
                             <div className="flex gap-2">
-                              <button 
-                                onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text); }}
-                                className="text-xs text-indigo-500"
-                              >
-                                تعديل
-                              </button>
-                              <button 
-                                onClick={() => deleteComment(fullTicketView.id, comment.id)}
-                                className="text-xs text-rose-500"
-                              >
-                                حذف
-                              </button>
+                              <button onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text); }} className="text-xs text-indigo-500">تعديل</button>
+                              <button onClick={() => deleteComment(comment.id)} className="text-xs text-rose-500">حذف</button>
                             </div>
                           </div>
                         </div>
@@ -8519,52 +8292,20 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
                   ))}
                 </div>
                 <div className="flex gap-2">
-                  <input 
-                    className="flex-1 border p-2 rounded-lg text-sm"
-                    placeholder="أضف تعليقاً..."
-                    value={newComment}
-                    onChange={e => setNewComment(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') addComment(fullTicketView.id); }}
-                  />
-                  <button 
-                    onClick={() => addComment(fullTicketView.id)}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold"
-                  >
-                    إضافة
-                  </button>
+                  <input className="flex-1 border p-2 rounded-lg text-sm" placeholder="أضف تعليقاً..." value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addComment(); }} />
+                  <button onClick={addComment} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold">إضافة</button>
                 </div>
               </div>
 
               {/* أزرار الإجراءات */}
               <div className="flex flex-wrap gap-2 pt-4 border-t">
-                <button 
-                  onClick={() => { setSelectedTicket(fullTicketView); setShowAssignModal(true); }}
-                  className="px-4 py-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg text-sm font-bold"
-                >
-                  تعيين مسؤولين
-                </button>
-                <button 
-                  onClick={() => handleGenerateInvoice(fullTicketView)}
-                  className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-sm font-bold"
-                >
-                  إنشاء فاتورة
-                </button>
-                <button 
-                  onClick={() => window.print()}
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold"
-                >
-                  طباعة
-                </button>
-                <button 
-                  onClick={() => setShowFullTicketModal(false)}
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold"
-                >
-                  إغلاق
-                </button>
+                <button onClick={() => { setSelectedTicket(fullTicketView); setShowAssignModal(true); }} className="px-4 py-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg text-sm font-bold"><Users size={14} className="inline ml-1"/> تعيين مسؤولين</button>
+                <button onClick={() => handleGenerateInvoice(fullTicketView)} className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-sm font-bold"><Receipt size={14} className="inline ml-1"/> إنشاء فاتورة</button>
+                <button onClick={() => window.print()} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold"><Printer size={14} className="inline ml-1"/> طباعة</button>
+                <button onClick={() => setShowFullTicketModal(false)} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold">إغلاق</button>
               </div>
 
-              {/* معلومات إضافية */}
-              <div className="text-xs text-slate-400 dark:text-slate-500 space-y-1 border-t pt-4">
+              <div className="text-xs text-slate-400 space-y-1 border-t pt-4">
                 <p>تاريخ الإنشاء: {formatDate(fullTicketView.createdAt)}</p>
                 <p>آخر تحديث: {formatDate(fullTicketView.updatedAt)}</p>
                 <p>تم الإنشاء بواسطة: {fullTicketView.createdByName}</p>
@@ -8575,233 +8316,210 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
         </div>
       )}
 
-      {/* باقي المودالات (SpareParts, History, Assign, BulkDelete) كما هي مع تعديلات طفيفة */}
+      {/* ===== مودال تعيين مسؤولين ===== */}
+      {showAssignModal && selectedTicket && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
+            <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white">تعيين مسؤولين للتذكرة #{selectedTicket.ticketNumber}</h3>
+            <div className="space-y-4">
+              <div><label className="block text-xs font-bold mb-1">الفني</label><select className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" value={assignData.technician} onChange={e => setAssignData({...assignData, technician: e.target.value})}><option value="">-- اختر --</option>{technicians.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+              <div><label className="block text-xs font-bold mb-1">مركز الصيانة</label><select className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" value={assignData.center} onChange={e => setAssignData({...assignData, center: e.target.value})}><option value="">-- اختر --</option>{maintenanceCenters.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
+              <div><label className="block text-xs font-bold mb-1">الكول سنتر</label><select className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" value={assignData.callCenter} onChange={e => setAssignData({...assignData, callCenter: e.target.value})}><option value="">-- اختر --</option>{callCenters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+              <div className="flex gap-2 pt-4">
+                <button onClick={() => handleAssign(selectedTicket.id)} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold">حفظ</button>
+                <button onClick={() => { setShowAssignModal(false); setAssignData({technician:'',center:'',callCenter:''}); }} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إلغاء</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* رأس الصفحة مع الفلاتر */}
+      {/* ===== مودال قطع الغيار ===== */}
+      {showSparePartsModal && selectedTicket && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6 border-b pb-4">
+              <h3 className="font-black text-xl">قطع غيار التذكرة #{selectedTicket.ticketNumber}</h3>
+              <button onClick={() => setShowSparePartsModal(false)} className="hover:text-rose-600"><X size={24}/></button>
+            </div>
+            <div className="space-y-6">
+              <div className="border rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 dark:bg-slate-900/50"><tr><th className="p-3">القطعة</th><th className="p-3 text-center">الكمية</th><th className="p-3 text-center">السعر</th><th className="p-3 text-center">الإجمالي</th></tr></thead>
+                  <tbody className="divide-y">
+                    {(selectedTicket.spareParts || []).map((p, i) => <tr key={i}><td className="p-3 font-bold">{p.name}</td><td className="p-3 text-center">{p.quantity}</td><td className="p-3 text-center">{p.price} ج</td><td className="p-3 text-center font-black">{p.quantity * p.price} ج</td></tr>)}
+                    {(selectedTicket.spareParts || []).length === 0 && <tr><td colSpan="4" className="p-6 text-center text-slate-400">لا توجد قطع غيار</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                <h4 className="font-bold mb-3">إضافة قطعة جديدة</h4>
+                <div className="grid grid-cols-4 gap-3">
+                  <input className="col-span-2 border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="اسم القطعة" id={`pn-${selectedTicket.id}`} />
+                  <input type="number" className="border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="الكمية" id={`pq-${selectedTicket.id}`} defaultValue="1" />
+                  <input type="number" className="border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="السعر" id={`pp-${selectedTicket.id}`} />
+                </div>
+                <button onClick={() => {
+                  const name = document.getElementById(`pn-${selectedTicket.id}`).value;
+                  const qty = parseInt(document.getElementById(`pq-${selectedTicket.id}`).value) || 1;
+                  const price = parseFloat(document.getElementById(`pp-${selectedTicket.id}`).value) || 0;
+                  if (!name) return showError("يرجى إدخال اسم القطعة");
+                  handleAddSparePart(selectedTicket.id, { name, quantity: qty, price });
+                  document.getElementById(`pn-${selectedTicket.id}`).value = '';
+                  document.getElementById(`pp-${selectedTicket.id}`).value = '';
+                }} className="mt-3 w-full bg-indigo-600 text-white py-2 rounded-lg font-bold text-sm">إضافة القطعة</button>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                <h4 className="font-bold mb-3">إضافة دفعة</h4>
+                <div className="flex gap-3">
+                  <input type="number" className="flex-1 border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="المبلغ" id={`pa-${selectedTicket.id}`} />
+                  <button onClick={() => {
+                    const amount = parseFloat(document.getElementById(`pa-${selectedTicket.id}`).value);
+                    if (!amount || amount <= 0) return showError("مبلغ غير صحيح");
+                    handleAddPayment(selectedTicket.id, amount);
+                    document.getElementById(`pa-${selectedTicket.id}`).value = '';
+                  }} className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-bold text-sm">إضافة</button>
+                </div>
+              </div>
+              <button onClick={() => setShowSparePartsModal(false)} className="w-full bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إغلاق</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== مودال سجل التذكرة ===== */}
+      {showHistoryModal && selectedTicket && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-2xl shadow-2xl max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6 border-b pb-4">
+              <h3 className="font-black text-xl">سجل التذكرة #{selectedTicket.ticketNumber}</h3>
+              <button onClick={() => setShowHistoryModal(false)} className="hover:text-rose-600"><X size={24}/></button>
+            </div>
+            <div className="space-y-4">
+              {ticketHistory.map((event, idx) => (
+                <div key={idx} className="relative pr-6 pb-4 border-r-2 border-indigo-200 dark:border-indigo-800 last:border-0">
+                  <div className="absolute right-[-5px] top-0 w-3 h-3 rounded-full bg-indigo-600"></div>
+                  <p className="text-xs text-slate-400">{formatDate(event.timestamp)}</p>
+                  <p className="font-bold">{event.action}</p>
+                  {event.notes && <p className="text-sm text-slate-600">{event.notes}</p>}
+                  <p className="text-xs text-indigo-500 mt-1">بواسطة: {event.by}</p>
+                </div>
+              ))}
+              {ticketHistory.length === 0 && <p className="text-center text-slate-400 py-8">لا يوجد سجل</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== مودال الحذف المجمع ===== */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
+            <h3 className="font-black text-lg mb-2 text-rose-600 flex items-center gap-2"><Trash2 size={20}/> حذف مجمع للتذاكر</h3>
+            <p className="text-sm mb-4">حذف <span className="font-bold text-rose-600">{selectedItems.size}</span> تذكرة بشكل نهائي</p>
+            <input className="w-full border p-3 rounded-xl font-bold mb-4 bg-white dark:bg-slate-900" placeholder="اكتب 'حذف' للتأكيد" value={bulkDeleteConfirm} onChange={e => setBulkDeleteConfirm(e.target.value)} />
+            <div className="flex gap-2">
+              <button onClick={handleBulkDelete} disabled={bulkDeleteConfirm !== 'حذف'} className="flex-1 bg-rose-600 text-white py-3 rounded-xl font-bold disabled:opacity-50">تأكيد</button>
+              <button onClick={() => { setShowBulkDeleteModal(false); setBulkDeleteConfirm(''); }} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== رأس الصفحة ===== */}
       <div className="p-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
-            <MessageSquare className="text-indigo-600" size={20}/> تذاكر الصيانة
-          </h2>
-          <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg text-xs">
-            {tickets.length} تذكرة
-          </span>
+          <h2 className="text-lg font-black flex items-center gap-2"><MessageSquare className="text-indigo-600" size={20}/> تذاكر الصيانة</h2>
+          <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg text-xs">{tickets.length} تذكرة</span>
         </div>
-        
-        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <input
-            type="text"
-            placeholder="بحث شامل..."
-            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs bg-white dark:bg-slate-900"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          
-          <select 
-            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs bg-white dark:bg-slate-900"
-            value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
-          >
-            <option value="all">كل الحالات</option>
-            {TICKET_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+        <div className="flex flex-wrap gap-2">
+          {selectedItems.size > 0 && (
+            <button onClick={() => setShowBulkDeleteModal(true)} className="bg-rose-50 dark:bg-rose-900/30 text-rose-700 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2"><Trash2 size={14}/> حذف {selectedItems.size}</button>
+          )}
+          <input className="border p-2 rounded-lg text-xs bg-white dark:bg-slate-900 w-40" placeholder="بحث شامل..." value={search} onChange={e => setSearch(e.target.value)} />
+          <select className="border p-2 rounded-lg text-xs bg-white dark:bg-slate-900" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <option value="all">كل الحالات</option>{TICKET_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
-          
-          <select 
-            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs bg-white dark:bg-slate-900"
-            value={filterPriority}
-            onChange={e => setFilterPriority(e.target.value)}
-          >
-            <option value="all">كل الأولويات</option>
-            <option value="high">عالية</option>
-            <option value="medium">متوسطة</option>
-            <option value="low">منخفضة</option>
+          <select className="border p-2 rounded-lg text-xs bg-white dark:bg-slate-900" value={filterPriority} onChange={e => setFilterPriority(e.target.value)}>
+            <option value="all">كل الأولويات</option><option value="high">عالية</option><option value="medium">متوسطة</option><option value="low">منخفضة</option>
           </select>
-          
-          <select 
-            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs bg-white dark:bg-slate-900"
-            value={filterWarranty}
-            onChange={e => setFilterWarranty(e.target.value)}
-          >
-            <option value="all">كل الضمانات</option>
-            {WARRANTY_OPTIONS.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
+          <select className="border p-2 rounded-lg text-xs bg-white dark:bg-slate-900" value={filterWarranty} onChange={e => setFilterWarranty(e.target.value)}>
+            <option value="all">كل الضمانات</option>{WARRANTY_OPTIONS.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
           </select>
-          
-          <select 
-            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs bg-white dark:bg-slate-900"
-            value={filterTicketType}
-            onChange={e => setFilterTicketType(e.target.value)}
-          >
-            <option value="all">كل الأنواع</option>
-            {TICKET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          <select className="border p-2 rounded-lg text-xs bg-white dark:bg-slate-900" value={filterTicketType} onChange={e => setFilterTicketType(e.target.value)}>
+            <option value="all">كل الأنواع</option>{TICKET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
-          
-          <select 
-            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs bg-white dark:bg-slate-900"
-            value={filterSource}
-            onChange={e => setFilterSource(e.target.value)}
-          >
-            <option value="all">كل المصادر</option>
-            {TICKET_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          <select className="border p-2 rounded-lg text-xs bg-white dark:bg-slate-900" value={filterSource} onChange={e => setFilterSource(e.target.value)}>
+            <option value="all">كل المصادر</option>{TICKET_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
-          
-          <button 
-            onClick={() => {
-              setFilterStatus('all');
-              setFilterPriority('all');
-              setFilterWarranty('all');
-              setFilterTicketType('all');
-              setFilterSource('all');
-              setFilterBranch('all');
-              setFilterTechnician('all');
-              setFilterTag('all');
-              setDateRange({ from: '', to: '' });
-              setSearch('');
-            }}
-            className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold"
-          >
-            <RefreshCcw size={14}/>
-          </button>
-          
-          <button 
-            onClick={()=>setShowAddModal(true)} 
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-sm whitespace-nowrap"
-          >
-            <Plus size={14}/> تذكرة جديدة
-          </button>
+          <button onClick={resetFilters} className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs font-bold"><RotateCcw size={14}/></button>
+          <button onClick={() => setShowAddModal(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center gap-2"><Plus size={14}/> تذكرة جديدة</button>
+        </div>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <input type="date" className="border p-2 rounded-lg text-xs bg-white dark:bg-slate-900" value={dateRange.from} onChange={e => setDateRange({...dateRange, from: e.target.value})} />
+          <input type="date" className="border p-2 rounded-lg text-xs bg-white dark:bg-slate-900" value={dateRange.to} onChange={e => setDateRange({...dateRange, to: e.target.value})} />
         </div>
       </div>
 
-      {/* جدول التذاكر */}
+      {/* ===== جدول التذاكر ===== */}
       <div className="overflow-x-auto max-h-[70vh] custom-scrollbar">
         <table className="w-full text-right text-sm">
           <thead className="bg-white dark:bg-slate-900 border-b text-slate-500 dark:text-slate-400 font-bold text-[11px] uppercase sticky top-0">
             <tr>
-              <th className="p-4 w-10">
-                <input 
-                  type="checkbox" 
-                  className="w-4 h-4 accent-indigo-600"
-                  checked={selectedItems.size === tickets.length && tickets.length > 0}
-                  onChange={toggleSelectAll}
-                />
-              </th>
-              <th className="p-4">رقم التذكرة</th>
-              <th className="p-4">العميل</th>
-              <th className="p-4">الهاتف</th>
-              <th className="p-4">الجهاز</th>
-              <th className="p-4">الحالة</th>
-              <th className="p-4">الأولوية</th>
-              <th className="p-4">النوع</th>
-              <th className="p-4">المصدر</th>
-              <th className="p-4">الضمان</th>
-              <th className="p-4">آخر تحديث</th>
-              <th className="p-4 text-center">إجراءات</th>
+              <th className="p-3 w-10"><input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={selectedItems.size === tickets.length && tickets.length > 0} onChange={toggleSelectAll} /></th>
+              <th className="p-3">رقم التذكرة</th>
+              <th className="p-3">العميل</th>
+              <th className="p-3">الهاتف</th>
+              <th className="p-3">الجهاز</th>
+              <th className="p-3">النوع</th>
+              <th className="p-3">الحالة</th>
+              <th className="p-3">الأولوية</th>
+              <th className="p-3">الضمان</th>
+              <th className="p-3">المصدر</th>
+              <th className="p-3">الفني</th>
+              <th className="p-3">آخر تحديث</th>
+              <th className="p-3 text-center">إجراءات</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50 dark:divide-slate-700 font-medium text-xs">
-            {tickets.length === 0 && !loadingData ? 
-              <tr><td colSpan="12" className="p-10 text-center text-slate-400">لا توجد تذاكر</td></tr> : 
-              tickets.map((t) => {
-                const statusInfo = TICKET_STATUSES.find(s => s.value === t.status) || { label: t.status, color: 'gray' };
-                return (
-                <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors cursor-pointer">
-                  <td className="p-4" onClick={(e) => e.stopPropagation()}>
-                    <input 
-                      type="checkbox" 
-                      className="w-4 h-4 accent-indigo-600"
-                      checked={selectedItems.has(t.id)}
-                      onChange={() => toggleSelectItem(t.id)}
-                    />
-                  </td>
-                  <td className="p-4 font-mono font-bold text-indigo-600 dark:text-indigo-400" onClick={() => openFullTicket(t)}>
-                    {t.ticketNumber || t.id.slice(0,8)}
-                  </td>
-                  <td className="p-4" onClick={() => openFullTicket(t)}>
-                    <p className="font-bold text-slate-800 dark:text-white">{t.customerName}</p>
-                    {t.secondPhone && <p className="text-[9px] text-slate-500 dark:text-slate-400">رقم 2: {t.secondPhone}</p>}
-                  </td>
-                  <td className="p-4" onClick={() => openFullTicket(t)}>
-                    <p className="font-mono text-slate-600 dark:text-slate-400" dir="ltr">{t.customerPhone}</p>
-                    {t.landline && <p className="text-[9px] text-slate-400 dark:text-slate-500" dir="ltr">أرضي: {t.landline}</p>}
-                  </td>
-                  <td className="p-4" onClick={() => openFullTicket(t)}>
-                    <p className="font-bold">{t.device || t.deviceType || '-'}</p>
-                    <p className="text-[9px] text-slate-500 dark:text-slate-400">{t.deviceModel || ''}</p>
-                    {t.deviceSerial && <p className="text-[8px] font-mono text-slate-400 dark:text-slate-500">{t.deviceSerial}</p>}
-                  </td>
-                  <td className="p-4" onClick={(e) => e.stopPropagation()}>
-                    <StatusSelect 
-                      value={t.status} 
-                      onChange={handleUpdateStatus} 
-                      ticketId={t.id}
-                    />
-                  </td>
-                  <td className="p-4" onClick={() => openFullTicket(t)}>
-                    <span className={`px-2 py-1 rounded-full text-[9px] font-bold ${
-                      t.priority === 'high' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300' :
-                      t.priority === 'medium' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
-                      'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
-                    }`}>
-                      {t.priority === 'high' ? 'عالية' : t.priority === 'medium' ? 'متوسطة' : 'منخفضة'}
-                    </span>
-                  </td>
-                  <td className="p-4" onClick={() => openFullTicket(t)}>
-                    {TICKET_TYPES.find(tt => tt.value === t.ticketType)?.label || '-'}
-                  </td>
-                  <td className="p-4" onClick={() => openFullTicket(t)}>
-                    {TICKET_SOURCES.find(ts => ts.value === t.source)?.label || '-'}
-                  </td>
-                  <td className="p-4" onClick={() => openFullTicket(t)}>
-                    <span className={`px-2 py-1 rounded-full text-[9px] font-bold ${
-                      t.warrantyStatus === 'in_warranty' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' :
-                      t.warrantyStatus === 'out_of_warranty' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300' :
-                      'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                    }`}>
-                      {WARRANTY_OPTIONS.find(w => w.value === t.warrantyStatus)?.label || '-'}
-                    </span>
-                  </td>
-                  <td className="p-4 text-slate-500 dark:text-slate-400 text-[9px]" onClick={() => openFullTicket(t)}>
-                    {formatDate(t.updatedAt || t.createdAt)}
-                  </td>
-                  <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex justify-center gap-1">
-                      <button 
-                        onClick={() => openFullTicket(t)}
-                        className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/50"
-                        title="فتح التذكرة"
-                      >
-                        <Eye size={14}/>
-                      </button>
-                      <button 
-                        onClick={() => { setSelectedTicket(t); setShowAssignModal(true); }}
-                        className="p-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded hover:bg-amber-100 dark:hover:bg-amber-900/50"
-                        title="تعيين مسؤولين"
-                      >
-                        <Users size={14}/>
-                      </button>
-                      <button 
-                        onClick={() => handleGenerateInvoice(t)}
-                        className="p-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
-                        title="إصدار فاتورة"
-                      >
-                        <Receipt size={14}/>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )})}
+            {tickets.length === 0 && !loadingData ? (
+              <tr><td colSpan="13" className="p-10 text-center text-slate-400">لا توجد تذاكر</td></tr>
+            ) : tickets.map(t => (
+              <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors cursor-pointer" onClick={() => openFullTicket(t)}>
+                <td className="p-3" onClick={e => e.stopPropagation()}><input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={selectedItems.has(t.id)} onChange={() => toggleSelectItem(t.id)} /></td>
+                <td className="p-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">{t.ticketNumber || t.id.slice(0,8)}</td>
+                <td className="p-3 font-bold">{t.customerName}{t.secondPhone && <span className="text-[9px] text-slate-400 block">رقم 2: {t.secondPhone}</span>}</td>
+                <td className="p-3 font-mono" dir="ltr">{t.customerPhone}{t.landline && <span className="text-[9px] text-slate-400 block">أرضي: {t.landline}</span>}</td>
+                <td className="p-3">{t.device || t.deviceType || '-'}{t.deviceModel && <span className="text-[9px] text-slate-400 block">{t.deviceModel}</span>}</td>
+                <td className="p-3">{TICKET_TYPES.find(tt => tt.value === t.ticketType)?.label || '-'}</td>
+                <td className="p-3" onClick={e => e.stopPropagation()}><StatusSelectComp value={t.status} onChange={handleUpdateStatus} ticketId={t.id} /></td>
+                <td className="p-3"><span className={`px-2 py-1 rounded-full text-[9px] font-bold ${getPriorityColor(t.priority)}`}>{t.priority === 'high' ? 'عالية' : t.priority === 'medium' ? 'متوسطة' : 'منخفضة'}</span></td>
+                <td className="p-3">{WARRANTY_OPTIONS.find(w => w.value === t.warrantyStatus)?.label || '-'}</td>
+                <td className="p-3">{TICKET_SOURCES.find(s => s.value === t.source)?.label || '-'}</td>
+                <td className="p-3">{technicians.find(tech => tech.id === t.assignedTechnician)?.name || '-'}</td>
+                <td className="p-3 text-[9px]">{formatDate(t.updatedAt || t.createdAt)}</td>
+                <td className="p-3 text-center" onClick={e => e.stopPropagation()}>
+                  <div className="flex justify-center gap-1">
+                    <button onClick={() => openFullTicket(t)} className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded hover:bg-indigo-100" title="فتح"><Eye size={14}/></button>
+                    <button onClick={() => { setSelectedTicket(t); setShowAssignModal(true); }} className="p-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 rounded hover:bg-amber-100" title="تعيين"><Users size={14}/></button>
+                    <button onClick={() => handleViewHistory(t)} className="p-1.5 bg-purple-50 dark:bg-purple-900/30 text-purple-600 rounded hover:bg-purple-100" title="سجل"><History size={14}/></button>
+                    <button onClick={() => handleGenerateInvoice(t)} className="p-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 rounded hover:bg-emerald-100" title="فاتورة"><Receipt size={14}/></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
         {hasMore && !loadingData && tickets.length >= 30 && (
-          <div className="p-4 text-center bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700">
-            <button onClick={() => loadTickets(true)} className="text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:underline flex items-center justify-center gap-1 mx-auto">
-              تحميل المزيد <ChevronDown size={14}/>
-            </button>
+          <div className="p-4 text-center bg-slate-50 dark:bg-slate-900/50 border-t">
+            <button onClick={() => loadTickets(true)} className="text-indigo-600 font-bold text-xs hover:underline">تحميل المزيد <ChevronDown size={14}/></button>
           </div>
         )}
       </div>
     </div>
   );
 }
+
 
 // ==========================================================================
 // 👥 إدارة المستخدمين المحسنة (مع صلاحيات تفصيلية وتحكم كامل)
