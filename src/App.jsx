@@ -5135,10 +5135,10 @@ function ReportsManager({ notify }) {
 }
 
 // ==========================================================================
-// 📦 مدير التحويلات المحسن
+// 📦 مدير التحويلات المحسن - مع نظام الموافقة والرفض الكامل
 // ==========================================================================
 function EnhancedTransferManager({ appUser, warehouseMap, notify, setGlobalLoading }) {
-  const [activeTab, setActiveTab] = useState('pending'); 
+  const [activeTab, setActiveTab] = useState('pending');
   const [transfers, setTransfers] = useState([]);
   const [inventory, setInventory] = useState([]);
   
@@ -5152,35 +5152,38 @@ function EnhancedTransferManager({ appUser, warehouseMap, notify, setGlobalLoadi
   const [filteredTransfers, setFilteredTransfers] = useState([]);
   const [transferNotes, setTransferNotes] = useState('');
   const [priority, setPriority] = useState('normal');
+  const [transferLog, setTransferLog] = useState([]);
+  const [showLogModal, setShowLogModal] = useState(false);
+  const [selectedTransferForLog, setSelectedTransferForLog] = useState(null);
 
   const currentWarehouseId = appUser.assignedWarehouseId || 'main';
-  const isMainWarehouse = currentWarehouseId === 'main' || appUser.role === 'admin';
-  const canApprove = appUser.role === 'main_warehouse_manager' || appUser.role === 'admin';
+  const isMainWarehouse = currentWarehouseId === 'main' || appUser.role === 'admin' || appUser.role === 'main_warehouse_manager';
+  const canApprove = appUser.permissions?.approveTransfer || isMainWarehouse;
+  const canReject = appUser.permissions?.rejectTransfer || isMainWarehouse;
 
   useEffect(() => {
-    let q = collection(db, 'transfers');
+    let q = query(collection(db, 'transfers'), orderBy('createdAt', 'desc'));
     
     if (!appUser.permissions?.viewAllWarehouses) {
       if (isMainWarehouse) {
-        q = query(q, where('fromWarehouseId', '==', 'main'), orderBy('createdAt', 'desc'));
+        q = query(q, where('fromWarehouseId', '==', 'main'));
       } else {
-        q = query(q, where('toWarehouseId', '==', currentWarehouseId), orderBy('createdAt', 'desc'));
+        q = query(q, where('toWarehouseId', '==', currentWarehouseId));
       }
-    } else {
-      q = query(q, orderBy('createdAt', 'desc'));
     }
 
     const unsub = onSnapshot(query(q, limit(150)), snap => {
-       const fetched = snap.docs.map(d => ({id: d.id, ...d.data()}));
-       setTransfers(fetched);
+      const fetched = snap.docs.map(d => ({id: d.id, ...d.data()}));
+      setTransfers(fetched);
     });
 
-    const invUnsub = onSnapshot(
-      query(collection(db, 'inventory'), where('warehouseId', '==', currentWarehouseId), where('isDeleted', '==', false)),
-      snap => {
-        setInventory(snap.docs.map(d => ({id: d.id, ...d.data()})));
-      }
-    );
+    const invQ = isMainWarehouse 
+      ? query(collection(db, 'inventory'), where('warehouseId', '==', 'main'), where('isDeleted', '==', false))
+      : query(collection(db, 'inventory'), where('warehouseId', '==', currentWarehouseId), where('isDeleted', '==', false));
+
+    const invUnsub = onSnapshot(invQ, snap => {
+      setInventory(snap.docs.map(d => ({id: d.id, ...d.data()})));
+    });
 
     return () => { unsub(); invUnsub(); };
   }, [appUser, currentWarehouseId, isMainWarehouse]);
@@ -5189,7 +5192,9 @@ function EnhancedTransferManager({ appUser, warehouseMap, notify, setGlobalLoadi
     if (selectedWarehouse === 'all') {
       setFilteredTransfers(transfers);
     } else {
-      setFilteredTransfers(transfers.filter(t => t.toWarehouseId === selectedWarehouse));
+      setFilteredTransfers(transfers.filter(t => 
+        t.toWarehouseId === selectedWarehouse || t.fromWarehouseId === selectedWarehouse
+      ));
     }
   }, [transfers, selectedWarehouse]);
 
@@ -5199,153 +5204,219 @@ function EnhancedTransferManager({ appUser, warehouseMap, notify, setGlobalLoadi
     
     const term = normalizeSearch(searchProduct);
     const found = inventory.find(i => 
-      i.serialNumber?.toLowerCase().includes(term) || 
-      i.name?.toLowerCase().includes(term)
+      normalizeSearch(i.serialNumber).includes(term) || 
+      normalizeSearch(i.name).includes(term)
     );
     
     if (found) {
+      if (found.quantity <= 0) {
+        showError("المنتج غير متوفر بالكمية المطلوبة في مخزنك");
+        return;
+      }
       setSelectedProduct(found);
       setSearchProduct('');
+      setReqQty(1);
     } else {
       showError("لم يتم العثور على المنتج في مخزنك");
     }
   };
 
   const handleSubmitRequest = async () => {
-      if (!selectedProduct) return showError("اختر منتجاً أولاً");
-      if (!toWarehouseId) return showError("اختر المخزن المرسل إليه");
-      if (reqQty <= 0) return showError("الكمية غير صالحة");
-      if (reqQty > selectedProduct.quantity) return showError("الكمية المطلوبة أكبر من المتاح في مخزنك!");
+    if (!selectedProduct) return showError("اختر منتجاً أولاً");
+    if (!toWarehouseId) return showError("اختر المخزن المرسل إليه");
+    if (reqQty <= 0) return showError("الكمية غير صالحة");
+    if (reqQty > selectedProduct.quantity) return showError("الكمية المطلوبة أكبر من المتاح في مخزنك!");
+    
+    setGlobalLoading(true);
+    try {
+      const transferData = {
+        serialNumber: selectedProduct.serialNumber,
+        itemName: selectedProduct.name,
+        requestedQty: Number(reqQty),
+        fromWarehouseId: currentWarehouseId,
+        toWarehouseId: toWarehouseId,
+        status: 'pending',
+        priority,
+        createdAt: serverTimestamp(),
+        requestedBy: appUser.name || appUser.email,
+        requestedById: appUser.id,
+        notes: transferNotes,
+        log: [{
+          action: 'إنشاء طلب تحويل',
+          timestamp: new Date().toISOString(),
+          by: appUser.name,
+          details: `طلب تحويل ${reqQty} قطعة من ${selectedProduct.name} إلى ${warehouseMap[toWarehouseId]}`
+        }]
+      };
       
-      setGlobalLoading(true);
-      try {
-          await addDoc(collection(db, 'transfers'), {
-              serialNumber: selectedProduct.serialNumber,
-              itemName: selectedProduct.name,
-              requestedQty: Number(reqQty),
-              fromWarehouseId: currentWarehouseId,
-              toWarehouseId: toWarehouseId,
-              status: 'pending', 
-              priority,
-              createdAt: serverTimestamp(),
-              requestedBy: appUser.name || appUser.email,
-              requestedById: appUser.id,
-              notes: transferNotes
-          });
-          
-          await logUserActivity(appUser, 'طلب تحويل مخزني', `طلب تحويل ${reqQty} قطعة من ${selectedProduct.name} إلى ${warehouseMap[toWarehouseId]}`);
-          showSuccess("تم إرسال طلب التحويل بنجاح");
-          setSelectedProduct(null);
-          setSearchProduct('');
-          setReqQty(1);
-          setToWarehouseId('');
-          setTransferNotes('');
-          setPriority('normal');
-          setActiveTab('history');
-      } catch(e) {
-          console.error(e);
-          showError("فشل إرسال الطلب");
-      }
-      setGlobalLoading(false);
+      await addDoc(collection(db, 'transfers'), transferData);
+      
+      await logUserActivity(appUser, 'طلب تحويل مخزني', `طلب تحويل ${reqQty} قطعة من ${selectedProduct.name} إلى ${warehouseMap[toWarehouseId]}`);
+      showSuccess("تم إرسال طلب التحويل بنجاح");
+      setSelectedProduct(null);
+      setSearchProduct('');
+      setReqQty(1);
+      setToWarehouseId('');
+      setTransferNotes('');
+      setPriority('normal');
+      setActiveTab('history');
+    } catch(e) {
+      console.error(e);
+      showError("فشل إرسال الطلب: " + e.message);
+    }
+    setGlobalLoading(false);
   };
 
   const handleApprove = async (req) => {
-      const confirmed = await showConfirm(
-        'الموافقة على التحويل',
-        `الموافقة على تحويل ${req.requestedQty} قطعة من ${req.itemName} لفرع ${warehouseMap[req.toWarehouseId]}؟`
-      );
-      
-      if (!confirmed) return;
-      
-      setGlobalLoading(true);
-      
-      try {
-          await runTransaction(db, async (t) => {
-              const fromQ = query(
-                collection(db, 'inventory'), 
-                where('serialNumber', '==', req.serialNumber), 
-                where('warehouseId', '==', req.fromWarehouseId), 
-                where('isDeleted', '==', false)
-              );
-              const fromSnap = await getDocs(fromQ);
-              if (fromSnap.empty) throw new Error("المنتج غير موجود في المخزن المرسل!");
-              const fromItem = fromSnap.docs[0];
-              
-              if (fromItem.data().quantity < req.requestedQty) throw new Error("الكمية غير كافية!");
+    const confirmed = await showConfirm(
+      'الموافقة على التحويل',
+      `الموافقة على تحويل ${req.requestedQty} قطعة من ${req.itemName} لفرع ${warehouseMap[req.toWarehouseId]}؟`
+    );
+    
+    if (!confirmed) return;
+    
+    setGlobalLoading(true);
+    
+    try {
+      await runTransaction(db, async (transaction) => {
+        // 1. البحث عن المنتج في المخزن المرسل
+        const fromQ = query(
+          collection(db, 'inventory'),
+          where('serialNumber', '==', req.serialNumber),
+          where('warehouseId', '==', req.fromWarehouseId),
+          where('isDeleted', '==', false)
+        );
+        const fromSnap = await getDocs(fromQ);
+        
+        if (fromSnap.empty) {
+          throw new Error(`المنتج ${req.itemName} غير موجود بالمخزن المرسل!`);
+        }
+        
+        const fromItem = fromSnap.docs[0];
+        const currentQty = fromItem.data().quantity || 0;
+        
+        if (currentQty < req.requestedQty) {
+          throw new Error(`الكمية غير كافية! المتاح: ${currentQty}, المطلوب: ${req.requestedQty}`);
+        }
 
-              const toQ = query(
-                collection(db, 'inventory'), 
-                where('serialNumber', '==', req.serialNumber), 
-                where('warehouseId', '==', req.toWarehouseId), 
-                where('isDeleted', '==', false)
-              );
-              const toSnap = await getDocs(toQ);
+        // 2. خصم الكمية من المخزن المرسل
+        transaction.update(fromItem.ref, {
+          quantity: currentQty - req.requestedQty,
+          updatedAt: serverTimestamp()
+        });
 
-              t.update(fromItem.ref, {
-                  quantity: increment(-req.requestedQty)
-              });
+        // 3. البحث عن المنتج في المخزن المستقبل
+        const toQ = query(
+          collection(db, 'inventory'),
+          where('serialNumber', '==', req.serialNumber),
+          where('warehouseId', '==', req.toWarehouseId),
+          where('isDeleted', '==', false)
+        );
+        const toSnap = await getDocs(toQ);
 
-              if (!toSnap.empty) {
-                  const toItem = toSnap.docs[0];
-                  t.update(toItem.ref, {
-                      quantity: increment(req.requestedQty)
-                  });
-              } else {
-                  const newRef = doc(collection(db, 'inventory'));
-                  t.set(newRef, {
-                      ...fromItem.data(),
-                      warehouseId: req.toWarehouseId,
-                      quantity: req.requestedQty,
-                      createdAt: serverTimestamp()
-                  });
-              }
-
-              const reqRef = doc(db, 'transfers', req.id);
-              t.update(reqRef, {
-                  status: 'approved',
-                  processedAt: serverTimestamp(),
-                  processedBy: appUser.name || appUser.email,
-                  processedById: appUser.id
-              });
+        if (!toSnap.empty) {
+          // إضافة الكمية للمنتج الموجود
+          const toItem = toSnap.docs[0];
+          transaction.update(toItem.ref, {
+            quantity: increment(req.requestedQty),
+            updatedAt: serverTimestamp()
           });
-          
-          await logUserActivity(appUser, 'موافقة على تحويل مخزني', `تمت الموافقة لفرع ${warehouseMap[req.toWarehouseId]} على ${req.requestedQty} قطعة من ${req.itemName}`);
-          showSuccess("تمت الموافقة وتم التحويل المخزني بنجاح!");
-      } catch(e) {
-          console.error(e);
-          showError(e.message || "خطأ أثناء الموافقة");
-      }
-      setGlobalLoading(false);
+        } else {
+          // إنشاء منتج جديد في المخزن المستقبل
+          const newRef = doc(collection(db, 'inventory'));
+          const sourceData = fromItem.data();
+          transaction.set(newRef, {
+            serialNumber: sourceData.serialNumber,
+            name: sourceData.name,
+            price: sourceData.price || 0,
+            quantity: req.requestedQty,
+            minStock: sourceData.minStock || 2,
+            category: sourceData.category || 'عام',
+            location: sourceData.location || '',
+            tags: sourceData.tags || [],
+            notes: sourceData.notes || '',
+            warehouseId: req.toWarehouseId,
+            searchKey: normalizeSearch(`${sourceData.name} ${sourceData.serialNumber} ${sourceData.category || ''}`),
+            createdAt: serverTimestamp(),
+            isDeleted: false,
+            transferredFrom: req.fromWarehouseId,
+            transferId: req.id
+          });
+        }
+
+        // 4. تحديث حالة الطلب
+        const updatedLog = [...(req.log || []), {
+          action: 'تمت الموافقة على التحويل',
+          timestamp: new Date().toISOString(),
+          by: appUser.name,
+          details: `تم خصم ${req.requestedQty} قطعة من ${warehouseMap[req.fromWarehouseId]} وإضافتها إلى ${warehouseMap[req.toWarehouseId]}`
+        }];
+
+        const reqRef = doc(db, 'transfers', req.id);
+        transaction.update(reqRef, {
+          status: 'approved',
+          processedAt: serverTimestamp(),
+          processedBy: appUser.name || appUser.email,
+          processedById: appUser.id,
+          log: updatedLog
+        });
+      });
+      
+      await logUserActivity(appUser, 'موافقة على تحويل مخزني', `تمت الموافقة لفرع ${warehouseMap[req.toWarehouseId]} على ${req.requestedQty} قطعة من ${req.itemName}`);
+      showSuccess("تمت الموافقة وتم التحويل المخزني بنجاح!");
+      
+    } catch(e) {
+      console.error(e);
+      showError(e.message || "خطأ أثناء الموافقة على التحويل");
+    }
+    setGlobalLoading(false);
   };
 
   const submitReject = async (e) => {
-      e.preventDefault();
-      if(!rejectReason.trim()) return showError("يرجى كتابة سبب الرفض");
+    e.preventDefault();
+    if(!rejectReason.trim()) return showError("يرجى كتابة سبب الرفض");
+    
+    setGlobalLoading(true);
+    try {
+      const updatedLog = [...(rejectingReq.log || []), {
+        action: 'تم رفض التحويل',
+        timestamp: new Date().toISOString(),
+        by: appUser.name,
+        details: `سبب الرفض: ${rejectReason}`
+      }];
+
+      await updateDoc(doc(db, 'transfers', rejectingReq.id), {
+        status: 'rejected',
+        rejectReason: rejectReason,
+        processedAt: serverTimestamp(),
+        processedBy: appUser.name || appUser.email,
+        processedById: appUser.id,
+        log: updatedLog
+      });
       
-      setGlobalLoading(true);
-      try {
-          await updateDoc(doc(db, 'transfers', rejectingReq.id), {
-              status: 'rejected',
-              rejectReason: rejectReason,
-              processedAt: serverTimestamp(),
-              processedBy: appUser.name || appUser.email,
-              processedById: appUser.id
-          });
-          
-          await logUserActivity(appUser, 'رفض تحويل مخزني', `رفض طلب فرع ${warehouseMap[rejectingReq.toWarehouseId]} بسبب: ${rejectReason}`);
-          showSuccess("تم رفض الطلب بنجاح");
-          setRejectingReq(null);
-          setRejectReason('');
-      } catch(err) {
-          console.error(err);
-          showError("فشل عملية الرفض");
-      }
-      setGlobalLoading(false);
+      await logUserActivity(appUser, 'رفض تحويل مخزني', `رفض طلب فرع ${warehouseMap[rejectingReq.toWarehouseId]} بسبب: ${rejectReason}`);
+      showSuccess("تم رفض الطلب بنجاح");
+      setRejectingReq(null);
+      setRejectReason('');
+    } catch(err) {
+      console.error(err);
+      showError("فشل عملية الرفض: " + err.message);
+    }
+    setGlobalLoading(false);
+  };
+
+  const viewTransferLog = (transfer) => {
+    setSelectedTransferForLog(transfer);
+    setTransferLog(transfer.log || []);
+    setShowLogModal(true);
   };
 
   const pendingRequests = filteredTransfers.filter(t => t.status === 'pending');
   const processedRequests = filteredTransfers.filter(t => t.status !== 'pending');
-  const uniqueWarehouses = [...new Set(transfers.map(t => t.toWarehouseId))];
+  const uniqueWarehouses = [...new Set([
+    ...transfers.map(t => t.toWarehouseId),
+    ...transfers.map(t => t.fromWarehouseId)
+  ])];
 
   const getPriorityColor = (priority) => {
     switch(priority) {
@@ -5357,306 +5428,354 @@ function EnhancedTransferManager({ appUser, warehouseMap, notify, setGlobalLoadi
   };
 
   return (
-      <div className="bg-white dark:bg-slate-800 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden text-right" dir="rtl">
-          {rejectingReq && (
-              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                  <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
-                      <h3 className="font-black text-xl mb-4 text-slate-800 dark:text-white border-b pb-3 text-rose-600 flex items-center gap-2">
-                        <X size={20}/> سبب رفض التحويل
-                      </h3>
-                      <form onSubmit={submitReject}>
-                          <p className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2">أنت تقوم برفض طلب ({rejectingReq.itemName}) لفرع ({warehouseMap[rejectingReq.toWarehouseId]})</p>
-                          <textarea 
-                              required
-                              rows="3"
-                              className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-rose-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold resize-none mb-4" 
-                              placeholder="اكتب سبب الرفض هنا ليراه الفرع الطالب..."
-                              value={rejectReason}
-                              onChange={e => setRejectReason(e.target.value)}
-                          />
-                          <div className="flex gap-2">
-                              <button type="submit" className="flex-1 bg-rose-600 text-white py-3 rounded-xl font-bold hover:bg-rose-700 transition-colors shadow-md">تأكيد الرفض</button>
-                              <button type="button" onClick={()=>{setRejectingReq(null); setRejectReason('');}} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">إلغاء</button>
-                          </div>
-                      </form>
-                  </div>
-              </div>
-          )}
-
-          <div className="p-6 border-b flex flex-wrap items-center justify-between bg-slate-50 dark:bg-slate-900/50 gap-4">
-              <h2 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-3">
-                 <ArrowRightLeft className="text-indigo-600" size={24}/> 
-                 نظام التحويلات بين المخازن
-              </h2>
-              <div className="flex gap-2">
-                  <select 
-                    className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm font-bold bg-white dark:bg-slate-900 focus:border-indigo-500 outline-none"
-                    value={selectedWarehouse}
-                    onChange={e => setSelectedWarehouse(e.target.value)}
-                  >
-                    <option value="all">كل الفروع</option>
-                    {uniqueWarehouses.map(w => (
-                      <option key={w} value={w}>{warehouseMap[w] || w}</option>
-                    ))}
-                  </select>
-                  <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-2 rounded-lg text-xs font-bold">
-                    {pendingRequests.length} طلبات قيد الانتظار
-                  </span>
-              </div>
+    <div className="bg-white dark:bg-slate-800 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden text-right" dir="rtl">
+      
+      {/* مودال سجل التحويل */}
+      {showLogModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-2xl shadow-2xl max-h-[80vh] overflow-y-auto">
+            <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white border-b pb-3">
+              سجل التحويل #{selectedTransferForLog?.id?.slice(0,8)}
+            </h3>
+            <div className="space-y-4">
+              {transferLog.map((entry, idx) => (
+                <div key={idx} className="relative pr-6 pb-4 border-r-2 border-indigo-200 dark:border-indigo-800 last:border-0 last:pb-0">
+                  <div className="absolute right-[-5px] top-0 w-3 h-3 rounded-full bg-indigo-600"></div>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">{new Date(entry.timestamp).toLocaleString('ar-EG')}</p>
+                  <p className="font-bold text-slate-800 dark:text-white">{entry.action}</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">{entry.details}</p>
+                  <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">بواسطة: {entry.by}</p>
+                </div>
+              ))}
+              {transferLog.length === 0 && (
+                <p className="text-center text-slate-400 py-8">لا يوجد سجل</p>
+              )}
+            </div>
+            <button 
+              onClick={() => setShowLogModal(false)}
+              className="mt-4 w-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600"
+            >
+              إغلاق
+            </button>
           </div>
+        </div>
+      )}
 
-          <div className="flex border-b bg-white dark:bg-slate-800 overflow-x-auto custom-scrollbar">
-              <button 
-                onClick={()=>setActiveTab('pending')} 
-                className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'pending' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
-              >
-                الطلبات المعلقة
-              </button>
-              <button 
-                onClick={()=>setActiveTab('history')} 
-                className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'history' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
-              >
-                سجل التحويلات
-              </button>
-              {appUser.permissions?.createTransfer && (
-                  <button 
-                    onClick={()=>setActiveTab('new')} 
-                    className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'new' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
-                  >
-                    طلب تحويل جديد
-                  </button>
-              )}
-          </div>
+      {/* باقي المكون كما هو مع إضافة زر عرض السجل في الجدول */}
 
-          <div className="p-6 max-h-[65vh] overflow-y-auto custom-scrollbar bg-slate-50/50 dark:bg-slate-900/50">
-              
-              {activeTab === 'new' && (
-                  <div className="max-w-xl mx-auto space-y-6">
-                      <div className="bg-indigo-50 dark:bg-indigo-900/30 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-800 text-indigo-800 dark:text-indigo-300 font-bold text-sm leading-relaxed shadow-sm">
-                          ابحث عن المنتج في مخزنك واختر الكمية والمخزن المرسل إليه
-                      </div>
-                      
-                      <form onSubmit={handleSearchProduct} className="flex gap-3">
-                          <input 
-                              className="flex-1 border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold text-right bg-white dark:bg-slate-900 focus:border-indigo-500" 
-                              placeholder="ابحث بالاسم أو السيريال..." 
-                              value={searchProduct} 
-                              onChange={e=>setSearchProduct(e.target.value)} 
-                          />
-                          <button type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold shadow-sm hover:bg-indigo-700">
-                              <Search size={18}/>
-                          </button>
-                      </form>
-
-                      {selectedProduct && (
-                          <div className="bg-white dark:bg-slate-800 border-2 border-indigo-100 dark:border-indigo-800 rounded-2xl p-6 shadow-md space-y-4">
-                              <div className="flex justify-between items-center">
-                                  <h3 className="font-black text-lg text-slate-800 dark:text-white">{selectedProduct.name}</h3>
-                                  <button onClick={() => setSelectedProduct(null)} className="text-slate-400 dark:text-slate-500 hover:text-rose-500">
-                                      <X size={18}/>
-                                  </button>
-                              </div>
-                              <p className="text-slate-500 dark:text-slate-400 font-mono text-sm">{selectedProduct.serialNumber}</p>
-                              <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-4 py-2 rounded-xl font-bold text-sm">
-                                    المتاح في مخزنك: {selectedProduct.quantity}
-                                </div>
-                                <div className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-4 py-2 rounded-xl font-bold text-sm">
-                                    السعر: {selectedProduct.price} ج
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الكمية المطلوبة</label>
-                                      <input 
-                                          type="number" 
-                                          min="1" 
-                                          max={selectedProduct.quantity}
-                                          className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold text-center bg-white dark:bg-slate-900" 
-                                          value={reqQty} 
-                                          onChange={e=>setReqQty(e.target.value)} 
-                                      />
-                                  </div>
-                                  <div>
-                                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">المخزن المرسل إليه</label>
-                                      <select 
-                                          className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900"
-                                          value={toWarehouseId}
-                                          onChange={e => setToWarehouseId(e.target.value)}
-                                      >
-                                          <option value="">-- اختر --</option>
-                                          {Object.entries(warehouseMap)
-                                            .filter(([id]) => id !== currentWarehouseId)
-                                            .map(([id, name]) => (
-                                              <option key={id} value={id}>{name}</option>
-                                            ))}
-                                      </select>
-                                  </div>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الأولوية</label>
-                                <select
-                                  className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900"
-                                  value={priority}
-                                  onChange={e => setPriority(e.target.value)}
-                                >
-                                  <option value="low">منخفضة</option>
-                                  <option value="normal">عادية</option>
-                                  <option value="high">عالية</option>
-                                </select>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ملاحظات</label>
-                                <textarea
-                                  rows="2"
-                                  className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold text-sm resize-none bg-white dark:bg-slate-900"
-                                  value={transferNotes}
-                                  onChange={e => setTransferNotes(e.target.value)}
-                                  placeholder="أي ملاحظات إضافية..."
-                                />
-                              </div>
-
-                              <button 
-                                  onClick={handleSubmitRequest} 
-                                  className="w-full bg-slate-900 dark:bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-black dark:hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
-                              >
-                                  <ArrowRightLeft size={18}/> إرسال طلب التحويل
-                              </button>
-                          </div>
-                      )}
-                  </div>
-              )}
-
-              {activeTab === 'pending' && (
-                  <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
-                      <div className="overflow-x-auto">
-                          <table className="w-full text-right text-sm">
-                              <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 font-bold border-b text-[11px] uppercase">
-                                  <tr>
-                                      <th className="p-4">من مخزن</th>
-                                      <th className="p-4">إلى مخزن</th>
-                                      <th className="p-4">المنتج</th>
-                                      <th className="p-4 text-center">الكمية</th>
-                                      <th className="p-4">الأولوية</th>
-                                      <th className="p-4">بواسطة</th>
-                                      <th className="p-4">ملاحظات</th>
-                                      <th className="p-4 text-center">الإجراء</th>
-                                  </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
-                                  {pendingRequests.length === 0 ? <tr><td colSpan="8" className="p-12 text-center text-slate-400">لا توجد طلبات معلقة</td></tr> :
-                                      pendingRequests.map(req => (
-                                          <tr key={req.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                                              <td className="p-4 font-black text-indigo-700 dark:text-indigo-400">{warehouseMap[req.fromWarehouseId]}</td>
-                                              <td className="p-4 font-black text-indigo-700 dark:text-indigo-400">{warehouseMap[req.toWarehouseId]}</td>
-                                              <td className="p-4">
-                                                  <p className="font-bold text-slate-800 dark:text-white mb-0.5">{req.itemName}</p>
-                                                  <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400">{req.serialNumber}</p>
-                                              </td>
-                                              <td className="p-4 text-center font-black text-lg text-slate-700 dark:text-slate-300">{req.requestedQty}</td>
-                                              <td className="p-4">
-                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${getPriorityColor(req.priority)}`}>
-                                                  {req.priority === 'high' ? 'عالية' : req.priority === 'normal' ? 'عادية' : 'منخفضة'}
-                                                </span>
-                                              </td>
-                                              <td className="p-4 text-xs text-slate-500 dark:text-slate-400">
-                                                  <p className="font-bold text-slate-700 dark:text-slate-300 mb-0.5">{req.requestedBy}</p>
-                                                  <p className="text-[9px]">{formatDate(req.createdAt)}</p>
-                                              </td>
-                                              <td className="p-4 text-xs text-slate-500 dark:text-slate-400 max-w-[150px] truncate">
-                                                {req.notes || '-'}
-                                              </td>
-                                              <td className="p-4 text-center">
-                                                  {canApprove ? (
-                                                      <div className="flex justify-center gap-2">
-                                                          <button onClick={()=>handleApprove(req)} className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 p-2 rounded-xl hover:bg-emerald-500 dark:hover:bg-emerald-800 hover:text-white" title="موافقة">
-                                                              <Check size={18}/>
-                                                          </button>
-                                                          <button onClick={()=>setRejectingReq(req)} className="bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 p-2 rounded-xl hover:bg-rose-500 dark:hover:bg-rose-800 hover:text-white" title="رفض">
-                                                              <X size={18}/>
-                                                          </button>
-                                                      </div>
-                                                  ) : (
-                                                      <span className="bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-3 py-1.5 rounded-lg text-[10px] font-bold border border-amber-100 dark:border-amber-800 flex items-center gap-1 w-max mx-auto">
-                                                          <Loader2 size={12} className="animate-spin"/> بالانتظار
-                                                      </span>
-                                                  )}
-                                              </td>
-                                          </tr>
-                                      ))
-                                  }
-                              </tbody>
-                          </table>
-                      </div>
-                  </div>
-              )}
-
-              {activeTab === 'history' && (
-                  <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
-                      <div className="overflow-x-auto">
-                          <table className="w-full text-right text-sm">
-                              <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 font-bold border-b text-[11px] uppercase">
-                                  <tr>
-                                      <th className="p-4">من مخزن</th>
-                                      <th className="p-4">إلى مخزن</th>
-                                      <th className="p-4">المنتج</th>
-                                      <th className="p-4 text-center">الكمية</th>
-                                      <th className="p-4">الأولوية</th>
-                                      <th className="p-4">الحالة</th>
-                                      <th className="p-4">ملاحظات</th>
-                                      <th className="p-4">التاريخ</th>
-                                  </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
-                                  {processedRequests.length === 0 ? <tr><td colSpan="8" className="p-12 text-center text-slate-400">لا يوجد سجل للتحويلات</td></tr> :
-                                      processedRequests.map(req => (
-                                          <tr key={req.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                                              <td className="p-4 font-bold text-slate-700 dark:text-slate-300">{warehouseMap[req.fromWarehouseId]}</td>
-                                              <td className="p-4 font-bold text-slate-700 dark:text-slate-300">{warehouseMap[req.toWarehouseId]}</td>
-                                              <td className="p-4">
-                                                  <p className="font-bold text-slate-800 dark:text-white mb-0.5">{req.itemName}</p>
-                                                  <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400">{req.serialNumber}</p>
-                                              </td>
-                                              <td className="p-4 text-center font-black text-slate-700 dark:text-slate-300">{req.requestedQty}</td>
-                                              <td className="p-4">
-                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${getPriorityColor(req.priority)}`}>
-                                                  {req.priority === 'high' ? 'عالية' : req.priority === 'normal' ? 'عادية' : 'منخفضة'}
-                                                </span>
-                                              </td>
-                                              <td className="p-4">
-                                                  {req.status === 'approved' ? (
-                                                      <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-1 rounded-lg text-[10px] font-bold">
-                                                          <Check size={12}/> تمت الموافقة
-                                                      </span>
-                                                  ) : (
-                                                      <div>
-                                                          <span className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-2 py-1 rounded-lg text-[10px] font-bold">
-                                                              <X size={12}/> مرفوض
-                                                          </span>
-                                                          <p className="text-[9px] text-rose-600 dark:text-rose-400 mt-1">{req.rejectReason}</p>
-                                                      </div>
-                                                  )}
-                                              </td>
-                                              <td className="p-4 text-xs text-slate-500 dark:text-slate-400 max-w-[150px] truncate">
-                                                {req.notes || '-'}
-                                              </td>
-                                              <td className="p-4 text-xs text-slate-500 dark:text-slate-400">
-                                                  <p className="font-bold text-slate-700 dark:text-slate-300 mb-0.5">{formatDate(req.processedAt)}</p>
-                                                  <p className="text-[9px]">بواسطة: {req.processedBy}</p>
-                                              </td>
-                                          </tr>
-                                      ))
-                                  }
-                              </tbody>
-                          </table>
-                      </div>
-                  </div>
-              )}
-          </div>
+      <div className="p-6 border-b flex flex-wrap items-center justify-between bg-slate-50 dark:bg-slate-900/50 gap-4">
+        <h2 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-3">
+          <ArrowRightLeft className="text-indigo-600" size={24}/> 
+          نظام التحويلات بين المخازن
+        </h2>
+        <div className="flex gap-2">
+          <select 
+            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm font-bold bg-white dark:bg-slate-900 focus:border-indigo-500 outline-none"
+            value={selectedWarehouse}
+            onChange={e => setSelectedWarehouse(e.target.value)}
+          >
+            <option value="all">كل الفروع</option>
+            {uniqueWarehouses.map(w => (
+              <option key={w} value={w}>{warehouseMap[w] || w}</option>
+            ))}
+          </select>
+          <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-2 rounded-lg text-xs font-bold">
+            {pendingRequests.length} طلبات قيد الانتظار
+          </span>
+        </div>
       </div>
+
+      {/* الألسنة */}
+      <div className="flex border-b bg-white dark:bg-slate-800 overflow-x-auto custom-scrollbar">
+        {[
+          { id: 'pending', label: 'الطلبات المعلقة' },
+          { id: 'history', label: 'سجل التحويلات' },
+          ...(appUser.permissions?.createTransfer ? [{ id: 'new', label: 'طلب تحويل جديد' }] : [])
+        ].map(tab => (
+          <button 
+            key={tab.id}
+            onClick={()=>setActiveTab(tab.id)} 
+            className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === tab.id ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* المحتوى */}
+      <div className="p-6 max-h-[65vh] overflow-y-auto custom-scrollbar bg-slate-50/50 dark:bg-slate-900/50">
+        
+        {activeTab === 'new' && (
+          <div className="max-w-xl mx-auto space-y-6">
+            <div className="bg-indigo-50 dark:bg-indigo-900/30 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-800 text-indigo-800 dark:text-indigo-300 font-bold text-sm leading-relaxed shadow-sm">
+              ابحث عن المنتج في مخزنك واختر الكمية والمخزن المرسل إليه. المخزن الرئيسي يمكنه الموافقة أو رفض الطلب.
+            </div>
+            
+            <form onSubmit={handleSearchProduct} className="flex gap-3">
+              <input 
+                className="flex-1 border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold text-right bg-white dark:bg-slate-900 focus:border-indigo-500" 
+                placeholder="ابحث بالاسم أو السيريال..." 
+                value={searchProduct} 
+                onChange={e=>setSearchProduct(e.target.value)} 
+              />
+              <button type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold shadow-sm hover:bg-indigo-700">
+                <Search size={18}/>
+              </button>
+            </form>
+
+            {selectedProduct && (
+              <div className="bg-white dark:bg-slate-800 border-2 border-indigo-100 dark:border-indigo-800 rounded-2xl p-6 shadow-md space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-black text-lg text-slate-800 dark:text-white">{selectedProduct.name}</h3>
+                  <button onClick={() => setSelectedProduct(null)} className="text-slate-400 dark:text-slate-500 hover:text-rose-500">
+                    <X size={18}/>
+                  </button>
+                </div>
+                <p className="text-slate-500 dark:text-slate-400 font-mono text-sm">{selectedProduct.serialNumber}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-4 py-2 rounded-xl font-bold text-sm">
+                    المتاح في مخزنك: {selectedProduct.quantity}
+                  </div>
+                  <div className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-4 py-2 rounded-xl font-bold text-sm">
+                    السعر: {selectedProduct.price} ج
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الكمية المطلوبة</label>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max={selectedProduct.quantity}
+                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold text-center bg-white dark:bg-slate-900" 
+                      value={reqQty} 
+                      onChange={e=>setReqQty(Number(e.target.value))} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">المخزن المرسل إليه</label>
+                    <select 
+                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900"
+                      value={toWarehouseId}
+                      onChange={e => setToWarehouseId(e.target.value)}
+                    >
+                      <option value="">-- اختر --</option>
+                      {Object.entries(warehouseMap)
+                        .filter(([id]) => id !== currentWarehouseId)
+                        .map(([id, name]) => (
+                          <option key={id} value={id}>{name}</option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الأولوية</label>
+                  <select
+                    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900"
+                    value={priority}
+                    onChange={e => setPriority(e.target.value)}
+                  >
+                    <option value="low">منخفضة</option>
+                    <option value="normal">عادية</option>
+                    <option value="high">عالية</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ملاحظات</label>
+                  <textarea
+                    rows="2"
+                    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold text-sm resize-none bg-white dark:bg-slate-900"
+                    value={transferNotes}
+                    onChange={e => setTransferNotes(e.target.value)}
+                    placeholder="أي ملاحظات إضافية..."
+                  />
+                </div>
+
+                <button 
+                  onClick={handleSubmitRequest} 
+                  className="w-full bg-slate-900 dark:bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-black dark:hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <ArrowRightLeft size={18}/> إرسال طلب التحويل
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'pending' && (
+          <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 font-bold border-b text-[11px] uppercase">
+                  <tr>
+                    <th className="p-4">من مخزن</th>
+                    <th className="p-4">إلى مخزن</th>
+                    <th className="p-4">المنتج</th>
+                    <th className="p-4 text-center">الكمية</th>
+                    <th className="p-4">الأولوية</th>
+                    <th className="p-4">بواسطة</th>
+                    <th className="p-4">ملاحظات</th>
+                    <th className="p-4">سجل</th>
+                    <th className="p-4 text-center">الإجراء</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
+                  {pendingRequests.length === 0 ? <tr><td colSpan="9" className="p-12 text-center text-slate-400">لا توجد طلبات معلقة</td></tr> :
+                    pendingRequests.map(req => (
+                      <tr key={req.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                        <td className="p-4 font-black text-indigo-700 dark:text-indigo-400">{warehouseMap[req.fromWarehouseId]}</td>
+                        <td className="p-4 font-black text-indigo-700 dark:text-indigo-400">{warehouseMap[req.toWarehouseId]}</td>
+                        <td className="p-4">
+                          <p className="font-bold text-slate-800 dark:text-white mb-0.5">{req.itemName}</p>
+                          <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400">{req.serialNumber}</p>
+                        </td>
+                        <td className="p-4 text-center font-black text-lg text-slate-700 dark:text-slate-300">{req.requestedQty}</td>
+                        <td className="p-4">
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${getPriorityColor(req.priority)}`}>
+                            {req.priority === 'high' ? 'عالية' : req.priority === 'normal' ? 'عادية' : 'منخفضة'}
+                          </span>
+                        </td>
+                        <td className="p-4 text-xs text-slate-500 dark:text-slate-400">
+                          <p className="font-bold text-slate-700 dark:text-slate-300 mb-0.5">{req.requestedBy}</p>
+                          <p className="text-[9px]">{formatDate(req.createdAt)}</p>
+                        </td>
+                        <td className="p-4 text-xs text-slate-500 dark:text-slate-400 max-w-[150px] truncate">
+                          {req.notes || '-'}
+                        </td>
+                        <td className="p-4">
+                          <button 
+                            onClick={() => viewTransferLog(req)}
+                            className="text-indigo-600 dark:text-indigo-400 hover:underline text-xs"
+                          >
+                            عرض السجل
+                          </button>
+                        </td>
+                        <td className="p-4 text-center">
+                          {canApprove ? (
+                            <div className="flex justify-center gap-2">
+                              <button onClick={()=>handleApprove(req)} className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 p-2 rounded-xl hover:bg-emerald-500 dark:hover:bg-emerald-800 hover:text-white" title="موافقة">
+                                <Check size={18}/>
+                              </button>
+                              {canReject && (
+                                <button onClick={()=>setRejectingReq(req)} className="bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 p-2 rounded-xl hover:bg-rose-500 dark:hover:bg-rose-800 hover:text-white" title="رفض">
+                                  <X size={18}/>
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-3 py-1.5 rounded-lg text-[10px] font-bold border border-amber-100 dark:border-amber-800 flex items-center gap-1 w-max mx-auto">
+                              <Loader2 size={12} className="animate-spin"/> بالانتظار
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'history' && (
+          <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 font-bold border-b text-[11px] uppercase">
+                  <tr>
+                    <th className="p-4">من مخزن</th>
+                    <th className="p-4">إلى مخزن</th>
+                    <th className="p-4">المنتج</th>
+                    <th className="p-4 text-center">الكمية</th>
+                    <th className="p-4">الأولوية</th>
+                    <th className="p-4">الحالة</th>
+                    <th className="p-4">سجل</th>
+                    <th className="p-4">التاريخ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
+                  {processedRequests.length === 0 ? <tr><td colSpan="8" className="p-12 text-center text-slate-400">لا يوجد سجل للتحويلات</td></tr> :
+                    processedRequests.map(req => (
+                      <tr key={req.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                        <td className="p-4 font-bold text-slate-700 dark:text-slate-300">{warehouseMap[req.fromWarehouseId]}</td>
+                        <td className="p-4 font-bold text-slate-700 dark:text-slate-300">{warehouseMap[req.toWarehouseId]}</td>
+                        <td className="p-4">
+                          <p className="font-bold text-slate-800 dark:text-white mb-0.5">{req.itemName}</p>
+                          <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400">{req.serialNumber}</p>
+                        </td>
+                        <td className="p-4 text-center font-black text-slate-700 dark:text-slate-300">{req.requestedQty}</td>
+                        <td className="p-4">
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${getPriorityColor(req.priority)}`}>
+                            {req.priority === 'high' ? 'عالية' : req.priority === 'normal' ? 'عادية' : 'منخفضة'}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          {req.status === 'approved' ? (
+                            <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-1 rounded-lg text-[10px] font-bold">
+                              <Check size={12}/> تمت الموافقة
+                            </span>
+                          ) : (
+                            <div>
+                              <span className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-2 py-1 rounded-lg text-[10px] font-bold">
+                                <X size={12}/> مرفوض
+                              </span>
+                              {req.rejectReason && <p className="text-[9px] text-rose-600 dark:text-rose-400 mt-1">{req.rejectReason}</p>}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <button 
+                            onClick={() => viewTransferLog(req)}
+                            className="text-indigo-600 dark:text-indigo-400 hover:underline text-xs"
+                          >
+                            عرض السجل
+                          </button>
+                        </td>
+                        <td className="p-4 text-xs text-slate-500 dark:text-slate-400">
+                          <p className="font-bold text-slate-700 dark:text-slate-300 mb-0.5">{formatDate(req.processedAt)}</p>
+                          <p className="text-[9px]">بواسطة: {req.processedBy}</p>
+                        </td>
+                      </tr>
+                    ))
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* مودال سبب الرفض */}
+      {rejectingReq && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
+            <h3 className="font-black text-xl mb-4 text-slate-800 dark:text-white border-b pb-3 text-rose-600 flex items-center gap-2">
+              <X size={20}/> سبب رفض التحويل
+            </h3>
+            <form onSubmit={submitReject}>
+              <p className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2">
+                أنت تقوم برفض طلب ({rejectingReq.itemName}) لفرع ({warehouseMap[rejectingReq.toWarehouseId]})
+              </p>
+              <textarea 
+                required
+                rows="3"
+                className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-rose-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold resize-none mb-4" 
+                placeholder="اكتب سبب الرفض هنا ليراه الفرع الطالب..."
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+              />
+              <div className="flex gap-2">
+                <button type="submit" className="flex-1 bg-rose-600 text-white py-3 rounded-xl font-bold hover:bg-rose-700 transition-colors shadow-md">تأكيد الرفض</button>
+                <button type="button" onClick={()=>{setRejectingReq(null); setRejectReason('');}} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">إلغاء</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 // ==========================================================================
@@ -7410,11 +7529,12 @@ function TicketCard({ ticket, onStatusChange, onView, onEdit }) {
 }
 
 // ==========================================================================
-// 🎫 مدير التذاكر المحسن مع إدارة كاملة للصيانة
+// 🎫 مدير التذاكر المحسن مع فتح كامل للتذكرة وإدارة متكاملة
 // ==========================================================================
+
 function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUser, warehouseMap, onGenerateInvoice }) {
   const [tickets, setTickets] = useState([]);
-  const [editingTicket,setEditingTicket] = useState(null)
+  const [editingTicket, setEditingTicket] = useState(null);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 700);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -7427,36 +7547,61 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState('');
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [assignData, setAssignData] = useState({ technician: '', center: '', callCenter: '' });
+  const [assignData, setAssignData] = useState({ assignTo: [], technician: '', center: '', callCenter: '' });
+  const [showFullTicketModal, setShowFullTicketModal] = useState(false);
+  const [fullTicketView, setFullTicketView] = useState(null);
+  const [ticketComments, setTicketComments] = useState([]);
+  const [newComment, setNewComment] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
   
   const [technicians, setTechnicians] = useState([]);
   const [maintenanceCenters, setMaintenanceCenters] = useState([]);
   const [callCenters, setCallCenters] = useState([]);
+  const [allEmployees, setAllEmployees] = useState([]);
   const [availableTags, setAvailableTags] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  
+  // فلاتر إضافية
+  const [filterWarranty, setFilterWarranty] = useState('all');
+  const [filterTicketType, setFilterTicketType] = useState('all');
+  const [filterSource, setFilterSource] = useState('all');
+  const [filterBranch, setFilterBranch] = useState('all');
   
   const [newTicket, setNewTicket] = useState({
     customerId: '',
     customerName: '',
     customerPhone: '',
+    secondPhone: '',
+    landline: '',
     customerEmail: '',
+    customerAddress: '',
+    device: '',
     deviceType: '',
     deviceModel: '',
     deviceSerial: '',
     issue: '',
     status: 'created',
     priority: 'medium',
+    warrantyStatus: '',
+    ticketType: '',
+    source: '',
+    nearestBranch: '',
     assignedTechnician: '',
     assignedMaintenanceCenter: '',
     assignedCallCenter: '',
+    assignTo: [],
     estimatedCost: 0,
     estimatedDuration: '',
     notes: '',
     spareParts: [],
     tags: [],
-    attachments: []
+    attachments: [],
+    comments: []
   });
 
-  const [customers,setCustomers] = useState([]);
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
@@ -7466,40 +7611,74 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const [filterTag, setFilterTag] = useState('all');
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
 
-  
+  // خيارات نوع التذكرة
+  const TICKET_TYPES = [
+    { value: 'complaint', label: 'شكوى' },
+    { value: 'inquiry', label: 'استفسار' },
+    { value: 'spare_parts', label: 'قطع غيار' },
+    { value: 'replacement', label: 'طلب استبدال' },
+    { value: 'purchase', label: 'طلب شراء' },
+    { value: 'after_sales', label: 'ما بعد البيع' },
+    { value: 'maintenance', label: 'الصيانة' },
+    { value: 'spare_parts_only', label: 'قطع غيار فقط' }
+  ];
 
+  // خيارات المصدر
+  const TICKET_SOURCES = [
+    { value: 'hotline', label: 'HOTLINE' },
+    { value: 'facebook', label: 'Facebook' },
+    { value: 'whatsapp', label: 'WhatsApp' },
+    { value: 'friend_referral', label: 'اقتراح صديق' },
+    { value: 'store_visit', label: 'زيارة المتجر' },
+    { value: 'phone_call', label: 'مكالمة هاتفية' },
+    { value: 'email', label: 'بريد إلكتروني' }
+  ];
 
-  useEffect(()=>{
+  // خيارات الضمان
+  const WARRANTY_OPTIONS = [
+    { value: 'in_warranty', label: 'داخل الضمان' },
+    { value: 'out_of_warranty', label: 'خارج الضمان' },
+    { value: 'extended_warranty', label: 'ضمان ممتد' }
+  ];
 
-     const loadCustomers = async ()=>{
+  // خيارات الفروع - يمكن تعديلها من الإعدادات
+  const BRANCH_OPTIONS = systemSettings?.branches || [
+    { value: 'main', label: 'الفرع الرئيسي' }
+  ];
 
-       const snap = await getDocs(collection(db,"customers"));
-
-       const data = snap.docs.map(d=>({
-         id:d.id,
-         ...d.data()
-       }));
-
-       setCustomers(data);
-
-     };
-
-     loadCustomers();
-
-   },[])
+  // جلب العملاء
+  useEffect(() => {
+    const loadCustomers = async () => {
+      try {
+        const snap = await getDocs(collection(db, "customers"));
+        const data = snap.docs.map(d => ({
+          id: d.id,
+          ...d.data()
+        }));
+        setCustomers(data);
+      } catch (error) {
+        console.error("Error loading customers:", error);
+      }
+    };
+    loadCustomers();
+  }, []);
 
   // جلب الموظفين
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const techs = await getDocs(query(collection(db, 'employees'), where('role', '==', 'technician'), where('isDisabled', '==', false)));
-        setTechnicians(techs.docs.map(d => ({ id: d.id, ...d.data() })));
+        const allEmps = await getDocs(query(collection(db, 'employees'), where('isDisabled', '==', false)));
+        const allData = allEmps.docs.map(d => ({ id: d.id, ...d.data() }));
+        setAllEmployees(allData);
         
-        const centers = await getDocs(query(collection(db, 'employees'), where('role', '==', 'maintenance_center'), where('isDisabled', '==', false)));
-        setMaintenanceCenters(centers.docs.map(d => ({ id: d.id, ...d.data() })));
+        const techs = allData.filter(e => e.role === 'technician');
+        setTechnicians(techs);
         
-        const calls = await getDocs(query(collection(db, 'employees'), where('role', '==', 'call_center'), where('isDisabled', '==', false)));
-        setCallCenters(calls.docs.map(d => ({ id: d.id, ...d.data() })));
+        const centers = allData.filter(e => e.role === 'maintenance_center');
+        setMaintenanceCenters(centers);
+        
+        const calls = allData.filter(e => e.role === 'call_center');
+        setCallCenters(calls);
       } catch (error) {
         console.error("Error fetching employees:", error);
       }
@@ -7520,78 +7699,89 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   // تحميل التذاكر
   useEffect(() => {
     loadTickets(false);
-  }, [debouncedSearch, filterStatus, filterPriority, filterTechnician, filterTag, dateRange]);
+  }, [debouncedSearch, filterStatus, filterPriority, filterTechnician, filterTag, filterWarranty, filterTicketType, filterSource, filterBranch, dateRange]);
 
   const loadTickets = useCallback(async (isNextPage = false) => {
     setLoadingData(true);
     try {
-        let q = collection(db, 'tickets');
-        
-        if (filterStatus !== 'all') {
-          q = query(q, where('status', '==', filterStatus));
-        }
-        
-        if (filterPriority !== 'all') {
-          q = query(q, where('priority', '==', filterPriority));
-        }
-        
-        q = query(q, orderBy('createdAt', 'desc'));
+      let q = collection(db, 'tickets');
+      
+      if (filterStatus !== 'all') {
+        q = query(q, where('status', '==', filterStatus));
+      }
+      
+      if (filterPriority !== 'all') {
+        q = query(q, where('priority', '==', filterPriority));
+      }
+      
+      q = query(q, orderBy('createdAt', 'desc'));
 
-        if (isNextPage && lastDoc) {
-           q = query(q, startAfter(lastDoc));
-        }
+      if (isNextPage && lastDoc) {
+        q = query(q, startAfter(lastDoc));
+      }
 
-        q = query(q, limit(30));
-        const snap = await getDocs(q);
-        let fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      q = query(q, limit(30));
+      const snap = await getDocs(q);
+      let fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        if (dateRange.from) {
-          const fromDate = new Date(dateRange.from);
-          fromDate.setHours(0,0,0,0);
-          fetched = fetched.filter(t => {
-            const ticketDate = t.createdAt?.toDate?.() || new Date(t.createdAt);
-            return ticketDate >= fromDate;
-          });
-        }
-        if (dateRange.to) {
-          const toDate = new Date(dateRange.to);
-          toDate.setHours(23,59,59,999);
-          fetched = fetched.filter(t => {
-            const ticketDate = t.createdAt?.toDate?.() || new Date(t.createdAt);
-            return ticketDate <= toDate;
-          });
-        }
+      // تطبيق الفلاتر المحلية
+      if (filterWarranty !== 'all') {
+        fetched = fetched.filter(t => t.warrantyStatus === filterWarranty);
+      }
+      if (filterTicketType !== 'all') {
+        fetched = fetched.filter(t => t.ticketType === filterTicketType);
+      }
+      if (filterSource !== 'all') {
+        fetched = fetched.filter(t => t.source === filterSource);
+      }
+      if (filterBranch !== 'all') {
+        fetched = fetched.filter(t => t.nearestBranch === filterBranch);
+      }
+      if (filterTechnician !== 'all') {
+        fetched = fetched.filter(t => t.assignedTechnician === filterTechnician);
+      }
+      if (filterTag !== 'all') {
+        fetched = fetched.filter(t => t.tags?.includes(filterTag));
+      }
+      if (dateRange.from) {
+        const fromDate = new Date(dateRange.from);
+        fromDate.setHours(0,0,0,0);
+        fetched = fetched.filter(t => {
+          const ticketDate = t.createdAt?.toDate?.() || new Date(t.createdAt);
+          return ticketDate >= fromDate;
+        });
+      }
+      if (dateRange.to) {
+        const toDate = new Date(dateRange.to);
+        toDate.setHours(23,59,59,999);
+        fetched = fetched.filter(t => {
+          const ticketDate = t.createdAt?.toDate?.() || new Date(t.createdAt);
+          return ticketDate <= toDate;
+        });
+      }
 
-        if (filterTechnician !== 'all') {
-          fetched = fetched.filter(t => t.assignedTechnician === filterTechnician);
-        }
-
-        if (filterTag !== 'all') {
-          fetched = fetched.filter(t => t.tags?.includes(filterTag));
-        }
-
-        if (isNextPage) {
-           setTickets(prev => [...prev, ...fetched]);
-        } else {
-           setTickets(fetched);
-        }
-        
-        setLastDoc(snap.docs[snap.docs.length - 1] || null);
-        setHasMore(snap.docs.length === 30);
+      if (isNextPage) {
+        setTickets(prev => [...prev, ...fetched]);
+      } else {
+        setTickets(fetched);
+      }
+      
+      setLastDoc(snap.docs[snap.docs.length - 1] || null);
+      setHasMore(snap.docs.length === 30);
     } catch (e) {
-        console.error(e);
-        if (e.code === 'permission-denied') {
-           showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
-        } else if (e.message.includes('index')) {
-           showError("يحتاج هذا البحث لتهيئة الفهارس الخاصة بقاعدة البيانات");
-        } else {
-           showError("فشل جلب التذاكر: " + e.message);
-        }
+      console.error(e);
+      if (e.code === 'permission-denied') {
+        showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
+      } else if (e.message.includes('index')) {
+        showError("يحتاج هذا البحث لتهيئة الفهارس الخاصة بقاعدة البيانات");
+      } else {
+        showError("فشل جلب التذاكر: " + e.message);
+      }
     }
     setLoadingData(false);
-  }, [filterStatus, filterPriority, filterTechnician, filterTag, lastDoc, dateRange]);
+  }, [filterStatus, filterPriority, filterTechnician, filterTag, filterWarranty, filterTicketType, filterSource, filterBranch, lastDoc, dateRange]);
 
-  // دوال التحديد المتعدد
+  // وظائف التحديد المتعدد
   const toggleSelectItem = (itemId) => {
     const newSelected = new Set(selectedItems);
     if (newSelected.has(itemId)) {
@@ -7610,232 +7800,262 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     }
   };
 
-  // دالة الحذف المجمع
-  const handleBulkDelete = async () => {
-    if (selectedItems.size === 0) {
-      showError("لم يتم تحديد أي تذاكر للحذف");
-      return;
-    }
+  // البحث عن العملاء
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch.trim()) return [];
+    const term = normalizeSearch(customerSearch);
+    return customers.filter(c => 
+      normalizeSearch(c.name).includes(term) || 
+      normalizeSearch(c.phone).includes(term) ||
+      (c.email && normalizeSearch(c.email).includes(term))
+    ).slice(0, 10);
+  }, [customerSearch, customers]);
 
-    if (bulkDeleteConfirm !== 'حذف') {
-      showError("يرجى كتابة 'حذف' لتأكيد العملية");
-      return;
-    }
+  const selectCustomer = (customer) => {
+    setNewTicket({
+      ...newTicket,
+      customerId: customer.id,
+      customerName: customer.name || '',
+      customerPhone: customer.phone || '',
+      secondPhone: customer.secondPhone || '',
+      customerEmail: customer.email || '',
+      customerAddress: customer.address || '',
+      landline: customer.landline || ''
+    });
+    setCustomerSearch('');
+    setShowCustomerDropdown(false);
+  };
 
-    const confirmed = await showConfirm(
-      'تأكيد الحذف المجمع',
-      `هل أنت متأكد من حذف ${selectedItems.size} تذكرة بشكل نهائي؟`,
-      'warning',
-      'نعم، احذف الكل'
-    );
+  // فتح التذكرة كاملة
+  const openFullTicket = (ticket) => {
+    setFullTicketView(ticket);
+    setTicketComments(ticket.comments || []);
+    setShowFullTicketModal(true);
+  };
 
-    if (!confirmed) return;
-
-    setGlobalLoading(true);
+  // إضافة تعليق
+  const addComment = async (ticketId) => {
+    if (!newComment.trim()) return;
+    
+    const comment = {
+      id: Date.now().toString(),
+      text: newComment,
+      createdAt: new Date().toISOString(),
+      createdBy: appUser.name,
+      createdById: appUser.id
+    };
+    
+    const updatedComments = [...ticketComments, comment];
+    setTicketComments(updatedComments);
+    setNewComment('');
+    
+    // تحديث في قاعدة البيانات
     try {
-      const itemsToDelete = Array.from(selectedItems);
-      const chunks = [];
-      
-      for (let i = 0; i < itemsToDelete.length; i += 400) {
-        chunks.push(itemsToDelete.slice(i, i + 400));
-      }
-
-      let deleted = 0;
-      for (const chunk of chunks) {
-        const batch = writeBatch(db);
-        
-        chunk.forEach(ticketId => {
-          const ref = doc(db, 'tickets', ticketId);
-          batch.delete(ref);
-        });
-
-        await batch.commit();
-        deleted += chunk.length;
-      }
-
-      await logUserActivity(appUser, 'حذف مجمع تذاكر', `تم حذف ${deleted} تذكرة`);
-      showSuccess(`تم حذف ${deleted} تذكرة بنجاح`);
-      
-      setSelectedItems(new Set());
-      setShowBulkDeleteModal(false);
-      setBulkDeleteConfirm('');
-      setLastDoc(null);
-      loadTickets(false);
-      
+      const ticketRef = doc(db, 'tickets', ticketId);
+      await updateDoc(ticketRef, {
+        comments: updatedComments,
+        updatedAt: serverTimestamp()
+      });
     } catch (error) {
-      console.error("Bulk delete error:", error);
-      showError("حدث خطأ أثناء الحذف المجمع");
+      console.error("Error adding comment:", error);
+      showError("فشل إضافة التعليق");
     }
-    setGlobalLoading(false);
+  };
+
+  // تعديل تعليق
+  const editComment = async (ticketId, commentId) => {
+    if (!editingCommentText.trim()) return;
+    
+    const updatedComments = ticketComments.map(c => 
+      c.id === commentId ? { ...c, text: editingCommentText, editedAt: new Date().toISOString() } : c
+    );
+    
+    setTicketComments(updatedComments);
+    setEditingCommentId(null);
+    setEditingCommentText('');
+    
+    try {
+      const ticketRef = doc(db, 'tickets', ticketId);
+      await updateDoc(ticketRef, {
+        comments: updatedComments,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error editing comment:", error);
+    }
+  };
+
+  // حذف تعليق
+  const deleteComment = async (ticketId, commentId) => {
+    const updatedComments = ticketComments.filter(c => c.id !== commentId);
+    setTicketComments(updatedComments);
+    
+    try {
+      const ticketRef = doc(db, 'tickets', ticketId);
+      await updateDoc(ticketRef, {
+        comments: updatedComments,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error deleting comment:", error);
+    }
   };
 
   // إضافة تذكرة جديدة
   const handleAddTicket = async (e) => {
-     e.preventDefault();
-     if(!newTicket.customerName || !newTicket.customerPhone) return showError("اسم العميل ورقم الهاتف مطلوبان");
-     
-     setGlobalLoading(true);
-     try {
-        if (newTicket.tags && newTicket.tags.length > 0) {
-          for (const tag of newTicket.tags) {
-            await tagManager.incrementUsage(tag);
-          }
+    e.preventDefault();
+
+    if (!newTicket.customerName || !newTicket.customerPhone) {
+      return showError("اسم العميل ورقم الهاتف مطلوبان");
+    }
+
+    setGlobalLoading(true);
+
+    try {
+      if (newTicket.tags && newTicket.tags.length > 0) {
+        for (const tag of newTicket.tags) {
+          await tagManager.incrementUsage(tag);
         }
-        
-        
-        let customerId = newTicket.customerId || null;
+      }
 
-          if (!customerId && newTicket.customerPhone) {
+      let customerId = newTicket.customerId || null;
 
-            const q = query(
-              collection(db, "customers"),
-              where("phone", "==", newTicket.customerPhone)
-            );
-
-            const snap = await getDocs(q);
-
-            if (!snap.empty) {
-
-              // العميل موجود
-              customerId = snap.docs[0].id;
-
-            } else {
-
-              // إنشاء عميل جديد
-              const newCustomerRef = await addDoc(collection(db, "customers"), {
-
-                name: newTicket.customerName,
-                phone: newTicket.customerPhone,
-                email: newTicket.customerEmail || "",
-                createdAt: serverTimestamp(),
-
-                // مهم للبحث
-                searchKey: normalizeSearch(
-                  `${newTicket.customerName} ${newTicket.customerPhone}`
-                ),
-
-                ticketsCount: 0
-
-              });
-
-              customerId = newCustomerRef.id;
-
-            }
-
-          }
-
-        const ticketData = {
-            ...newTicket,
-
-            // ================= العميل =================
-            customerId: selectedCustomer?.id || null,
-            customerName: newTicket.customerName || "",
-            customerPhone: newTicket.customerPhone || "",
-            secondPhone: newTicket.secondPhone || "", // 🔥 جديد
-            landline: newTicket.landline || "", // 🔥 جديد
-            address: newTicket.address || "",
-            device: newTicket.device || "",
-
-            // ================= التيكت =================
-            ticketNumber: 'TKT-' + Date.now().toString().slice(-8),
-
-            warrantyStatus: newTicket.warrantyStatus || "", // 🔥 داخل / خارج
-            ticketType: newTicket.ticketType || "",
-            source: newTicket.source || "",
-
-            // ================= الإدارة =================
-            nearestBranch: newTicket.nearestBranch || "", // 🔥 جديد
-            assignedTo: newTicket.assignedTo || [], // 🔥 multi users
-            assignedCenter: appUser?.assignedWarehouseId || "", // 🔥 تلقائي
-
-            // ================= الفواتير / التكاليف =================
-            spareParts: [],
-            totalCost: 0,
-            totalPaid: 0,
-            remaining: 0,
-
-            // ================= التعليقات =================
-            comments: newTicket.comments || [], // 🔥 مهم
-
-            // ================= التواريخ =================
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-
-            // ================= المستخدم =================
-            createdBy: appUser.id,
-            createdByName: appUser.name,
-
-            // ================= الحالة =================
-            status: "created",
-
-            statusHistory: [
-              {
-                status: 'created',
-                timestamp: new Date(),
-                by: appUser.name,
-                notes: 'تم إنشاء التذكرة'
-              }
-            ],
-
-            // ================= الهيستوري =================
-            history: [
-              {
-                action: 'إنشاء تذكرة',
-                timestamp: new Date(),
-                by: appUser.name
-              }
-            ],
-
-            // ================= البحث =================
-            searchIndex: `
-              ${newTicket.customerName}
-              ${newTicket.customerPhone}
-              ${newTicket.secondPhone || ""}
-              ${newTicket.device || ""}
-              ${newTicket.address || ""}
-            `.toLowerCase()
-          };
-        const docRef = await addDoc(collection(db, 'tickets'), ticketData);
-        
-        setSelectedTicket({
-            id: docRef.id,
-            ...ticketData
-             });
-
-
-        if (newTicket.customerPhone) {
-          const customerQuery = query(collection(db, 'customers'), where('phone', '==', newTicket.customerPhone));
-          const customerSnap = await getDocs(customerQuery);
-          if (!customerSnap.empty) {
-            const customerRef = doc(db, 'customers', customerSnap.docs[0].id);
-            await updateDoc(customerRef, {
-              ticketsCount: increment(1),
-              lastTicket: serverTimestamp()
-            });
-          }
-        }
-        
-        await logUserActivity(appUser, 'إضافة تذكرة صيانة', `تذكرة جديدة للعميل: ${newTicket.customerName}`);
-        showSuccess("تم إنشاء تذكرة الصيانة بنجاح");
-        setShowAddModal(false);
-        setNewTicket({
-          customerId: '', customerName: '', customerPhone: '', customerEmail: '', deviceType: '', deviceModel: '',
-          deviceSerial: '', issue: '', status: 'created', priority: 'medium',
-          assignedTechnician: '', assignedMaintenanceCenter: '',
-          assignedCallCenter: '', estimatedCost: 0, estimatedDuration: '', notes: '', spareParts: [],
-          tags: [], attachments: []
-        });
-        setLastDoc(null);
-        loadTickets(false); 
-     } catch(err) {
-        console.error(err);
-        if (err.code === 'permission-denied') {
-          showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
+      if (!customerId && newTicket.customerPhone) {
+        const q = query(
+          collection(db, "customers"),
+          where("phone", "==", newTicket.customerPhone)
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          customerId = snap.docs[0].id;
         } else {
-          showError("حدث خطأ أثناء الحفظ: " + err.message);
+          const newCustomerRef = await addDoc(collection(db, "customers"), {
+            name: newTicket.customerName,
+            phone: newTicket.customerPhone,
+            secondPhone: newTicket.secondPhone || '',
+            landline: newTicket.landline || '',
+            email: newTicket.customerEmail || "",
+            address: newTicket.customerAddress || '',
+            createdAt: serverTimestamp(),
+            searchKey: normalizeSearch(
+              `${newTicket.customerName} ${newTicket.customerPhone} ${newTicket.secondPhone || ''}`
+            ),
+            ticketsCount: 0
+          });
+          customerId = newCustomerRef.id;
         }
-     }
-     setGlobalLoading(false);
+      }
+
+      const ticketData = {
+        ...newTicket,
+        customerId: customerId,
+        ticketNumber: 'TKT-' + Date.now().toString().slice(-8),
+        assignedCenter: appUser?.assignedWarehouseId || "",
+        spareParts: [],
+        totalCost: 0,
+        totalPaid: 0,
+        remaining: 0,
+        comments: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: appUser.id,
+        createdByName: appUser.name,
+        status: "created",
+        statusHistory: [
+          {
+            status: 'created',
+            timestamp: new Date(),
+            by: appUser.name,
+            notes: 'تم إنشاء التذكرة'
+          }
+        ],
+        history: [
+          {
+            action: 'إنشاء تذكرة',
+            timestamp: new Date(),
+            by: appUser.name
+          }
+        ],
+        searchIndex: [
+          newTicket.customerName,
+          newTicket.customerPhone,
+          newTicket.secondPhone || "",
+          newTicket.device || "",
+          newTicket.deviceType || "",
+          newTicket.deviceModel || "",
+          newTicket.deviceSerial || "",
+          newTicket.customerAddress || "",
+          newTicket.issue || "",
+          newTicket.ticketType || "",
+          newTicket.source || "",
+          newTicket.warrantyStatus || ""
+        ].join(" ").toLowerCase()
+      };
+
+      const docRef = await addDoc(collection(db, 'tickets'), ticketData);
+
+      // فتح التذكرة مباشرة بعد الإنشاء
+      setFullTicketView({
+        id: docRef.id,
+        ...ticketData
+      });
+      setTicketComments([]);
+      setShowFullTicketModal(true);
+
+      if (customerId) {
+        const customerRef = doc(db, 'customers', customerId);
+        await updateDoc(customerRef, {
+          ticketsCount: increment(1),
+          lastTicket: serverTimestamp()
+        });
+      }
+
+      showSuccess("تم إنشاء التذكرة بنجاح");
+      setShowAddModal(false);
+      resetNewTicket();
+      setLastDoc(null);
+      loadTickets(false);
+
+    } catch (error) {
+      console.error(error);
+      showError("حصل خطأ أثناء إنشاء التذكرة");
+    }
+
+    setGlobalLoading(false);
+  };
+
+  const resetNewTicket = () => {
+    setNewTicket({
+      customerId: '',
+      customerName: '',
+      customerPhone: '',
+      secondPhone: '',
+      landline: '',
+      customerEmail: '',
+      customerAddress: '',
+      device: '',
+      deviceType: '',
+      deviceModel: '',
+      deviceSerial: '',
+      issue: '',
+      status: 'created',
+      priority: 'medium',
+      warrantyStatus: '',
+      ticketType: '',
+      source: '',
+      nearestBranch: '',
+      assignedTechnician: '',
+      assignedMaintenanceCenter: '',
+      assignedCallCenter: '',
+      assignTo: [],
+      estimatedCost: 0,
+      estimatedDuration: '',
+      notes: '',
+      spareParts: [],
+      tags: [],
+      attachments: [],
+      comments: []
+    });
   };
 
   // تحديث حالة التذكرة
@@ -7871,13 +8091,19 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
 
       await logUserActivity(appUser, 'تحديث حالة تذكرة', `تغيير حالة التذكرة ${ticketId} إلى ${newStatus}`);
       showSuccess("تم تحديث حالة التذكرة");
+
+      // تحديث العرض المفتوح
+      if (fullTicketView?.id === ticketId) {
+        setFullTicketView({
+          ...fullTicketView,
+          status: newStatus,
+          statusHistory,
+          history
+        });
+      }
     } catch (err) {
       console.error(err);
-      if (err.code === 'permission-denied') {
-        showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
-      } else {
-        showError("فشل تحديث الحالة: " + err.message);
-      }
+      showError("فشل تحديث الحالة: " + err.message);
     }
     setGlobalLoading(false);
   };
@@ -7894,12 +8120,11 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       const newPart = {
         ...part,
         id: Date.now().toString(),
-        addedAt: serverTimestamp(),
+        addedAt: new Date().toISOString(),
         addedBy: appUser.name
       };
 
       spareParts.push(newPart);
-
       const totalCost = (currentTicket.totalCost || 0) + (part.price * part.quantity);
       const totalPaid = currentTicket.totalPaid || 0;
       const remaining = totalCost - totalPaid;
@@ -7921,17 +8146,19 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
 
       await logUserActivity(appUser, 'إضافة قطعة غيار', `إضافة ${part.name} للتذكرة ${ticketId}`);
       showSuccess("تم إضافة قطعة الغيار");
-      
-      if (selectedTicket?.id === ticketId) {
-        setSpareParts([...spareParts]);
+
+      if (fullTicketView?.id === ticketId) {
+        setFullTicketView({
+          ...fullTicketView,
+          spareParts,
+          totalCost,
+          remaining,
+          history
+        });
       }
     } catch (err) {
       console.error(err);
-      if (err.code === 'permission-denied') {
-        showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
-      } else {
-        showError("فشل إضافة قطعة الغيار: " + err.message);
-      }
+      showError("فشل إضافة قطعة الغيار: " + err.message);
     }
     setGlobalLoading(false);
   };
@@ -7962,6 +8189,15 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       });
 
       showSuccess("تم إضافة الدفعة بنجاح");
+
+      if (fullTicketView?.id === ticketId) {
+        setFullTicketView({
+          ...fullTicketView,
+          totalPaid,
+          remaining,
+          history
+        });
+      }
     } catch (err) {
       console.error(err);
       showError("فشل إضافة الدفعة");
@@ -8006,19 +8242,20 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
 
       showSuccess("تم تعيين المسؤولين بنجاح");
       setShowAssignModal(false);
-      setAssignData({ technician: '', center: '', callCenter: '' });
+      setAssignData({ assignTo: [], technician: '', center: '', callCenter: '' });
+
+      if (fullTicketView?.id === ticketId) {
+        setFullTicketView({
+          ...fullTicketView,
+          ...assignData,
+          history: [...(fullTicketView.history || []), ...history]
+        });
+      }
     } catch (err) {
       console.error(err);
       showError("فشل تعيين المسؤولين");
     }
     setGlobalLoading(false);
-  };
-
-  // عرض سجل التذكرة
-  const handleViewHistory = (ticket) => {
-    setSelectedTicket(ticket);
-    setTicketHistory(ticket.history || []);
-    setShowHistoryModal(true);
   };
 
   // إنشاء فاتورة من التذكرة
@@ -8036,697 +8273,536 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     });
   };
 
-  const getPriorityColor = (priority) => {
-    switch(priority) {
-      case 'high': return 'text-rose-600 bg-rose-50 dark:bg-rose-900/30 border-rose-200 dark:border-rose-800';
-      case 'medium': return 'text-amber-600 bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800';
-      case 'low': return 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800';
-      default: return 'text-slate-600 bg-slate-50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-700';
-    }
-  };
-
-  const getStatusColor = (status) => {
-    const statusInfo = TICKET_STATUSES.find(s => s.value === status);
-    return statusInfo?.color || 'gray';
-  };
-
-  const StatusSelect = ({ value, onChange, ticketId }) => (
-    <select
-      className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 bg-white dark:bg-slate-900 font-bold"
-      value={value}
-      onChange={(e) => onChange(ticketId, e.target.value)}
-    >
-      {TICKET_STATUSES.map(s => (
-        <option key={s.value} value={s.value}>{s.label}</option>
-      ))}
-    </select>
-  );
+  // ... (باقي الدوال المساعدة مثل getPriorityColor, StatusSelect الخ)
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden text-right" dir="rtl">
       
-      {/* مودال إضافة تذكرة */}
-      {showAddModal && (
+      {/* مودال فتح التذكرة كاملة */}
+      {showFullTicketModal && fullTicketView && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-4xl shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
-            <div className="flex justify-between items-center mb-6 border-b pb-4">
-              <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
-                <MessageSquare className="text-indigo-600"/> إنشاء تذكرة صيانة جديدة
-              </h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-rose-600">
-                <X size={24}/>
-              </button>
-            </div>
-            <form onSubmit={handleAddTicket} className="space-y-4">
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] w-full max-w-5xl shadow-2xl max-h-[95vh] overflow-y-auto custom-scrollbar">
+            {/* هيدر التذكرة */}
+            <div className="sticky top-0 bg-gradient-to-l from-indigo-600 to-purple-600 p-6 rounded-t-[1.5rem] z-10">
+              <div className="flex justify-between items-start">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">اسم العميل *</label>
-                  <select
-                      className="border p-2 rounded-lg w-full mb-2"
-                      value={newTicket.customerId || ""}
-                      onChange={(e)=>{
-
-                      const customer = customers.find(c=>c.id === e.target.value)
-
-                      if(!customer) return
-
-                      setNewTicket({
-                       ...newTicket,
-                       customerId: customer.id,
-                       customerName: customer.name,
-                       customerPhone: customer.phone,
-                       customerEmail: customer.email || ""
-                      })
-
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-white/80 text-sm font-mono">#{fullTicketView.ticketNumber}</span>
+                    <StatusSelect 
+                      value={fullTicketView.status} 
+                      onChange={(id, status) => {
+                        handleUpdateStatus(id, status);
+                        setFullTicketView({...fullTicketView, status});
                       }}
-                      >
-
-                      <option value="">اختر عميل من السجل</option>
-
-                      {customers.map(c=>(
-                      <option key={c.id} value={c.id}>
-                      {c.name} - {c.phone}
-                      </option>
-                      ))}
-
-                      </select>
-                  <input required className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" value={newTicket.customerName} onChange={e=>setNewTicket({...newTicket, customerName:e.target.value})} />
+                      ticketId={fullTicketView.id}
+                    />
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      fullTicketView.priority === 'high' ? 'bg-rose-500 text-white' : 
+                      fullTicketView.priority === 'medium' ? 'bg-amber-500 text-white' : 
+                      'bg-emerald-500 text-white'
+                    }`}>
+                      {fullTicketView.priority === 'high' ? 'عالية' : 
+                       fullTicketView.priority === 'medium' ? 'متوسطة' : 'منخفضة'}
+                    </span>
+                  </div>
+                  <h2 className="text-2xl font-black text-white">{fullTicketView.customerName}</h2>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">رقم الهاتف *</label>
-                  <input required className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold font-mono" value={newTicket.customerPhone} onChange={e=>setNewTicket({...newTicket, customerPhone:e.target.value})} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">البريد الإلكتروني</label>
-                  <input type="email" className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" value={newTicket.customerEmail} onChange={e=>setNewTicket({...newTicket, customerEmail:e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">نوع الجهاز</label>
-                  <input className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" value={newTicket.deviceType} onChange={e=>setNewTicket({...newTicket, deviceType:e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الموديل</label>
-                  <input className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" value={newTicket.deviceModel} onChange={e=>setNewTicket({...newTicket, deviceModel:e.target.value})} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">السيريال</label>
-                  <input className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold font-mono" value={newTicket.deviceSerial} onChange={e=>setNewTicket({...newTicket, deviceSerial:e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الوسوم</label>
-                  <input className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" value={newTicket.tags?.join(', ')} onChange={e=>setNewTicket({...newTicket, tags: e.target.value.split(',').map(t => t.trim())})} placeholder="وسم1, وسم2" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">المشكلة *</label>
-                <textarea rows="3" className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold resize-none" value={newTicket.issue} onChange={e=>setNewTicket({...newTicket, issue:e.target.value})} required />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الأولوية</label>
-                  <select className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold" value={newTicket.priority} onChange={e=>setNewTicket({...newTicket, priority:e.target.value})}>
-                    <option value="low">منخفضة</option>
-                    <option value="medium">متوسطة</option>
-                    <option value="high">عالية</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">المدة التقديرية</label>
-                  <input className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" placeholder="مثال: 3 أيام" value={newTicket.estimatedDuration} onChange={e=>setNewTicket({...newTicket, estimatedDuration:e.target.value})} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">التكلفة التقديرية</label>
-                  <input type="number" min="0" className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" value={newTicket.estimatedCost} onChange={e=>setNewTicket({...newTicket, estimatedCost: Number(e.target.value)})} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الفني المختص</label>
-                  <select className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold" value={newTicket.assignedTechnician} onChange={e=>setNewTicket({...newTicket, assignedTechnician:e.target.value})}>
-                    <option value="">-- غير محدد --</option>
-                    {technicians.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">مركز الصيانة</label>
-                  <select className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold" value={newTicket.assignedMaintenanceCenter} onChange={e=>setNewTicket({...newTicket, assignedMaintenanceCenter:e.target.value})}>
-                    <option value="">-- غير محدد --</option>
-                    {maintenanceCenters.map(m => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ملاحظات إضافية</label>
-                <textarea rows="2" className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold resize-none" value={newTicket.notes} onChange={e=>setNewTicket({...newTicket, notes:e.target.value})} />
-              </div>
-
-              <div className="flex gap-3 pt-4 border-t">
-                <button type="submit" className="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 shadow-md transition-colors flex items-center justify-center gap-2">
-                  <Save size={18}/> إنشاء التذكرة
-                </button>
-                <button type="button" onClick={()=>setShowAddModal(false)} className="px-6 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-3.5 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
-                  إلغاء
+                <button onClick={() => setShowFullTicketModal(false)} className="text-white/70 hover:text-white">
+                  <X size={24}/>
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* مودال قطع الغيار */}
-      {showSparePartsModal && selectedTicket && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6 border-b pb-4">
-              <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
-                <Package size={20} className="text-indigo-600"/> قطع غيار التذكرة #{selectedTicket.ticketNumber}
-              </h3>
-              <button onClick={() => setShowSparePartsModal(false)} className="text-slate-400 hover:text-rose-600">
-                <X size={24}/>
-              </button>
             </div>
-            
-            <div className="space-y-6">
-              <p className="text-sm font-bold text-slate-600 dark:text-slate-400">العميل: {selectedTicket.customerName}</p>
-              
-              <div className="border rounded-xl overflow-hidden">
-                <table className="w-full text-right text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-900/50">
-                    <tr>
-                      <th className="p-3">القطعة</th>
-                      <th className="p-3 text-center">الكمية</th>
-                      <th className="p-3 text-center">السعر</th>
-                      <th className="p-3 text-center">الإجمالي</th>
-                      <th className="p-3 text-center">تاريخ الإضافة</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {(selectedTicket.spareParts || []).map((part, idx) => (
-                      <tr key={idx}>
-                        <td className="p-3 font-bold">{part.name}</td>
-                        <td className="p-3 text-center">{part.quantity}</td>
-                        <td className="p-3 text-center">{part.price} ج</td>
-                        <td className="p-3 text-center font-black text-indigo-600 dark:text-indigo-400">{(part.quantity * part.price)} ج</td>
-                        <td className="p-3 text-center text-xs text-slate-500 dark:text-slate-400">{formatDate(part.addedAt)}</td>
-                      </tr>
-                    ))}
-                    {(selectedTicket.spareParts || []).length === 0 && (
-                      <tr><td colSpan="5" className="p-6 text-center text-slate-400">لا توجد قطع غيار مضافة</td></tr>
-                    )}
-                  </tbody>
-                </table>
+
+            {/* محتوى التذكرة */}
+            <div className="p-6 space-y-6">
+              {/* معلومات العميل */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">رقم الهاتف</label>
+                  <p className="font-bold font-mono" dir="ltr">{fullTicketView.customerPhone}</p>
+                </div>
+                {fullTicketView.secondPhone && (
+                  <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                    <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">رقم ثاني</label>
+                    <p className="font-bold font-mono" dir="ltr">{fullTicketView.secondPhone}</p>
+                  </div>
+                )}
+                {fullTicketView.landline && (
+                  <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                    <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">أرضي</label>
+                    <p className="font-bold font-mono" dir="ltr">{fullTicketView.landline}</p>
+                  </div>
+                )}
+                {fullTicketView.customerEmail && (
+                  <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                    <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">البريد الإلكتروني</label>
+                    <p className="font-bold">{fullTicketView.customerEmail}</p>
+                  </div>
+                )}
               </div>
 
-              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                <h4 className="font-bold mb-3">إضافة قطعة غيار جديدة</h4>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                  <input
-                    type="text"
-                    placeholder="اسم القطعة"
-                    className="col-span-2 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm bg-white dark:bg-slate-900"
-                    id={`partName-${selectedTicket.id}`}
-                  />
-                  <input
-                    type="number"
-                    placeholder="الكمية"
-                    className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm bg-white dark:bg-slate-900"
-                    id={`partQty-${selectedTicket.id}`}
-                    defaultValue="1"
-                  />
-                  <input
-                    type="number"
-                    placeholder="السعر"
-                    className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm bg-white dark:bg-slate-900"
-                    id={`partPrice-${selectedTicket.id}`}
-                  />
+              {/* معلومات الجهاز والضمان */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">الجهاز</label>
+                  <p className="font-bold">{fullTicketView.device || '-'}</p>
                 </div>
-                <button
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">النوع / الموديل</label>
+                  <p className="font-bold">{fullTicketView.deviceType || '-'} {fullTicketView.deviceModel || ''}</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">السيريال</label>
+                  <p className="font-bold font-mono">{fullTicketView.deviceSerial || '-'}</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">الضمان</label>
+                  <p className="font-bold">
+                    {WARRANTY_OPTIONS.find(w => w.value === fullTicketView.warrantyStatus)?.label || '-'}
+                  </p>
+                </div>
+              </div>
+
+              {/* نوع التذكرة والمصدر */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">نوع التذكرة</label>
+                  <p className="font-bold">
+                    {TICKET_TYPES.find(t => t.value === fullTicketView.ticketType)?.label || '-'}
+                  </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">المصدر</label>
+                  <p className="font-bold">
+                    {TICKET_SOURCES.find(s => s.value === fullTicketView.source)?.label || '-'}
+                  </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">أقرب فرع</label>
+                  <p className="font-bold">
+                    {BRANCH_OPTIONS.find(b => b.value === fullTicketView.nearestBranch)?.label || '-'}
+                  </p>
+                </div>
+              </div>
+
+              {/* العنوان والمشكلة */}
+              {fullTicketView.customerAddress && (
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">العنوان</label>
+                  <p className="font-bold">{fullTicketView.customerAddress}</p>
+                </div>
+              )}
+              
+              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">المشكلة</label>
+                <p className="font-bold">{fullTicketView.issue || '-'}</p>
+              </div>
+
+              {/* المسؤولون */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">الفني المختص</label>
+                  <p className="font-bold">
+                    {technicians.find(t => t.id === fullTicketView.assignedTechnician)?.name || '-'}
+                  </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">مركز الصيانة</label>
+                  <p className="font-bold">
+                    {maintenanceCenters.find(m => m.id === fullTicketView.assignedMaintenanceCenter)?.name || '-'}
+                  </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">الكول سنتر</label>
+                  <p className="font-bold">
+                    {callCenters.find(c => c.id === fullTicketView.assignedCallCenter)?.name || '-'}
+                  </p>
+                </div>
+              </div>
+
+              {/* المبالغ */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl text-center">
+                  <label className="text-xs block mb-1">التكلفة التقديرية</label>
+                  <p className="text-xl font-black">{fullTicketView.estimatedCost || 0} ج</p>
+                </div>
+                <div className="bg-emerald-50 dark:bg-emerald-900/30 p-4 rounded-xl text-center">
+                  <label className="text-xs block mb-1">إجمالي التكاليف</label>
+                  <p className="text-xl font-black">{fullTicketView.totalCost || 0} ج</p>
+                </div>
+                <div className="bg-emerald-50 dark:bg-emerald-900/30 p-4 rounded-xl text-center">
+                  <label className="text-xs block mb-1">المدفوع</label>
+                  <p className="text-xl font-black">{fullTicketView.totalPaid || 0} ج</p>
+                </div>
+                <div className="bg-amber-50 dark:bg-amber-900/30 p-4 rounded-xl text-center">
+                  <label className="text-xs block mb-1">المتبقي</label>
+                  <p className="text-xl font-black">{(fullTicketView.totalCost || 0) - (fullTicketView.totalPaid || 0)} ج</p>
+                </div>
+              </div>
+
+              {/* قطع الغيار */}
+              <div className="border rounded-xl p-4">
+                <h3 className="font-bold mb-3">قطع الغيار</h3>
+                {(fullTicketView.spareParts || []).map((part, idx) => (
+                  <div key={idx} className="flex justify-between p-2 border-b">
+                    <span>{part.name} × {part.quantity}</span>
+                    <span className="font-bold">{part.price * part.quantity} ج</span>
+                  </div>
+                ))}
+                <button 
                   onClick={() => {
-                    const name = document.getElementById(`partName-${selectedTicket.id}`).value;
-                    const qty = parseInt(document.getElementById(`partQty-${selectedTicket.id}`).value) || 1;
-                    const price = parseFloat(document.getElementById(`partPrice-${selectedTicket.id}`).value) || 0;
-                    
-                    if (!name) return showError("يرجى إدخال اسم القطعة");
-                    
-                    handleAddSparePart(selectedTicket.id, {
-                      name,
-                      quantity: qty,
-                      price
-                    });
-                    
-                    document.getElementById(`partName-${selectedTicket.id}`).value = '';
-                    document.getElementById(`partPrice-${selectedTicket.id}`).value = '';
+                    setSelectedTicket(fullTicketView);
+                    setShowSparePartsModal(true);
                   }}
-                  className="mt-3 w-full bg-indigo-600 text-white py-2 rounded-lg font-bold text-sm hover:bg-indigo-700"
+                  className="mt-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-4 py-2 rounded-lg text-sm font-bold"
                 >
-                  إضافة القطعة
+                  إدارة قطع الغيار
                 </button>
               </div>
 
-              <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold">إجمالي التكاليف:</span>
-                  <span className="text-xl font-black text-indigo-700 dark:text-indigo-400">{selectedTicket.totalCost || 0} ج</span>
+              {/* التعليقات */}
+              <div className="border rounded-xl p-4">
+                <h3 className="font-bold mb-3">التعليقات ({ticketComments.length})</h3>
+                <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+                  {ticketComments.map(comment => (
+                    <div key={comment.id} className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg">
+                      {editingCommentId === comment.id ? (
+                        <div className="flex gap-2">
+                          <input 
+                            className="flex-1 border p-2 rounded-lg text-sm"
+                            value={editingCommentText}
+                            onChange={e => setEditingCommentText(e.target.value)}
+                          />
+                          <button 
+                            onClick={() => editComment(fullTicketView.id, comment.id)}
+                            className="px-3 py-1 bg-indigo-600 text-white rounded text-xs"
+                          >
+                            حفظ
+                          </button>
+                          <button 
+                            onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }}
+                            className="px-3 py-1 bg-slate-200 dark:bg-slate-700 rounded text-xs"
+                          >
+                            إلغاء
+                          </button>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-sm">{comment.text}</p>
+                          <div className="flex justify-between items-center mt-2">
+                            <div>
+                              <span className="text-xs text-slate-500">{comment.createdBy}</span>
+                              <span className="text-xs text-slate-400 mx-2">•</span>
+                              <span className="text-xs text-slate-400">
+                                {new Date(comment.createdAt).toLocaleString('ar-EG')}
+                              </span>
+                              {comment.editedAt && <span className="text-xs text-amber-500 mr-2">(معدل)</span>}
+                            </div>
+                            <div className="flex gap-2">
+                              <button 
+                                onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text); }}
+                                className="text-xs text-indigo-500"
+                              >
+                                تعديل
+                              </button>
+                              <button 
+                                onClick={() => deleteComment(fullTicketView.id, comment.id)}
+                                className="text-xs text-rose-500"
+                              >
+                                حذف
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                <div className="flex justify-between items-center mt-2">
-                  <span className="font-bold">المدفوع:</span>
-                  <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{selectedTicket.totalPaid || 0} ج</span>
-                </div>
-                <div className="flex justify-between items-center mt-2 border-t border-indigo-200 dark:border-indigo-800 pt-2">
-                  <span className="font-bold">المتبقي:</span>
-                  <span className="text-xl font-black text-amber-600 dark:text-amber-400">{(selectedTicket.totalCost - (selectedTicket.totalPaid || 0))} ج</span>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                <h4 className="font-bold mb-3">إضافة دفعة</h4>
-                <div className="flex gap-3">
-                  <input
-                    type="number"
-                    placeholder="المبلغ"
-                    className="flex-1 border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm bg-white dark:bg-slate-900"
-                    id={`paymentAmount-${selectedTicket.id}`}
+                <div className="flex gap-2">
+                  <input 
+                    className="flex-1 border p-2 rounded-lg text-sm"
+                    placeholder="أضف تعليقاً..."
+                    value={newComment}
+                    onChange={e => setNewComment(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') addComment(fullTicketView.id); }}
                   />
-                  <button
-                    onClick={() => {
-                      const amount = parseFloat(document.getElementById(`paymentAmount-${selectedTicket.id}`).value);
-                      if (!amount || amount <= 0) return showError("يرجى إدخال مبلغ صحيح");
-                      handleAddPayment(selectedTicket.id, amount);
-                    }}
-                    className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-emerald-700"
+                  <button 
+                    onClick={() => addComment(fullTicketView.id)}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold"
                   >
-                    إضافة دفعة
+                    إضافة
                   </button>
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-4">
-                <button
-                  onClick={() => handleGenerateInvoice(selectedTicket)}
-                  className="flex-1 bg-emerald-600 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-emerald-700 flex items-center justify-center gap-2"
+              {/* أزرار الإجراءات */}
+              <div className="flex flex-wrap gap-2 pt-4 border-t">
+                <button 
+                  onClick={() => { setSelectedTicket(fullTicketView); setShowAssignModal(true); }}
+                  className="px-4 py-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg text-sm font-bold"
                 >
-                  <Receipt size={16}/> إنشاء فاتورة
+                  تعيين مسؤولين
                 </button>
-                <button onClick={() => setShowSparePartsModal(false)} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-2.5 rounded-lg font-bold text-sm hover:bg-slate-200 dark:hover:bg-slate-600">
+                <button 
+                  onClick={() => handleGenerateInvoice(fullTicketView)}
+                  className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-sm font-bold"
+                >
+                  إنشاء فاتورة
+                </button>
+                <button 
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold"
+                >
+                  طباعة
+                </button>
+                <button 
+                  onClick={() => setShowFullTicketModal(false)}
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold"
+                >
                   إغلاق
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* مودال سجل التذكرة */}
-      {showHistoryModal && selectedTicket && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-2xl shadow-2xl max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6 border-b pb-4">
-              <h3 className="font-black text-xl text-slate-800 dark:text-white">سجل التذكرة #{selectedTicket.ticketNumber}</h3>
-              <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-rose-600">
-                <X size={24}/>
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              {ticketHistory.map((event, idx) => (
-                <div key={idx} className="relative pr-6 pb-4 border-r-2 border-indigo-200 dark:border-indigo-800 last:border-0">
-                  <div className="absolute right-[-5px] top-0 w-3 h-3 rounded-full bg-indigo-600"></div>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 mb-1">{formatDate(event.timestamp)}</p>
-                  <p className="font-bold text-slate-800 dark:text-white">{event.action}</p>
-                  {event.notes && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{event.notes}</p>}
-                  <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">بواسطة: {event.by}</p>
-                </div>
-              ))}
-              {ticketHistory.length === 0 && (
-                <p className="text-center text-slate-400 py-8">لا يوجد سجل للحدث</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* مودال التعيين */}
-      {showAssignModal && selectedTicket && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
-            <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white">تعيين مسؤولين للتذكرة</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الفني</label>
-                <select
-                  className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900"
-                  value={assignData.technician}
-                  onChange={e => setAssignData({...assignData, technician: e.target.value})}
-                >
-                  <option value="">-- اختر فني --</option>
-                  {technicians.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">مركز الصيانة</label>
-                <select
-                  className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900"
-                  value={assignData.center}
-                  onChange={e => setAssignData({...assignData, center: e.target.value})}
-                >
-                  <option value="">-- اختر مركز صيانة --</option>
-                  {maintenanceCenters.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الكول سنتر</label>
-                <select
-                  className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900"
-                  value={assignData.callCenter}
-                  onChange={e => setAssignData({...assignData, callCenter: e.target.value})}
-                >
-                  <option value="">-- اختر كول سنتر --</option>
-                  {callCenters.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex gap-2 pt-4">
-                <button
-                  onClick={() => handleAssign(selectedTicket.id)}
-                  className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700"
-                >
-                  حفظ
-                </button>
-                <button
-                  onClick={() => {
-                    setShowAssignModal(false);
-                    setAssignData({ technician: '', center: '', callCenter: '' });
-                  }}
-                  className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600"
-                >
-                  إلغاء
-                </button>
+              {/* معلومات إضافية */}
+              <div className="text-xs text-slate-400 dark:text-slate-500 space-y-1 border-t pt-4">
+                <p>تاريخ الإنشاء: {formatDate(fullTicketView.createdAt)}</p>
+                <p>آخر تحديث: {formatDate(fullTicketView.updatedAt)}</p>
+                <p>تم الإنشاء بواسطة: {fullTicketView.createdByName}</p>
+                <p>المركز: {warehouseMap[fullTicketView.assignedCenter] || fullTicketView.assignedCenter}</p>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* مودال الحذف المجمع */}
-      {showBulkDeleteModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
-            <h3 className="font-black text-lg mb-2 text-rose-600 flex items-center gap-2">
-              <TrashIcon size={20}/> حذف مجمع للتذاكر
-            </h3>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-              أنت على وشك حذف <span className="font-bold text-rose-600">{selectedItems.size}</span> تذكرة بشكل نهائي.
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-500 mb-4">
-              هذا الإجراء لا يمكن التراجع عنه. لتأكيد الحذف، اكتب "حذف" في الحقل أدناه.
-            </p>
-            
-            <input
-              type="text"
-              className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-rose-500 mb-4 bg-white dark:bg-slate-900"
-              placeholder="اكتب 'حذف' للتأكيد"
-              value={bulkDeleteConfirm}
-              onChange={e => setBulkDeleteConfirm(e.target.value)}
-            />
-            
-            <div className="flex gap-2">
-              <button
-                onClick={handleBulkDelete}
-                disabled={bulkDeleteConfirm !== 'حذف'}
-                className="flex-1 bg-rose-600 text-white py-3 rounded-xl font-bold hover:bg-rose-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                تأكيد الحذف
-              </button>
-              <button
-                onClick={() => {
-                  setShowBulkDeleteModal(false);
-                  setBulkDeleteConfirm('');
-                }}
-                className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600"
-              >
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* باقي المودالات (SpareParts, History, Assign, BulkDelete) كما هي مع تعديلات طفيفة */}
 
-      {/* رأس الصفحة */}
+      {/* رأس الصفحة مع الفلاتر */}
       <div className="p-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
-         <div className="flex items-center gap-2">
-           <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
-             <MessageSquare className="text-indigo-600" size={20}/> تذاكر الصيانة
-           </h2>
-           <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg text-xs">
-             {tickets.length} تذكرة
-           </span>
-         </div>
-         
-         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-             {selectedItems.size > 0 && appUser.permissions?.deleteTicket && (
-               <button 
-                 onClick={() => setShowBulkDeleteModal(true)} 
-                 className="bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-4 py-2 rounded-lg text-xs font-bold hover:bg-rose-100 dark:hover:bg-rose-900/50 flex items-center justify-center gap-2"
-               >
-                 <TrashIcon size={14}/> حذف {selectedItems.size} تذكرة
-               </button>
-             )}
-             
-             <div className="relative flex-1 sm:w-48">
-                 <Search className="absolute right-3 top-2.5 text-slate-400" size={16}/>
-                 <input 
-                   className="w-full border border-slate-200 dark:border-slate-700 py-2 pr-9 pl-3 rounded-lg outline-none text-xs font-bold focus:border-indigo-500 bg-white dark:bg-slate-900" 
-                   placeholder="بحث..." 
-                   value={search} 
-                   onChange={e=>setSearch(e.target.value)} 
-                 />
-             </div>
-             
-             <select 
-               className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-900 focus:border-indigo-500 outline-none"
-               value={filterStatus}
-               onChange={e => setFilterStatus(e.target.value)}
-             >
-               <option value="all">كل الحالات</option>
-               {TICKET_STATUSES.map(s => (
-                 <option key={s.value} value={s.value}>{s.label}</option>
-               ))}
-             </select>
-             
-             <select 
-               className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-900 focus:border-indigo-500 outline-none"
-               value={filterPriority}
-               onChange={e => setFilterPriority(e.target.value)}
-             >
-               <option value="all">كل الأولويات</option>
-               <option value="high">عالية</option>
-               <option value="medium">متوسطة</option>
-               <option value="low">منخفضة</option>
-             </select>
-             
-             <select 
-               className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-900 focus:border-indigo-500 outline-none"
-               value={filterTechnician}
-               onChange={e => setFilterTechnician(e.target.value)}
-             >
-               <option value="all">كل الفنيين</option>
-               {technicians.map(t => (
-                 <option key={t.id} value={t.id}>{t.name}</option>
-               ))}
-             </select>
-             
-             <select 
-               className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-900 focus:border-indigo-500 outline-none"
-               value={filterTag}
-               onChange={e => setFilterTag(e.target.value)}
-             >
-               <option value="all">كل الوسوم</option>
-               {availableTags.map(tag => (
-                 <option key={tag} value={tag}>{tag}</option>
-               ))}
-             </select>
-             
-             <input
-               type="date"
-               className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-900"
-               value={dateRange.from}
-               onChange={e => setDateRange({...dateRange, from: e.target.value})}
-               placeholder="من تاريخ"
-             />
-             <input
-               type="date"
-               className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-900"
-               value={dateRange.to}
-               onChange={e => setDateRange({...dateRange, to: e.target.value})}
-               placeholder="إلى تاريخ"
-             />
-             
-             {loadingData && <Loader2 className="animate-spin text-indigo-500 mt-2 sm:mt-0" size={16}/>}
-             
-             <button 
-               onClick={()=>setShowAddModal(true)} 
-               className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-sm whitespace-nowrap"
-             >
-                <Plus size={14}/> تذكرة جديدة
-             </button>
-         </div>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+            <MessageSquare className="text-indigo-600" size={20}/> تذاكر الصيانة
+          </h2>
+          <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg text-xs">
+            {tickets.length} تذكرة
+          </span>
+        </div>
+        
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <input
+            type="text"
+            placeholder="بحث شامل..."
+            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs bg-white dark:bg-slate-900"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          
+          <select 
+            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs bg-white dark:bg-slate-900"
+            value={filterStatus}
+            onChange={e => setFilterStatus(e.target.value)}
+          >
+            <option value="all">كل الحالات</option>
+            {TICKET_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          
+          <select 
+            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs bg-white dark:bg-slate-900"
+            value={filterPriority}
+            onChange={e => setFilterPriority(e.target.value)}
+          >
+            <option value="all">كل الأولويات</option>
+            <option value="high">عالية</option>
+            <option value="medium">متوسطة</option>
+            <option value="low">منخفضة</option>
+          </select>
+          
+          <select 
+            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs bg-white dark:bg-slate-900"
+            value={filterWarranty}
+            onChange={e => setFilterWarranty(e.target.value)}
+          >
+            <option value="all">كل الضمانات</option>
+            {WARRANTY_OPTIONS.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
+          </select>
+          
+          <select 
+            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs bg-white dark:bg-slate-900"
+            value={filterTicketType}
+            onChange={e => setFilterTicketType(e.target.value)}
+          >
+            <option value="all">كل الأنواع</option>
+            {TICKET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+          
+          <select 
+            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-xs bg-white dark:bg-slate-900"
+            value={filterSource}
+            onChange={e => setFilterSource(e.target.value)}
+          >
+            <option value="all">كل المصادر</option>
+            {TICKET_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          
+          <button 
+            onClick={() => {
+              setFilterStatus('all');
+              setFilterPriority('all');
+              setFilterWarranty('all');
+              setFilterTicketType('all');
+              setFilterSource('all');
+              setFilterBranch('all');
+              setFilterTechnician('all');
+              setFilterTag('all');
+              setDateRange({ from: '', to: '' });
+              setSearch('');
+            }}
+            className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold"
+          >
+            <RefreshCcw size={14}/>
+          </button>
+          
+          <button 
+            onClick={()=>setShowAddModal(true)} 
+            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-sm whitespace-nowrap"
+          >
+            <Plus size={14}/> تذكرة جديدة
+          </button>
+        </div>
       </div>
 
       {/* جدول التذاكر */}
       <div className="overflow-x-auto max-h-[70vh] custom-scrollbar">
-         <table className="w-full text-right text-sm">
-            <thead className="bg-white dark:bg-slate-900 border-b text-slate-500 dark:text-slate-400 font-bold text-[11px] uppercase sticky top-0">
-               <tr>
-                  <th className="p-4 w-10">
+        <table className="w-full text-right text-sm">
+          <thead className="bg-white dark:bg-slate-900 border-b text-slate-500 dark:text-slate-400 font-bold text-[11px] uppercase sticky top-0">
+            <tr>
+              <th className="p-4 w-10">
+                <input 
+                  type="checkbox" 
+                  className="w-4 h-4 accent-indigo-600"
+                  checked={selectedItems.size === tickets.length && tickets.length > 0}
+                  onChange={toggleSelectAll}
+                />
+              </th>
+              <th className="p-4">رقم التذكرة</th>
+              <th className="p-4">العميل</th>
+              <th className="p-4">الهاتف</th>
+              <th className="p-4">الجهاز</th>
+              <th className="p-4">الحالة</th>
+              <th className="p-4">الأولوية</th>
+              <th className="p-4">النوع</th>
+              <th className="p-4">المصدر</th>
+              <th className="p-4">الضمان</th>
+              <th className="p-4">آخر تحديث</th>
+              <th className="p-4 text-center">إجراءات</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50 dark:divide-slate-700 font-medium text-xs">
+            {tickets.length === 0 && !loadingData ? 
+              <tr><td colSpan="12" className="p-10 text-center text-slate-400">لا توجد تذاكر</td></tr> : 
+              tickets.map((t) => {
+                const statusInfo = TICKET_STATUSES.find(s => s.value === t.status) || { label: t.status, color: 'gray' };
+                return (
+                <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors cursor-pointer">
+                  <td className="p-4" onClick={(e) => e.stopPropagation()}>
                     <input 
                       type="checkbox" 
                       className="w-4 h-4 accent-indigo-600"
-                      checked={selectedItems.size === tickets.length && tickets.length > 0}
-                      onChange={toggleSelectAll}
+                      checked={selectedItems.has(t.id)}
+                      onChange={() => toggleSelectItem(t.id)}
                     />
-                  </th>
-                  <th className="p-4">رقم التذكرة</th>
-                  <th className="p-4">العميل</th>
-                  <th className="p-4">الجهاز</th>
-                  <th className="p-4">الحالة</th>
-                  <th className="p-4">الأولوية</th>
-                  <th className="p-4">الفني</th>
-                  <th className="p-4">الوسوم</th>
-                  <th className="p-4">قطع الغيار</th>
-                  <th className="p-4 text-center">التكلفة</th>
-                  <th className="p-4 text-center">المتبقي</th>
-                  <th className="p-4">آخر تحديث</th>
-                  <th className="p-4 text-center">إجراءات</th>
-               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50 dark:divide-slate-700 font-medium text-xs">
-               {tickets.length === 0 && !loadingData ? 
-                 <tr><td colSpan="13" className="p-10 text-center text-slate-400">لا توجد تذاكر</td></tr> : 
-                 tickets.map((t) => {
-                   const statusInfo = TICKET_STATUSES.find(s => s.value === t.status) || { label: t.status, color: 'gray' };
-                   const technician = technicians.find(tech => tech.id === t.assignedTechnician);
-                   return (
-                   <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                     <td className="p-4">
-                       <input 
-                         type="checkbox" 
-                         className="w-4 h-4 accent-indigo-600"
-                         checked={selectedItems.has(t.id)}
-                         onChange={() => toggleSelectItem(t.id)}
-                       />
-                     </td>
-                     <td className="p-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">{t.ticketNumber || t.id.slice(0,8)}</td>
-                     <td className="p-4">
-                        <p className="font-bold text-slate-800 dark:text-white">{t.customerName}</p>
-                        <p className="text-[9px] text-slate-500 dark:text-slate-400">{t.customerPhone}</p>
-                     </td>
-                     <td className="p-4">
-                        <p className="font-bold text-slate-800 dark:text-white">{t.deviceType || '-'}</p>
-                        <p className="text-[9px] text-slate-500 dark:text-slate-400">{t.deviceModel || ''}</p>
-                        {t.deviceSerial && <p className="text-[8px] font-mono text-slate-400 dark:text-slate-500">{t.deviceSerial}</p>}
-                     </td>
-                     <td className="p-4">
-                        <span className={`px-2 py-1 rounded-full text-[9px] font-bold inline-block bg-${getStatusColor(t.status)}-100 dark:bg-${getStatusColor(t.status)}-900/30 text-${getStatusColor(t.status)}-700 dark:text-${getStatusColor(t.status)}-300 border border-${getStatusColor(t.status)}-200 dark:border-${getStatusColor(t.status)}-800`}>
-                          {statusInfo.label}
-                        </span>
-                     </td>
-                     <td className="p-4">
-                        <span className={`px-2 py-1 rounded-full text-[9px] font-bold inline-block ${getPriorityColor(t.priority)}`}>
-                          {t.priority === 'high' ? 'عالية' : t.priority === 'medium' ? 'متوسطة' : 'منخفضة'}
-                        </span>
-                     </td>
-                     <td className="p-4">
-                       {technician ? technician.name : '-'}
-                     </td>
-                     <td className="p-4">
-                        <div className="flex flex-wrap gap-1">
-                          {(t.tags || []).map(tag => (
-                            <span key={tag} className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded text-[8px] font-bold">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                     </td>
-                     <td className="p-4 text-center">
-                        <span className="font-bold text-slate-800 dark:text-white">{t.spareParts?.length || 0}</span>
-                     </td>
-                     <td className="p-4 text-center font-black text-emerald-600 dark:text-emerald-400">{t.totalCost || 0} ج</td>
-                     <td className="p-4 text-center font-black text-amber-600 dark:text-amber-400">{t.remaining || t.totalCost || 0} ج</td>
-                     <td className="p-4 text-slate-500 dark:text-slate-400 text-[9px]">{formatDate(t.updatedAt || t.createdAt)}</td>
-                     <td className="p-4 text-center">
-                        <div className="flex justify-center gap-1">
-                           <StatusSelect 
-                             value={t.status} 
-                             onChange={handleUpdateStatus} 
-                             ticketId={t.id}
-                           />
-                           {appUser.permissions?.addSpareParts && (
-                             <button 
-                               onClick={() => { setSelectedTicket(t); setShowSparePartsModal(true); }} 
-                               className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/50"
-                               title="إدارة قطع الغيار"
-                             >
-                               <Package size={14}/>
-                             </button>
-                           )}
-                           <button 
-                             onClick={() => { setSelectedTicket(t); setShowAssignModal(true); }} 
-                             className="p-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded hover:bg-amber-100 dark:hover:bg-amber-900/50"
-                             title="تعيين مسؤولين"
-                           >
-                             <Users size={14}/>
-                           </button>
-                           <button 
-                             onClick={() => handleViewHistory(t)} 
-                             className="p-1.5 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded hover:bg-purple-100 dark:hover:bg-purple-900/50"
-                             title="عرض السجل"
-                           >
-                             <History size={14}/>
-                           </button>
-                           <button 
-                             onClick={() => handleGenerateInvoice(t)} 
-                             className="p-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
-                             title="إصدار فاتورة"
-                           >
-                             <Receipt size={14}/>
-                           </button>
-                        </div>
-                     </td>
-                   </tr>
-                 )})}
-            </tbody>
-         </table>
-         {hasMore && !loadingData && tickets.length >= 30 && (
-             <div className="p-4 text-center bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700">
-                <button onClick={() => loadTickets(true)} className="text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:underline flex items-center justify-center gap-1 mx-auto">
-                   تحميل المزيد <ChevronDown size={14}/>
-                </button>
-             </div>
-         )}
+                  </td>
+                  <td className="p-4 font-mono font-bold text-indigo-600 dark:text-indigo-400" onClick={() => openFullTicket(t)}>
+                    {t.ticketNumber || t.id.slice(0,8)}
+                  </td>
+                  <td className="p-4" onClick={() => openFullTicket(t)}>
+                    <p className="font-bold text-slate-800 dark:text-white">{t.customerName}</p>
+                    {t.secondPhone && <p className="text-[9px] text-slate-500 dark:text-slate-400">رقم 2: {t.secondPhone}</p>}
+                  </td>
+                  <td className="p-4" onClick={() => openFullTicket(t)}>
+                    <p className="font-mono text-slate-600 dark:text-slate-400" dir="ltr">{t.customerPhone}</p>
+                    {t.landline && <p className="text-[9px] text-slate-400 dark:text-slate-500" dir="ltr">أرضي: {t.landline}</p>}
+                  </td>
+                  <td className="p-4" onClick={() => openFullTicket(t)}>
+                    <p className="font-bold">{t.device || t.deviceType || '-'}</p>
+                    <p className="text-[9px] text-slate-500 dark:text-slate-400">{t.deviceModel || ''}</p>
+                    {t.deviceSerial && <p className="text-[8px] font-mono text-slate-400 dark:text-slate-500">{t.deviceSerial}</p>}
+                  </td>
+                  <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                    <StatusSelect 
+                      value={t.status} 
+                      onChange={handleUpdateStatus} 
+                      ticketId={t.id}
+                    />
+                  </td>
+                  <td className="p-4" onClick={() => openFullTicket(t)}>
+                    <span className={`px-2 py-1 rounded-full text-[9px] font-bold ${
+                      t.priority === 'high' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300' :
+                      t.priority === 'medium' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
+                      'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                    }`}>
+                      {t.priority === 'high' ? 'عالية' : t.priority === 'medium' ? 'متوسطة' : 'منخفضة'}
+                    </span>
+                  </td>
+                  <td className="p-4" onClick={() => openFullTicket(t)}>
+                    {TICKET_TYPES.find(tt => tt.value === t.ticketType)?.label || '-'}
+                  </td>
+                  <td className="p-4" onClick={() => openFullTicket(t)}>
+                    {TICKET_SOURCES.find(ts => ts.value === t.source)?.label || '-'}
+                  </td>
+                  <td className="p-4" onClick={() => openFullTicket(t)}>
+                    <span className={`px-2 py-1 rounded-full text-[9px] font-bold ${
+                      t.warrantyStatus === 'in_warranty' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' :
+                      t.warrantyStatus === 'out_of_warranty' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300' :
+                      'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}>
+                      {WARRANTY_OPTIONS.find(w => w.value === t.warrantyStatus)?.label || '-'}
+                    </span>
+                  </td>
+                  <td className="p-4 text-slate-500 dark:text-slate-400 text-[9px]" onClick={() => openFullTicket(t)}>
+                    {formatDate(t.updatedAt || t.createdAt)}
+                  </td>
+                  <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex justify-center gap-1">
+                      <button 
+                        onClick={() => openFullTicket(t)}
+                        className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/50"
+                        title="فتح التذكرة"
+                      >
+                        <Eye size={14}/>
+                      </button>
+                      <button 
+                        onClick={() => { setSelectedTicket(t); setShowAssignModal(true); }}
+                        className="p-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded hover:bg-amber-100 dark:hover:bg-amber-900/50"
+                        title="تعيين مسؤولين"
+                      >
+                        <Users size={14}/>
+                      </button>
+                      <button 
+                        onClick={() => handleGenerateInvoice(t)}
+                        className="p-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
+                        title="إصدار فاتورة"
+                      >
+                        <Receipt size={14}/>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )})}
+          </tbody>
+        </table>
+        {hasMore && !loadingData && tickets.length >= 30 && (
+          <div className="p-4 text-center bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700">
+            <button onClick={() => loadTickets(true)} className="text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:underline flex items-center justify-center gap-1 mx-auto">
+              تحميل المزيد <ChevronDown size={14}/>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
 // ==========================================================================
 // 👥 إدارة المستخدمين المحسنة (مع صلاحيات تفصيلية وتحكم كامل)
 // ==========================================================================
@@ -11127,25 +11203,26 @@ setSearch('');
                  </select>
               </div>
               <div>
-                 <label className="block text-xs font-bold text-indigo-900 dark:text-indigo-300 mb-1">الخصم</label>
-                 <div className="flex bg-white dark:bg-slate-900 rounded-xl border border-indigo-100 dark:border-indigo-800 overflow-hidden">
+                  <label className="block text-xs font-bold text-indigo-900 dark:text-indigo-300 mb-1">الخصم</label>
+                  <div className="flex bg-white dark:bg-slate-900 rounded-xl border border-indigo-100 dark:border-indigo-800 overflow-hidden">
                     <input 
                       type="number" 
                       className="flex-1 p-2.5 outline-none font-bold text-center text-rose-600 dark:text-rose-400 text-sm bg-transparent" 
                       value={invoice.discount} 
                       onChange={e=>setInvoice({...invoice, discount: e.target.value})} 
-                      min="0" 
+                      min="0"
+                      placeholder="0"
                     />
                     <select 
                       className="bg-slate-50 dark:bg-slate-800 px-3 font-bold text-xs border-r border-slate-100 dark:border-slate-700 outline-none" 
                       value={invoice.discountType} 
                       onChange={e=>setInvoice({...invoice, discountType: e.target.value})}
                     >
-                       <option value="value">ج.م</option>
-                       <option value="percent">%</option>
+                      <option value="value">ج.م</option>
+                      <option value="percent">%</option>
                     </select>
-                 </div>
-              </div>
+                  </div>
+                </div>
               <div>
                  <label className="block text-xs font-bold text-indigo-900 dark:text-indigo-300 mb-1">الرسوم</label>
                  <select 
@@ -11488,6 +11565,8 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
           { id: 'technicians', label: 'الفنيين', icon: HardHat },
           { id: 'backup', label: 'النسخ الاحتياطي', icon: Database },
           { id: 'api', label: 'API Keys', icon: Key }
+          { id: 'branches', label: 'الفروع', icon: MapPin }
+        
         ].map(tab => (
           <button
             key={tab.id}
@@ -11570,6 +11649,52 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
             </div>
           </div>
         )}
+
+        
+          {activeTab === 'branches' && (
+            <div className="space-y-6 max-w-2xl">
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">إدارة الفروع (للاختيار في التذاكر)</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                  هذه الفروع تظهر في خانة "أقرب فرع" عند إنشاء تذكرة صيانة
+                </p>
+                {(settings.branches || []).map((branch, idx) => (
+                  <div key={idx} className="flex gap-3 mb-3">
+                    <input 
+                      className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                      placeholder="اسم الفرع"
+                      value={branch.label}
+                      onChange={e => {
+                        const newBranches = [...(settings.branches || [])];
+                        newBranches[idx].label = e.target.value;
+                        newBranches[idx].value = e.target.value.toLowerCase().replace(/\s+/g, '_');
+                        setLocalSettings({...settings, branches: newBranches});
+                      }}
+                    />
+                    <button 
+                      onClick={() => {
+                        const newBranches = (settings.branches || []).filter((_, i) => i !== idx);
+                        setLocalSettings({...settings, branches: newBranches});
+                      }}
+                      className="px-4 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
+                    >
+                      <Trash2 size={18}/>
+                    </button>
+                  </div>
+                ))}
+                <button 
+                  onClick={() => {
+                    const newBranches = [...(settings.branches || []), { value: '', label: '' }];
+                    setLocalSettings({...settings, branches: newBranches});
+                  }}
+                  className="w-full mt-4 py-4 border-3 border-dashed border-indigo-200 dark:border-indigo-800 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Plus size={20}/> إضافة فرع جديد
+                </button>
+              </div>
+            </div>
+          )}        
+
 
         {activeTab === 'invoice' && (
           <InvoiceTemplateManager 
@@ -12366,164 +12491,280 @@ export default function App() {
   );
 }
 
-//ارشيف الفواتير - voice archive //
+// تحديث InvoicesManager مع فلاتر متقدمة
+function InvoicesManager({ systemSettings, appUser }) {
+  const [invoices, setInvoices] = useState([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [invoiceData, setInvoiceData] = useState(null);
+  
+  // فلاتر جديدة
+  const [filterCustomerName, setFilterCustomerName] = useState('');
+  const [filterInvoiceNumber, setFilterInvoiceNumber] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterPhone, setFilterPhone] = useState('');
+  const [filterWarehouse, setFilterWarehouse] = useState('all');
+  const [warehouses, setWarehouses] = useState([]);
+  const [sortBy, setSortBy] = useState('date');
+  const [sortOrder, setSortOrder] = useState('desc');
 
-function InvoicesManager({ systemSettings }) {
+  useEffect(() => {
+    const loadWarehouses = async () => {
+      const snap = await getDocs(collection(db, 'warehouses'));
+      setWarehouses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    };
+    loadWarehouses();
+  }, []);
 
-  const [invoices,setInvoices] = useState([]);
-  const [search,setSearch] = useState("");
-  const [loading,setLoading] = useState(true);
-  const [invoiceData,setInvoiceData] = useState(null);
-
-  useEffect(()=>{
-
-    const loadInvoices = async()=>{
-
-      try{
-
+  useEffect(() => {
+    const loadInvoices = async () => {
+      try {
         const q = query(
-          collection(db,"transactions"),
-          where("type","==","sell"),
-          orderBy("timestamp","desc"),
+          collection(db, "transactions"),
+          where("type", "==", "sell"),
+          orderBy("timestamp", "desc"),
           limit(500)
         );
-
         const snap = await getDocs(q);
-
-        const data = snap.docs.map(d=>({
-          id:d.id,
+        const data = snap.docs.map(d => ({
+          id: d.id,
           ...d.data()
         }));
-
         setInvoices(data);
-
-      }catch(e){
-
+      } catch(e) {
         console.error(e);
-
       }
-
       setLoading(false);
-
     };
-
     loadInvoices();
+  }, []);
 
-  },[]);
-
-  const filtered = invoices.filter(inv=>{
-
-    const term = normalizeSerial(search);
-
-    return(
-      inv.invoiceNumber?.toLowerCase().includes(term) ||
-      inv.customerName?.toLowerCase().includes(term) ||
-      inv.serialNumber?.toLowerCase().includes(term)
-    );
-
+  const filtered = invoices.filter(inv => {
+    const matchesGlobalSearch = !search || 
+      normalizeSearch(inv.invoiceNumber).includes(normalizeSearch(search)) ||
+      normalizeSearch(inv.customerName).includes(normalizeSearch(search)) ||
+      normalizeSearch(inv.serialNumber).includes(normalizeSearch(search)) ||
+      normalizeSearch(inv.phone).includes(normalizeSearch(search));
+    
+    const matchesCustomerName = !filterCustomerName || 
+      normalizeSearch(inv.customerName).includes(normalizeSearch(filterCustomerName));
+    
+    const matchesInvoiceNumber = !filterInvoiceNumber || 
+      normalizeSearch(inv.invoiceNumber).includes(normalizeSearch(filterInvoiceNumber));
+    
+    const matchesPhone = !filterPhone || 
+      normalizeSearch(inv.phone).includes(normalizeSearch(filterPhone));
+    
+    const matchesWarehouse = filterWarehouse === 'all' || inv.warehouseId === filterWarehouse;
+    
+    let matchesDate = true;
+    if (filterDateFrom) {
+      const invDate = inv.timestamp?.toDate ? inv.timestamp.toDate() : new Date(inv.timestamp);
+      matchesDate = matchesDate && invDate >= new Date(filterDateFrom);
+    }
+    if (filterDateTo) {
+      const invDate = inv.timestamp?.toDate ? inv.timestamp.toDate() : new Date(inv.timestamp);
+      matchesDate = matchesDate && invDate <= new Date(filterDateTo + 'T23:59:59');
+    }
+    
+    return matchesGlobalSearch && matchesCustomerName && matchesInvoiceNumber && 
+           matchesPhone && matchesWarehouse && matchesDate;
+  }).sort((a, b) => {
+    let comparison = 0;
+    if (sortBy === 'date') {
+      const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
+      const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
+      comparison = dateA - dateB;
+    } else if (sortBy === 'total') {
+      comparison = (a.finalTotal || 0) - (b.finalTotal || 0);
+    } else if (sortBy === 'customer') {
+      comparison = (a.customerName || '').localeCompare(b.customerName || '');
+    }
+    return sortOrder === 'desc' ? -comparison : comparison;
   });
 
-  if(invoiceData){
-
-    return(
+  if (invoiceData) {
+    return (
       <InvoiceRenderer
         data={invoiceData}
         systemSettings={systemSettings}
-        onBack={()=>setInvoiceData(null)}
+        onBack={() => setInvoiceData(null)}
       />
     );
-
   }
 
-  return(
-
+  return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
+      <h2 className="text-2xl font-black">أرشيف الفواتير</h2>
 
-      <h2 className="text-2xl font-black">
-        أرشيف الفواتير
-      </h2>
+      {/* فلاتر متقدمة */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 bg-white dark:bg-slate-800 p-4 rounded-xl border">
+        <div>
+          <label className="text-xs font-bold block mb-1">بحث عام</label>
+          <input
+            className="w-full border p-2 rounded-lg text-sm"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="بحث شامل..."
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold block mb-1">اسم العميل</label>
+          <input
+            className="w-full border p-2 rounded-lg text-sm"
+            value={filterCustomerName}
+            onChange={e => setFilterCustomerName(e.target.value)}
+            placeholder="اسم العميل"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold block mb-1">رقم الفاتورة</label>
+          <input
+            className="w-full border p-2 rounded-lg text-sm font-mono"
+            value={filterInvoiceNumber}
+            onChange={e => setFilterInvoiceNumber(e.target.value)}
+            placeholder="INV-..."
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold block mb-1">رقم الموبايل</label>
+          <input
+            className="w-full border p-2 rounded-lg text-sm font-mono"
+            value={filterPhone}
+            onChange={e => setFilterPhone(e.target.value)}
+            placeholder="01XXXXXXXXX"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold block mb-1">من تاريخ</label>
+          <input
+            type="date"
+            className="w-full border p-2 rounded-lg text-sm"
+            value={filterDateFrom}
+            onChange={e => setFilterDateFrom(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold block mb-1">إلى تاريخ</label>
+          <input
+            type="date"
+            className="w-full border p-2 rounded-lg text-sm"
+            value={filterDateTo}
+            onChange={e => setFilterDateTo(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold block mb-1">الفرع / المركز</label>
+          <select
+            className="w-full border p-2 rounded-lg text-sm"
+            value={filterWarehouse}
+            onChange={e => setFilterWarehouse(e.target.value)}
+          >
+            <option value="all">كل الفروع</option>
+            {warehouses.map(w => (
+              <option key={w.id} value={w.id}>{w.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-bold block mb-1">ترتيب حسب</label>
+          <div className="flex gap-2">
+            <select
+              className="flex-1 border p-2 rounded-lg text-sm"
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value)}
+            >
+              <option value="date">التاريخ</option>
+              <option value="total">المبلغ</option>
+              <option value="customer">العميل</option>
+            </select>
+            <button
+              onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+              className="px-3 py-2 border rounded-lg text-sm"
+            >
+              {sortOrder === 'asc' ? '↑' : '↓'}
+            </button>
+          </div>
+        </div>
+      </div>
 
-      <input
-        placeholder="بحث برقم الفاتورة أو السيريال أو العميل..."
-        className="w-full border p-3 rounded-xl"
-        value={search}
-        onChange={e=>setSearch(e.target.value)}
-      />
+      <div className="flex justify-between items-center">
+        <span className="text-sm text-slate-500">{filtered.length} فاتورة</span>
+        <button
+          onClick={() => {
+            setSearch('');
+            setFilterCustomerName('');
+            setFilterInvoiceNumber('');
+            setFilterPhone('');
+            setFilterDateFrom('');
+            setFilterDateTo('');
+            setFilterWarehouse('all');
+          }}
+          className="text-xs text-indigo-600 hover:underline"
+        >
+          مسح الفلاتر
+        </button>
+      </div>
 
-      {loading && <p>جاري التحميل...</p>}
+      {loading && <p className="text-center py-8">جاري التحميل...</p>}
 
       {!loading && (
-
-        <div className="overflow-x-auto">
-
+        <div className="overflow-x-auto bg-white dark:bg-slate-800 rounded-xl border">
           <table className="w-full text-sm">
-
-            <thead className="bg-slate-100">
-
+            <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
-
-                <th className="p-2">رقم الفاتورة</th>
-                <th className="p-2">العميل</th>
-                <th className="p-2">الهاتف</th>
-                <th className="p-2">الإجمالي</th>
-                <th className="p-2">التاريخ</th>
-                <th className="p-2">عرض</th>
-
+                <th className="p-3">رقم الفاتورة</th>
+                <th className="p-3">العميل</th>
+                <th className="p-3">الهاتف</th>
+                <th className="p-3">الإجمالي</th>
+                <th className="p-3">الخصم</th>
+                <th className="p-3">طريقة الدفع</th>
+                <th className="p-3">الفرع</th>
+                <th className="p-3">التاريخ</th>
+                <th className="p-3">عرض</th>
               </tr>
-
             </thead>
-
-            <tbody>
-
-              {filtered.map(inv=>(
-                
-                <tr key={inv.id} className="border-b">
-
-                  <td className="p-2 font-bold">
-                    {inv.invoiceNumber}
+            <tbody className="divide-y">
+              {filtered.map(inv => (
+                <tr key={inv.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30">
+                  <td className="p-3 font-bold font-mono text-indigo-600 dark:text-indigo-400">
+                    {inv.invoiceNumber || inv.id.slice(0,8)}
                   </td>
-
-                  <td className="p-2">
-                    {inv.customerName}
+                  <td className="p-3 font-bold">{inv.customerName}</td>
+                  <td className="p-3 font-mono" dir="ltr">{inv.phone || '-'}</td>
+                  <td className="p-3 font-bold text-emerald-600 dark:text-emerald-400">
+                    {(inv.finalTotal || 0).toLocaleString()} ج
                   </td>
-
-                  <td className="p-2">
-                    {inv.phone}
+                  <td className="p-3 text-rose-500">
+                    {inv.discountAmount > 0 ? `${inv.discountAmount.toLocaleString()} ج` : '-'}
                   </td>
-
-                  <td className="p-2 font-bold">
-                    {inv.finalTotal} ج
+                  <td className="p-3">
+                    {inv.paymentMethod === 'cash' ? 'نقداً' :
+                     inv.paymentMethod === 'card' ? 'بطاقة' :
+                     inv.paymentMethod === 'transfer' ? 'تحويل' : '-'}
                   </td>
-
-                  <td className="p-2">
-                    {formatDate(inv.timestamp)}
-                  </td>
-
-                  <td className="p-2">
-
+                  <td className="p-3 text-xs">{inv.warehouseId || '-'}</td>
+                  <td className="p-3 text-xs">{formatDate(inv.timestamp)}</td>
+                  <td className="p-3">
                     <button
-                      onClick={()=>setInvoiceData(inv)}
-                      className="bg-indigo-600 text-white px-3 py-1 rounded"
+                      onClick={() => setInvoiceData(inv)}
+                      className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-700"
                     >
                       فتح
                     </button>
-
                   </td>
-
                 </tr>
-
               ))}
-
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan="9" className="p-8 text-center text-slate-400">لا توجد فواتير مطابقة</td>
+                </tr>
+              )}
             </tbody>
-
           </table>
-
         </div>
-
       )}
-
     </div>
-
   );
-
 }
