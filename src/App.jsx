@@ -11564,7 +11564,7 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
           { id: 'fees', label: 'الرسوم', icon: Calculator },
           { id: 'technicians', label: 'الفنيين', icon: HardHat },
           { id: 'backup', label: 'النسخ الاحتياطي', icon: Database },
-          { id: 'api', label: 'API Keys', icon: Key }
+          { id: 'api', label: 'API Keys', icon: Key },
           { id: 'branches', label: 'الفروع', icon: MapPin }
         
         ].map(tab => (
