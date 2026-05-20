@@ -1030,7 +1030,16 @@ const ROLE_DEFAULT_PERMISSIONS = {
     viewTransfers: false,
     viewReports: false,
     viewCharts: true,
-    viewWarehouses: false
+    viewWarehouses: false,
+    viewSettings: true,
+  editSystemSettings: false,
+  editInvoiceTemplate: false,
+  manageTechniciansList: false,
+  manageFeesAndCategories: false,
+  manageProductModels: false,
+  manageFaultCodes: false,
+  manageMaintenanceCenters: false,
+  manageBranchesList: false
   },
   
   maintenance_center: {
@@ -1050,7 +1059,18 @@ const ROLE_DEFAULT_PERMISSIONS = {
     assignCallCenter: true,
     viewTransfers: false,
     viewReports: true,
-    viewCharts: true
+    viewCharts: true,
+
+    viewSettings: true,
+  editSystemSettings: false,
+  editInvoiceTemplate: false,
+  manageTechniciansList: false,
+  manageFeesAndCategories: false,
+  manageProductModels: false,
+  manageFaultCodes: true,     // يمكنه إدارة أكواد الأعطال
+  manageMaintenanceCenters: false,
+  manageBranchesList: false
+
   },
   
   call_center: {
@@ -1067,7 +1087,18 @@ const ROLE_DEFAULT_PERMISSIONS = {
     assignCallCenter: false,
     viewTransfers: false,
     viewReports: false,
-    viewCharts: true
+    viewCharts: true,
+
+     viewSettings: true,
+  editSystemSettings: false,
+  editInvoiceTemplate: false,
+  manageTechniciansList: false,
+  manageFeesAndCategories: false,
+  manageProductModels: false,
+  manageFaultCodes: false,
+  manageMaintenanceCenters: false,
+  manageBranchesList: false
+
   },
   
   sales: {
@@ -1087,7 +1118,18 @@ const ROLE_DEFAULT_PERMISSIONS = {
     viewTransfers: false,
     viewReports: false,
     viewCharts: true,
-    viewWarehouses: false
+    viewWarehouses: false,
+
+     viewSettings: true,
+  editSystemSettings: false,
+  editInvoiceTemplate: true,   // يمكنه تعديل قالب الفاتورة
+  manageTechniciansList: false,
+  manageFeesAndCategories: false,
+  manageProductModels: false,
+  manageFaultCodes: false,
+  manageMaintenanceCenters: false,
+  manageBranchesList: false
+
   },
   
   accountant: {
