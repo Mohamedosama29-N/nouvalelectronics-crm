@@ -12116,7 +12116,7 @@ export default function App() {
     footerText: 'شكراً لتعاملكم معنا.', 
     installationFees: [],
     productCategories: [],
-    technicians: []
+    technicians: [],
     maintenanceCenters: []
   });
 
