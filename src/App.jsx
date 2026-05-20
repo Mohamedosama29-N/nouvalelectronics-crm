@@ -7631,13 +7631,6 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     { value: 'maintenance', label: 'الصيانة' }
   ];
 
-  // State للقوائم المتتالية (منتج ← موديل ← عطل)
-  const [products, setProducts] = useState([]);
-  const [models, setModels] = useState([]);
-  const [faults, setFaults] = useState([]);
-  const [selectedProductId, setSelectedProductId] = useState('');
-  const [selectedModelId, setSelectedModelId] = useState('');
-
 
   const TICKET_SOURCES = [
     { value: 'hotline', label: 'HOTLINE' },
