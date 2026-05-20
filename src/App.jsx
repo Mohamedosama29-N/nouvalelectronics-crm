@@ -967,7 +967,7 @@ const ROLE_DEFAULT_PERMISSIONS = {
     viewSettings: false,
     manageSettings: false,
     
-    editSystemSettings: false,      // لا يمكنه تعديل إعدادات النظام العامة
+    editSystemSettings: true,      // لا يمكنه تعديل إعدادات النظام العامة
   editInvoiceTemplate: true,      // يمكنه تعديل قالب الفاتورة
   manageTechniciansList: true,    // يمكنه إدارة الفنيين
   manageFeesAndCategories: false, // لا يمكنه تعديل الرسوم والتصنيفات
