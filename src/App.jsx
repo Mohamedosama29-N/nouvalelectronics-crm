@@ -12428,29 +12428,79 @@ export default function App() {
                 );
              })}
              
-             {appUser.role === 'admin' && (
-                <>
-                   <p className="px-3 text-[10px] font-bold text-slate-500 uppercase mb-2 mt-6">الإدارة</p>
-                   {[
-                     { id: 'warehouses', label: 'إدارة الفروع', icon: Store, permission: 'manageWarehouses' },
-                     { id: 'users', label: 'الموظفين والصلاحيات', icon: UserCog, permission: 'manageUsers' }, 
-                     { id: 'settings', label: 'الإعدادات المركزية', icon: Settings, permission: 'manageSettings' }
-                   ].map(item => (
-                      <button 
-                        key={item.id} 
-                        onClick={()=>{setCurrentView(item.id); setIsMobileOpen(false);}} 
-                        className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all duration-200 font-bold text-sm ${
-                          currentView === item.id 
-                            ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
-                            : 'hover:bg-slate-800 hover:text-white text-slate-400'
-                        }`}
-                      >
-                        <item.icon size={18} className={currentView === item.id ? 'text-white' : 'opacity-70'}/> 
-                        <span className="flex-1 text-right">{item.label}</span>
-                      </button>
-                   ))}
-                </>
-             )}
+             {/* عرض قسم الإدارة للمستخدمين الذين لديهم صلاحيات إدارية */}
+            {(appUser.role === 'admin' || 
+              appUser.permissions?.manageSettings || 
+              appUser.permissions?.manageWarehouses || 
+              appUser.permissions?.manageUsers ||
+              appUser.permissions?.viewSettings ||
+              appUser.permissions?.editSystemSettings ||
+              appUser.permissions?.editInvoiceTemplate ||
+              appUser.permissions?.manageTechniciansList ||
+              appUser.permissions?.manageFeesAndCategories ||
+              appUser.permissions?.manageProductModels ||
+              appUser.permissions?.manageFaultCodes ||
+              appUser.permissions?.manageMaintenanceCenters ||
+              appUser.permissions?.manageBranchesList) && (
+               <>
+                  <p className="px-3 text-[10px] font-bold text-slate-500 uppercase mb-2 mt-6">الإدارة</p>
+                  
+                  {/* زر إدارة الفروع - يظهر فقط لمن لديه صلاحية */}
+                  {(appUser.role === 'admin' || appUser.permissions?.manageWarehouses) && (
+                    <button 
+                      onClick={()=>{setCurrentView('warehouses'); setIsMobileOpen(false);}} 
+                      className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all duration-200 font-bold text-sm ${
+                        currentView === 'warehouses' 
+                          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
+                          : 'hover:bg-slate-800 hover:text-white text-slate-400'
+                      }`}
+                    >
+                      <Store size={18} className={currentView === 'warehouses' ? 'text-white' : 'opacity-70'}/> 
+                      <span className="flex-1 text-right">إدارة الفروع</span>
+                    </button>
+                  )}
+                  
+                  {/* زر الموظفين والصلاحيات - يظهر فقط لمن لديه صلاحية */}
+                  {(appUser.role === 'admin' || appUser.permissions?.manageUsers) && (
+                    <button 
+                      onClick={()=>{setCurrentView('users'); setIsMobileOpen(false);}} 
+                      className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all duration-200 font-bold text-sm ${
+                        currentView === 'users' 
+                          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
+                          : 'hover:bg-slate-800 hover:text-white text-slate-400'
+                      }`}
+                    >
+                      <UserCog size={18} className={currentView === 'users' ? 'text-white' : 'opacity-70'}/> 
+                      <span className="flex-1 text-right">الموظفين والصلاحيات</span>
+                    </button>
+                  )}
+                  
+                  {/* زر الإعدادات المركزية - يظهر لمن لديه صلاحية viewSettings أو manageSettings أو أي صلاحية إعدادات جزئية */}
+                  {(appUser.role === 'admin' || 
+                    appUser.permissions?.viewSettings || 
+                    appUser.permissions?.manageSettings ||
+                    appUser.permissions?.editSystemSettings ||
+                    appUser.permissions?.editInvoiceTemplate ||
+                    appUser.permissions?.manageTechniciansList ||
+                    appUser.permissions?.manageFeesAndCategories ||
+                    appUser.permissions?.manageProductModels ||
+                    appUser.permissions?.manageFaultCodes ||
+                    appUser.permissions?.manageMaintenanceCenters ||
+                    appUser.permissions?.manageBranchesList) && (
+                    <button 
+                      onClick={()=>{setCurrentView('settings'); setIsMobileOpen(false);}} 
+                      className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all duration-200 font-bold text-sm ${
+                        currentView === 'settings' 
+                          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
+                          : 'hover:bg-slate-800 hover:text-white text-slate-400'
+                      }`}
+                    >
+                      <Settings size={18} className={currentView === 'settings' ? 'text-white' : 'opacity-70'}/> 
+                      <span className="flex-1 text-right">الإعدادات المركزية</span>
+                    </button>
+                  )}
+               </>
+            )}
           </nav>
           
           {/* ملف المستخدم في sidebar */}
@@ -12572,7 +12622,17 @@ export default function App() {
                   <LowStockView lowStockItems={lowStockItems} appUser={appUser} warehouseMap={warehouseMap} />
                 }
                 
-                {currentView === 'settings' && appUser.role === 'admin' && 
+                {currentView === 'settings' && (appUser.role === 'admin' || 
+                  appUser.permissions?.viewSettings || 
+                  appUser.permissions?.manageSettings ||
+                  appUser.permissions?.editSystemSettings ||
+                  appUser.permissions?.editInvoiceTemplate ||
+                  appUser.permissions?.manageTechniciansList ||
+                  appUser.permissions?.manageFeesAndCategories ||
+                  appUser.permissions?.manageProductModels ||
+                  appUser.permissions?.manageFaultCodes ||
+                  appUser.permissions?.manageMaintenanceCenters ||
+                  appUser.permissions?.manageBranchesList) && 
                   <SettingsManager 
                      systemSettings={systemSettings}
                      setSettings={setSystemSettings}
