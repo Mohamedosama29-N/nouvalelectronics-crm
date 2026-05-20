@@ -79,6 +79,13 @@ try {
 const getCollRef = (collName) => collection(db, collName);
 const getDocRef = (collName, docId) => doc(db, collName, docId);
 
+// مراجع مجموعات المنتجات والموديلات وأكواد الأعطال
+const getProductsColl = () => collection(db, 'products');
+const getModelsColl = () => collection(db, 'models');
+const getFaultCodesColl = () => collection(db, 'faultCodes');
+
+
+
 // ==========================================================================
 // 🔐 ENCRYPTION SETUP
 // ==========================================================================
@@ -910,7 +917,18 @@ const ALL_PERMISSIONS = [
   { key: 'viewAuditLog', label: 'سجل التدقيق', category: 'إعدادات' },
   { key: 'manageAPIKeys', label: 'إدارة مفاتيح API', category: 'إعدادات' },
   { key: 'manageIntegrations', label: 'إدارة التكاملات', category: 'إعدادات' },
-  { key: 'manageTags', label: 'إدارة الوسوم', category: 'إعدادات' }
+  { key: 'manageTags', label: 'إدارة الوسوم', category: 'إعدادات' },
+
+    // إعدادات جزئية - للتحكم في من يمكنه تعديل ماذا
+  { key: 'editSystemSettings', label: 'تعديل الإعدادات العامة (اسم النظام، الضريبة، الشعار)', category: 'إعدادات' },
+  { key: 'editInvoiceTemplate', label: 'تعديل قالب الفاتورة', category: 'إعدادات' },
+  { key: 'manageTechniciansList', label: 'إدارة قائمة الفنيين', category: 'إعدادات' },
+  { key: 'manageFeesAndCategories', label: 'إدارة الرسوم والتصنيفات', category: 'إعدادات' },
+  { key: 'manageProductModels', label: 'إدارة المنتجات والموديلات', category: 'إعدادات' },
+  { key: 'manageFaultCodes', label: 'إدارة أكواد الأعطال', category: 'إعدادات' },
+  { key: 'manageMaintenanceCenters', label: 'إدارة مراكز الصيانة', category: 'إعدادات' },
+  { key: 'manageBranchesList', label: 'إدارة قائمة الفروع', category: 'إعدادات' }
+
 ];
 
 const ROLE_DEFAULT_PERMISSIONS = {
@@ -947,7 +965,17 @@ const ROLE_DEFAULT_PERMISSIONS = {
     viewUsers: false,
     manageUsers: false,
     viewSettings: false,
-    manageSettings: false
+    manageSettings: false,
+    
+    editSystemSettings: false,      // لا يمكنه تعديل إعدادات النظام العامة
+  editInvoiceTemplate: true,      // يمكنه تعديل قالب الفاتورة
+  manageTechniciansList: true,    // يمكنه إدارة الفنيين
+  manageFeesAndCategories: false, // لا يمكنه تعديل الرسوم والتصنيفات
+  manageProductModels: true,      // يمكنه إدارة المنتجات والموديلات
+  manageFaultCodes: true,         // يمكنه إدارة أكواد الأعطال
+  manageMaintenanceCenters: true, // يمكنه إدارة مراكز الصيانة
+  manageBranchesList: false       // لا يمكنه إدارة الفروع 
+
   },
   
   warehouse_manager: {
@@ -7556,6 +7584,12 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingCommentText, setEditingCommentText] = useState('');
   
+  const [products, setProducts] = useState([]);
+  const [models, setModels] = useState([]);
+  const [faults, setFaults] = useState([]);
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedModelId, setSelectedModelId] = useState('');
+
   const [technicians, setTechnicians] = useState([]);
   const [maintenanceCenters, setMaintenanceCenters] = useState([]);
   const [callCenters, setCallCenters] = useState([]);
@@ -7597,6 +7631,14 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     { value: 'maintenance', label: 'الصيانة' }
   ];
 
+  // State للقوائم المتتالية (منتج ← موديل ← عطل)
+  const [products, setProducts] = useState([]);
+  const [models, setModels] = useState([]);
+  const [faults, setFaults] = useState([]);
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedModelId, setSelectedModelId] = useState('');
+
+
   const TICKET_SOURCES = [
     { value: 'hotline', label: 'HOTLINE' },
     { value: 'facebook', label: 'Facebook' },
@@ -7625,6 +7667,92 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     };
     loadCustomers();
   }, []);
+
+  //تحميل المنتجات 
+  useEffect(() => {
+    const loadProducts = async () => {
+      const snap = await getDocs(collection(db, 'products'));
+      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    };
+    loadProducts();
+  }, []);
+
+  //لتحميل الموديات
+  useEffect(() => {
+    if (selectedProductId) {
+      const q = query(collection(db, 'models'), where('productId', '==', selectedProductId));
+      getDocs(q).then(snap => setModels(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      setSelectedModelId('');
+      setFaults([]);
+      const product = products.find(p => p.id === selectedProductId);
+      setNewTicket(prev => ({ ...prev, device: product?.name || '' }));
+    } else {
+      setModels([]);
+    }
+  }, [selectedProductId, products]);
+
+  //لتحميل  اكواد الاعطال 
+
+  useEffect(() => {
+    if (selectedModelId) {
+      const q = query(collection(db, 'faultCodes'), where('modelId', '==', selectedModelId));
+      getDocs(q).then(snap => setFaults(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      const model = models.find(m => m.id === selectedModelId);
+      setNewTicket(prev => ({ ...prev, deviceModel: model?.name || '' }));
+    } else {
+      setFaults([]);
+    }
+  }, [selectedModelId, models]);
+
+
+  // تحميل المنتجات من Firestore
+useEffect(() => {
+  const loadProducts = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'products'));
+      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (error) {
+      console.error("Error loading products:", error);
+    }
+  };
+  loadProducts();
+}, []);
+
+// عند اختيار منتج، تحميل الموديلات الخاصة به
+useEffect(() => {
+  if (selectedProductId) {
+    const loadModels = async () => {
+      const q = query(collection(db, 'models'), where('productId', '==', selectedProductId));
+      const snap = await getDocs(q);
+      setModels(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setSelectedModelId('');
+      setFaults([]);
+      // تحديث حقل الجهاز في newTicket باسم المنتج
+      const product = products.find(p => p.id === selectedProductId);
+      setNewTicket(prev => ({ ...prev, device: product?.name || '' }));
+    };
+    loadModels();
+  } else {
+    setModels([]);
+  }
+}, [selectedProductId, products]);
+
+// عند اختيار موديل، تحميل أكواد الأعطال الخاصة به
+useEffect(() => {
+  if (selectedModelId) {
+    const loadFaults = async () => {
+      const q = query(collection(db, 'faultCodes'), where('modelId', '==', selectedModelId));
+      const snap = await getDocs(q);
+      setFaults(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      // تحديث حقل الموديل في newTicket باسم الموديل
+      const model = models.find(m => m.id === selectedModelId);
+      setNewTicket(prev => ({ ...prev, deviceModel: model?.name || '' }));
+    };
+    loadFaults();
+  } else {
+    setFaults([]);
+  }
+}, [selectedModelId, models]);
 
   // جلب الموظفين
   useEffect(() => {
@@ -8110,12 +8238,86 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
                 <div><label className="block text-xs font-bold mb-1">العنوان</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" value={newTicket.customerAddress} onChange={e => setNewTicket({...newTicket, customerAddress: e.target.value})} /></div>
               </div>
 
-              {/* الجهاز */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div><label className="block text-xs font-bold mb-1">الجهاز</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.device} onChange={e => setNewTicket({...newTicket, device: e.target.value})} placeholder="مثال: شاشة LG" /></div>
-                <div><label className="block text-xs font-bold mb-1">الموديل</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" value={newTicket.deviceModel} onChange={e => setNewTicket({...newTicket, deviceModel: e.target.value})} /></div>
-                <div><label className="block text-xs font-bold mb-1">السيريال</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-mono" value={newTicket.deviceSerial} onChange={e => setNewTicket({...newTicket, deviceSerial: e.target.value})} /></div>
-              </div>
+              {/* ===== القوائم المتتالية: المنتج ← الموديل ← كود العطل ===== */}
+<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+  
+  {/* المنتج */}
+  <div>
+    <label className="block text-xs font-bold mb-1">المنتج</label>
+    <select
+      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
+      value={selectedProductId}
+      onChange={e => setSelectedProductId(e.target.value)}
+    >
+      <option value="">-- اختر المنتج --</option>
+      {products.map(p => (
+        <option key={p.id} value={p.id}>{p.name}</option>
+      ))}
+    </select>
+  </div>
+
+  {/* الموديل */}
+  <div>
+    <label className="block text-xs font-bold mb-1">الموديل</label>
+    <select
+      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold disabled:opacity-50"
+      value={selectedModelId}
+      onChange={e => setSelectedModelId(e.target.value)}
+      disabled={!selectedProductId}
+    >
+      <option value="">-- اختر الموديل --</option>
+      {models.map(m => (
+        <option key={m.id} value={m.id}>{m.name}</option>
+      ))}
+    </select>
+  </div>
+
+  {/* السيريال (يظل كما هو - إدخال يدوي) */}
+  <div>
+    <label className="block text-xs font-bold mb-1">السيريال</label>
+    <input 
+      className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-mono" 
+      value={newTicket.deviceSerial} 
+      onChange={e => setNewTicket({...newTicket, deviceSerial: e.target.value})} 
+      placeholder="السيريال التسلسلي للجهاز"
+    />
+  </div>
+
+</div>
+
+{/* كود العطل / المشكلة */}
+<div>
+  <label className="block text-xs font-bold mb-1">كود العطل / المشكلة *</label>
+  <select
+    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold disabled:opacity-50"
+    value={newTicket.issue}
+    onChange={e => setNewTicket({...newTicket, issue: e.target.value})}
+    disabled={!selectedModelId}
+    required
+  >
+    <option value="">-- اختر كود العطل --</option>
+    {faults.map(f => (
+      <option key={f.id} value={`${f.code} - ${f.description}`}>
+        {f.code} - {f.description}
+      </option>
+    ))}
+  </select>
+  {!selectedModelId && selectedProductId && (
+    <p className="text-[10px] text-amber-500 mt-1">⚠️ اختر الموديل أولاً لظهور أكواد الأعطال</p>
+  )}
+</div>
+
+{/* ملاحظات إضافية (تظل كما هي) */}
+<div>
+  <label className="block text-xs font-bold mb-1">ملاحظات إضافية</label>
+  <textarea 
+    rows="2" 
+    className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold resize-none" 
+    value={newTicket.notes} 
+    onChange={e => setNewTicket({...newTicket, notes: e.target.value})} 
+    placeholder="أي ملاحظات إضافية عن العطل..."
+  />
+</div>
 
               {/* الضمان - النوع - المصدر */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -11283,7 +11485,12 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
           { id: 'technicians', label: 'الفنيين', icon: HardHat },
           { id: 'backup', label: 'النسخ الاحتياطي', icon: Database },
           { id: 'api', label: 'API Keys', icon: Key },
-          { id: 'branches', label: 'الفروع', icon: MapPin }
+          { id: 'branches', label: 'الفروع', icon: MapPin },
+          { id: 'maintenance_centers', label: 'مراكز الصيانة', icon: WrenchIcon },
+          { id: 'products', label: 'المنتجات والموديلات', icon: Package },
+          { id: 'faults', label: 'أكواد الأعطال', icon: AlertCircle },
+          { id: 'products', label: 'المنتجات والموديلات', icon: Package },
+          { id: 'faults', label: 'أكواد الأعطال', icon: AlertCircle }
         
         ].map(tab => (
           <button
@@ -11300,9 +11507,52 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
           </button>
         ))}
       </div>
+      
+
+
+      {activeTab === 'products' && (appUser.permissions?.manageProductModels || appUser.role === 'admin') && (
+          <ProductModelManager systemSettings={settings} setLocalSettings={setLocalSettings} />
+        )}
+        {activeTab === 'faults' && (appUser.permissions?.manageFaultCodes || appUser.role === 'admin') && (
+          <FaultCodeManager />
+        )}
+
+      {activeTab === 'maintenance_centers' && (appUser.permissions?.manageMaintenanceCenters || appUser.role === 'admin') && (
+        <div className="space-y-6 max-w-2xl">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border">
+            <h4 className="font-bold text-indigo-600 mb-4">قائمة مراكز الصيانة</h4>
+            {systemSettings.maintenanceCenters?.map((center, idx) => (
+              <div key={idx} className="flex gap-3 mb-3">
+                <input 
+                  className="flex-1 border-2 p-3 rounded-xl font-bold bg-white dark:bg-slate-900"
+                  placeholder="اسم مركز الصيانة"
+                  value={center.name}
+                  onChange={e => {
+                    const newCenters = [...(settings.maintenanceCenters || [])];
+                    newCenters[idx] = { ...center, name: e.target.value, value: e.target.value.toLowerCase().replace(/\s+/g, '_') };
+                    setLocalSettings({...settings, maintenanceCenters: newCenters});
+                  }}
+                />
+                <button onClick={() => {
+                  const newCenters = (settings.maintenanceCenters || []).filter((_, i) => i !== idx);
+                  setLocalSettings({...settings, maintenanceCenters: newCenters});
+                }} className="px-4 bg-rose-50 text-rose-600 rounded-xl">
+                  <Trash2 size={18}/>
+                </button>
+              </div>
+            ))}
+            <button onClick={() => {
+              const newCenters = [...(settings.maintenanceCenters || []), { value: '', name: '' }];
+              setLocalSettings({...settings, maintenanceCenters: newCenters});
+            }} className="w-full mt-4 py-4 border-dashed border-2 rounded-xl text-indigo-600 font-bold flex items-center justify-center gap-2">
+              <Plus size={20}/> إضافة مركز صيانة
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="p-8 max-h-[70vh] overflow-y-auto custom-scrollbar bg-gradient-to-b from-white to-slate-50 dark:from-slate-800 dark:to-slate-900">
-        {activeTab === 'general' && (
+        {activeTab === 'general' && (appUser.permissions?.editSystemSettings || appUser.role === 'admin') && (
           <div className="space-y-6 max-w-3xl">
             <div className="grid md:grid-cols-2 gap-6">
               <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -11369,7 +11619,7 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
         )}
 
         
-          {activeTab === 'branches' && (
+          {activeTab === 'branches' && (appUser.permissions?.manageBranchesList || appUser.role === 'admin') && (
             <div className="space-y-6 max-w-2xl">
               <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
                 <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">إدارة الفروع (للاختيار في التذاكر)</h4>
@@ -11414,7 +11664,7 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
           )}        
 
 
-        {activeTab === 'invoice' && (
+        {activeTab === 'invoice' && (appUser.permissions?.editInvoiceTemplate || appUser.role === 'admin') && (
           <InvoiceTemplateManager 
             systemSettings={settings}
             setSettings={setLocalSettings}
@@ -11422,7 +11672,7 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
           />
         )}
 
-        {activeTab === 'categories' && (
+        {activeTab === 'categories' && (appUser.permissions?.manageFeesAndCategories || appUser.role === 'admin') && (
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
               <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">تصنيفات المنتجات</h4>
@@ -11474,7 +11724,7 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
           </div>
         )}
 
-        {activeTab === 'fees' && (
+        {activeTab === 'fees' && (appUser.permissions?.manageFeesAndCategories || appUser.role === 'admin') && (
           <div className="space-y-6 max-w-2xl">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
               <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">الرسوم الإضافية</h4>
@@ -11522,7 +11772,7 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
           </div>
         )}
 
-        {activeTab === 'technicians' && (
+        {activeTab === 'technicians' && (appUser.permissions?.manageTechniciansList || appUser.role === 'admin') && (
           <div className="space-y-6 max-w-2xl">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
               <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">قائمة الفنيين</h4>
@@ -11656,6 +11906,167 @@ const getAllDocs = async (collectionName) => {
   }
 };
 
+
+// ==========================================================================
+// 🏷️ إدارة المنتجات والموديلات
+// ==========================================================================
+function ProductModelManager({ systemSettings, setLocalSettings }) {
+  const [products, setProducts] = useState([]);
+  const [models, setModels] = useState([]);
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [newProduct, setNewProduct] = useState('');
+  const [newModel, setNewModel] = useState('');
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  const loadProducts = async () => {
+    const snap = await getDocs(collection(db, 'products'));
+    setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  };
+
+  const addProduct = async () => {
+    if (!newProduct.trim()) return;
+    await addDoc(collection(db, 'products'), { name: newProduct.trim(), createdAt: serverTimestamp() });
+    setNewProduct('');
+    loadProducts();
+  };
+
+  const deleteProduct = async (id) => {
+    await deleteDoc(doc(db, 'products', id));
+    loadProducts();
+  };
+
+  useEffect(() => {
+    if (selectedProductId) {
+      const q = query(collection(db, 'models'), where('productId', '==', selectedProductId));
+      const unsub = onSnapshot(q, snap => setModels(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      return unsub;
+    } else {
+      setModels([]);
+    }
+  }, [selectedProductId]);
+
+  const addModel = async () => {
+    if (!selectedProductId || !newModel.trim()) return;
+    await addDoc(collection(db, 'models'), { productId: selectedProductId, name: newModel.trim() });
+    setNewModel('');
+  };
+
+  const deleteModel = async (id) => {
+    await deleteDoc(doc(db, 'models', id));
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border">
+        <h3 className="font-bold text-indigo-600 mb-4">المنتجات</h3>
+        <div className="flex gap-2 mb-4">
+          <input className="flex-1 border p-3 rounded-xl" placeholder="اسم المنتج" value={newProduct} onChange={e => setNewProduct(e.target.value)} />
+          <button onClick={addProduct} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold">إضافة</button>
+        </div>
+        <div className="space-y-2 max-h-60 overflow-y-auto">
+          {products.map(p => (
+            <div key={p.id} className={`flex justify-between items-center p-3 rounded-xl cursor-pointer ${selectedProductId === p.id ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-500' : 'hover:bg-slate-50'}`}>
+              <button onClick={() => setSelectedProductId(p.id)} className="font-bold flex-1 text-right">{p.name}</button>
+              <button onClick={() => deleteProduct(p.id)} className="text-rose-500 p-2">🗑️</button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {selectedProductId && (
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border">
+          <h3 className="font-bold text-indigo-600 mb-4">موديلات {products.find(p => p.id === selectedProductId)?.name}</h3>
+          <div className="flex gap-2 mb-4">
+            <input className="flex-1 border p-3 rounded-xl" placeholder="اسم الموديل" value={newModel} onChange={e => setNewModel(e.target.value)} />
+            <button onClick={addModel} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold">إضافة</button>
+          </div>
+          <div className="space-y-2">
+            {models.map(m => (
+              <div key={m.id} className="flex justify-between items-center p-3 border-b">
+                <span>{m.name}</span>
+                <button onClick={() => deleteModel(m.id)} className="text-rose-500">حذف</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================================================
+// 🏷️ إدارة أكواد الأعطال
+// ==========================================================================
+function FaultCodeManager() {
+  const [faults, setFaults] = useState([]);
+  const [models, setModels] = useState([]);
+  const [selectedModelId, setSelectedModelId] = useState('');
+  const [newCode, setNewCode] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+
+  useEffect(() => {
+    const loadModels = async () => {
+      const snap = await getDocs(collection(db, 'models'));
+      setModels(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    };
+    loadModels();
+  }, []);
+
+  useEffect(() => {
+    if (selectedModelId) {
+      const q = query(collection(db, 'faultCodes'), where('modelId', '==', selectedModelId));
+      const unsub = onSnapshot(q, snap => setFaults(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      return unsub;
+    } else {
+      setFaults([]);
+    }
+  }, [selectedModelId]);
+
+  const addFault = async () => {
+    if (!selectedModelId || !newCode.trim() || !newDesc.trim()) return;
+    await addDoc(collection(db, 'faultCodes'), { modelId: selectedModelId, code: newCode.trim(), description: newDesc.trim() });
+    setNewCode('');
+    setNewDesc('');
+  };
+
+  const deleteFault = async (id) => {
+    await deleteDoc(doc(db, 'faultCodes', id));
+  };
+
+  return (
+    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border">
+      <h3 className="font-bold text-indigo-600 mb-4">أكواد الأعطال</h3>
+      <div className="mb-4">
+        <label className="block text-sm font-bold mb-1">اختر الموديل</label>
+        <select className="w-full border p-3 rounded-xl" value={selectedModelId} onChange={e => setSelectedModelId(e.target.value)}>
+          <option value="">-- اختر موديل --</option>
+          {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+      </div>
+      {selectedModelId && (
+        <>
+          <div className="flex gap-2 mb-4">
+            <input className="flex-1 border p-3 rounded-xl" placeholder="الكود (مثال: ERR-001)" value={newCode} onChange={e => setNewCode(e.target.value)} />
+            <input className="flex-2 border p-3 rounded-xl" placeholder="وصف العطل" value={newDesc} onChange={e => setNewDesc(e.target.value)} />
+            <button onClick={addFault} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold">إضافة</button>
+          </div>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {faults.map(f => (
+              <div key={f.id} className="flex justify-between items-center p-3 border-b">
+                <div><span className="font-mono font-bold">{f.code}</span> – {f.description}</div>
+                <button onClick={() => deleteFault(f.id)} className="text-rose-500">حذف</button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ==========================================================================
 // 🚀 المكون الرئيسي للتطبيق (مع حل مشكلة الرفريش والتكامل الكامل)
 // ==========================================================================
@@ -11706,6 +12117,7 @@ export default function App() {
     installationFees: [],
     productCategories: [],
     technicians: []
+    maintenanceCenters: []
   });
 
   // تفعيل/إلغاء الوضع الداكن
