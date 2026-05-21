@@ -11754,7 +11754,7 @@ useEffect(() => {
         أضف مراكز الصيانة التي ستظهر في قائمة "مركز الصيانة" عند إنشاء تذكرة
       </p>
       
-      {/* قائمة مراكز الصيانة الحالية */}
+      {/* ✅ استخدم settings (من localSettings) للقراءة */}
       {settings.maintenanceCenters && settings.maintenanceCenters.length > 0 ? (
         settings.maintenanceCenters.map((center, idx) => (
           <div key={idx} className="flex gap-3 mb-3">
@@ -11769,13 +11769,15 @@ useEffect(() => {
                   name: e.target.value, 
                   value: e.target.value.toLowerCase().replace(/\s+/g, '_') 
                 };
-                setSettings({...settings, maintenanceCenters: newCenters});
+                // ✅ استخدم setLocalSettings بدلاً من setSettings
+                setLocalSettings({...settings, maintenanceCenters: newCenters});
               }}
             />
             <button 
               onClick={() => {
                 const newCenters = (settings.maintenanceCenters || []).filter((_, i) => i !== idx);
-                setSettings({...settings, maintenanceCenters: newCenters});
+                // ✅ استخدم setLocalSettings بدلاً من setSettings
+                setLocalSettings({...settings, maintenanceCenters: newCenters});
               }} 
               className="px-4 py-3 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
             >
@@ -11795,8 +11797,12 @@ useEffect(() => {
         onClick={() => {
           console.log("✅ زر الإضافة تم الضغط عليه");
           const currentCenters = settings.maintenanceCenters || [];
+          console.log("📦 currentCenters:", currentCenters);
           const newCenters = [...currentCenters, { value: '', name: '' }];
-          setSettings({...settings, maintenanceCenters: newCenters});
+          console.log("🆕 newCenters:", newCenters);
+          // ✅ استخدم setLocalSettings بدلاً من setSettings
+          setLocalSettings({...settings, maintenanceCenters: newCenters});
+          console.log("✅ تم استدعاء setLocalSettings");
         }} 
         className="w-full mt-4 py-4 border-2 border-dashed border-indigo-300 dark:border-indigo-700 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center gap-2"
       >
