@@ -6365,52 +6365,61 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
                   </div>
                </div>
 
-               <div className="bg-emerald-50 dark:bg-emerald-900/30 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800">
-                  <h4 className="font-bold text-sm text-emerald-900 dark:text-emerald-300 mb-3 flex items-center gap-2">
-                    <Users size={16}/> تعيين المسؤولين
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                     <div>
-                        <label className="block text-xs font-bold text-emerald-800 dark:text-emerald-400 mb-1">الفني المختص</label>
-                        <select 
-                          className="w-full border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold"
-                          value={newCust.assignedTechnician}
-                          onChange={e => setNewCust({...newCust, assignedTechnician: e.target.value})}
-                        >
-                           <option value="">-- غير محدد --</option>
-                           {technicians.map(t => (
-                             <option key={t.id} value={t.id}>{t.name}</option>
-                           ))}
-                        </select>
-                     </div>
-                     <div>
-                        <label className="block text-xs font-bold text-emerald-800 dark:text-emerald-400 mb-1">مركز الصيانة</label>
-                        <select 
-                          className="w-full border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold"
-                          value={newCust.assignedMaintenanceCenter}
-                          onChange={e => setNewCust({...newCust, assignedMaintenanceCenter: e.target.value})}
-                        >
-                           <option value="">-- غير محدد --</option>
-                           {maintenanceCenters.map(m => (
-                             <option key={m.id} value={m.id}>{m.name}</option>
-                           ))}
-                        </select>
-                     </div>
-                     <div>
-                        <label className="block text-xs font-bold text-emerald-800 dark:text-emerald-400 mb-1">الكول سنتر</label>
-                        <select 
-                          className="w-full border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold"
-                          value={newCust.assignedCallCenter}
-                          onChange={e => setNewCust({...newCust, assignedCallCenter: e.target.value})}
-                        >
-                           <option value="">-- غير محدد --</option>
-                           {callCenters.map(c => (
-                             <option key={c.id} value={c.id}>{c.name}</option>
-                           ))}
-                        </select>
-                     </div>
-                  </div>
-               </div>
+              <div className="bg-emerald-50 dark:bg-emerald-900/30 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800">
+  <h4 className="font-bold text-sm text-emerald-900 dark:text-emerald-300 mb-3 flex items-center gap-2">
+    <Users size={16}/> تعيين المسؤولين
+  </h4>
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+     
+    {/* الفني المختص - يبقى كما هو من الموظفين */}
+    <div>
+      <label className="block text-xs font-bold text-emerald-800 dark:text-emerald-400 mb-1">الفني المختص</label>
+      <select 
+        className="w-full border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold"
+        value={newCust.assignedTechnician}
+        onChange={e => setNewCust({...newCust, assignedTechnician: e.target.value})}
+      >
+        <option value="">-- غير محدد --</option>
+        {technicians.map(t => (
+          <option key={t.id} value={t.id}>{t.name}</option>
+        ))}
+      </select>
+    </div>
+    
+    {/* ✅ مركز الصيانة - معدل ليأخذ البيانات من systemSettings.maintenanceCenters */}
+    <div>
+      <label className="block text-xs font-bold text-emerald-800 dark:text-emerald-400 mb-1">مركز الصيانة</label>
+      <select 
+        className="w-full border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold"
+        value={newCust.assignedMaintenanceCenter}
+        onChange={e => setNewCust({...newCust, assignedMaintenanceCenter: e.target.value})}
+      >
+        <option value="">-- غير محدد --</option>
+        {(systemSettings.maintenanceCenters || []).map(center => (
+          <option key={center.value || center} value={center.value || center}>
+            {center.name || center}
+          </option>
+        ))}
+      </select>
+    </div>
+    
+    {/* الكول سنتر - يبقى كما هو من الموظفين */}
+    <div>
+      <label className="block text-xs font-bold text-emerald-800 dark:text-emerald-400 mb-1">الكول سنتر</label>
+      <select 
+        className="w-full border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold"
+        value={newCust.assignedCallCenter}
+        onChange={e => setNewCust({...newCust, assignedCallCenter: e.target.value})}
+      >
+        <option value="">-- غير محدد --</option>
+        {callCenters.map(c => (
+          <option key={c.id} value={c.id}>{c.name}</option>
+        ))}
+      </select>
+    </div>
+    
+  </div>
+</div>
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -8512,12 +8521,21 @@ const selectCustomer = (customer) => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold mb-1">مركز الصيانة</label>
-                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.assignedMaintenanceCenter} onChange={e => setNewTicket({...newTicket, assignedMaintenanceCenter: e.target.value})}>
-                    <option value="">-- غير محدد --</option>
-                    {maintenanceCenters.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
+  <label className="block text-xs font-bold mb-1">مركز الصيانة</label>
+  <select 
+    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" 
+    value={newTicket.assignedMaintenanceCenter} 
+    onChange={e => setNewTicket({...newTicket, assignedMaintenanceCenter: e.target.value})}
+  >
+    <option value="">-- غير محدد --</option>
+    {/* ✅ استخدام systemSettings.maintenanceCenters بدلاً من maintenanceCenters */}
+    {(systemSettings.maintenanceCenters || []).map(center => (
+      <option key={center.value || center} value={center.value || center}>
+        {center.name || center}
+      </option>
+    ))}
+  </select>
+</div>
                 <div>
                   <label className="block text-xs font-bold mb-1">الكول سنتر</label>
                   <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.assignedCallCenter} onChange={e => setNewTicket({...newTicket, assignedCallCenter: e.target.value})}>
