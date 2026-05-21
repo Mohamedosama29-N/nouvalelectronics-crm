@@ -11447,6 +11447,12 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [newApiKey, setNewApiKey] = useState({ name: '', permissions: [] });
 
+  // مراقبة تغييرات settings
+useEffect(() => {
+  console.log("🔄 SettingsManager - settings تغيرت:", settings);
+  console.log("🔄 SettingsManager - maintenanceCenters:", settings.maintenanceCenters);
+}, [settings]);
+
   useEffect(() => {
     const loadBackups = async () => {
       const backups = await offlineDB.getAll('backups');
@@ -11784,17 +11790,13 @@ useEffect(() => {
         </div>
       )}
       
-      {/* زر إضافة مركز صيانة جديد - مع console.log */}
+      {/* زر إضافة مركز صيانة جديد */}
       <button 
         onClick={() => {
-          console.log("🔴 1. زر الإضافة تم الضغط عليه");
-          alert("✅ الزر يعمل! هذا تنبيه تجريبي");
+          console.log("✅ زر الإضافة تم الضغط عليه");
           const currentCenters = settings.maintenanceCenters || [];
-          console.log("🔴 2. currentCenters:", currentCenters);
           const newCenters = [...currentCenters, { value: '', name: '' }];
-          console.log("🔴 3. newCenters:", newCenters);
           setSettings({...settings, maintenanceCenters: newCenters});
-          console.log("🔴 4. تم استدعاء setSettings");
         }} 
         className="w-full mt-4 py-4 border-2 border-dashed border-indigo-300 dark:border-indigo-700 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center gap-2"
       >
