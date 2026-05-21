@@ -7777,6 +7777,7 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     status: ticket.status || 'created',
     priority: ticket.priority || 'medium',
     warrantyStatus: ticket.warrantyStatus || '',
+    warrantyPeriod: ticket.warrantyPeriod || '',
     ticketType: ticket.ticketType || '',
     source: ticket.source || '',
     nearestBranch: ticket.nearestBranch || '',
@@ -8407,6 +8408,23 @@ const selectCustomer = (customer) => {
       ))}
     </select>
   );
+
+  
+
+  // دالة مساعدة لقراءة البيانات بأمان (تتجنب الأخطاء)
+const safeGet = (obj, path, defaultValue = '') => {
+  try {
+    const keys = path.split('.');
+    let result = obj;
+    for (const key of keys) {
+      if (result === null || result === undefined) return defaultValue;
+      result = result[key];
+    }
+    return result === null || result === undefined ? defaultValue : result;
+  } catch (e) {
+    return defaultValue;
+  }
+};
 
   // ====================== RENDER ======================
   return (
@@ -9133,16 +9151,16 @@ const selectCustomer = (customer) => {
 
 
 
-      {/* فترة الضمان في عرض التذكرة */}
+      {/* فترة الضمان في عرض التذكرة - مع التحقق من وجود البيانات */}
 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
   
   {/* عرض حالة الضمان */}
   <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
     <label className="text-xs text-slate-500 block mb-1">حالة الضمان</label>
     <p className="font-bold">
-      {fullTicketView.warrantyStatus === 'in_warranty' ? (
+      {fullTicketView && fullTicketView.warrantyStatus === 'in_warranty' ? (
         <span className="text-green-600 dark:text-green-400">✅ داخل الضمان</span>
-      ) : fullTicketView.warrantyStatus === 'out_of_warranty' ? (
+      ) : fullTicketView && fullTicketView.warrantyStatus === 'out_of_warranty' ? (
         <span className="text-red-600 dark:text-red-400">❌ خارج الضمان</span>
       ) : '-'}
     </p>
@@ -9152,18 +9170,17 @@ const selectCustomer = (customer) => {
   <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
     <label className="text-xs text-slate-500 block mb-1">📅 فترة الضمان</label>
     <p className="font-bold">
-      {fullTicketView.warrantyStatus === 'in_warranty' ? (
+      {fullTicketView && fullTicketView.warrantyStatus === 'in_warranty' ? (
         <span className="text-blue-600 dark:text-blue-400">
           {WARRANTY_PERIODS.find(p => p.value === fullTicketView.warrantyPeriod)?.label || fullTicketView.warrantyPeriod || '-'}
         </span>
-      ) : fullTicketView.warrantyStatus === 'out_of_warranty' ? (
+      ) : fullTicketView && fullTicketView.warrantyStatus === 'out_of_warranty' ? (
         <span className="text-red-600 dark:text-red-400">خارج الضمان</span>
       ) : '-'}
     </p>
   </div>
   
 </div>
-
 
       {/* ===== مودال سجل التذكرة ===== */}
       {showHistoryModal && selectedTicket && (
@@ -9406,7 +9423,11 @@ const selectCustomer = (customer) => {
                 <td className="p-3">{TICKET_TYPES.find(tt => tt.value === t.ticketType)?.label || '-'}</td>
                 <td className="p-3" onClick={e => e.stopPropagation()}><StatusSelectComp value={t.status} onChange={handleUpdateStatus} ticketId={t.id} /></td>
                 <td className="p-3"><span className={`px-2 py-1 rounded-full text-[9px] font-bold ${getPriorityColor(t.priority)}`}>{t.priority === 'high' ? 'عالية' : t.priority === 'medium' ? 'متوسطة' : 'منخفضة'}</span></td>
-                <td className="p-3">{WARRANTY_OPTIONS.find(w => w.value === t.warrantyStatus)?.label || '-'}</td>
+                <td className="p-3">
+                  {t && t.warrantyStatus ? (
+                    WARRANTY_OPTIONS.find(w => w.value === t.warrantyStatus)?.label || '-'
+                  ) : '-'}
+                </td>
                 <td className="p-3">{TICKET_SOURCES.find(s => s.value === t.source)?.label || '-'}</td>
                 <td className="p-3">{technicians.find(tech => tech.id === t.assignedTechnician)?.name || '-'}</td>
                 <td className="p-3 text-[9px]">{formatDate(t.updatedAt || t.createdAt)}</td>
