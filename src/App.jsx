@@ -6371,7 +6371,7 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
   </h4>
   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
      
-    {/* الفني المختص - يبقى كما هو من الموظفين */}
+    {/* الفني المختص - ✅ من الإعدادات (systemSettings.technicians) */}
     <div>
       <label className="block text-xs font-bold text-emerald-800 dark:text-emerald-400 mb-1">الفني المختص</label>
       <select 
@@ -6380,8 +6380,9 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
         onChange={e => setNewCust({...newCust, assignedTechnician: e.target.value})}
       >
         <option value="">-- غير محدد --</option>
-        {technicians.map(t => (
-          <option key={t.id} value={t.id}>{t.name}</option>
+        {/* ✅ استخدام systemSettings.technicians من الإعدادات */}
+        {(systemSettings.technicians || []).map((tech, idx) => (
+          <option key={idx} value={tech}>{tech}</option>
         ))}
       </select>
     </div>
@@ -8516,9 +8517,12 @@ const selectCustomer = (customer) => {
                 <div>
                   <label className="block text-xs font-bold mb-1">الفني المختص</label>
                   <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.assignedTechnician} onChange={e => setNewTicket({...newTicket, assignedTechnician: e.target.value})}>
-                    <option value="">-- غير محدد --</option>
-                    {technicians.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
+                  <option value="">-- غير محدد --</option>
+                  {/* ✅ استخدام systemSettings.technicians من الإعدادات بدلاً من technicians */}
+                  {(systemSettings.technicians || []).map((tech, idx) => (
+                    <option key={idx} value={tech}>{tech}</option>
+                  ))}
+                </select>
                 </div>
                 <div>
   <label className="block text-xs font-bold mb-1">مركز الصيانة</label>
