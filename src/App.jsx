@@ -1150,13 +1150,7 @@ const ROLE_DEFAULT_PERMISSIONS = {
   }
 };
 
-const EGYPT_GOVERNORATES = [
-  'القاهرة', 'الجيزة', 'الإسكندرية', 'الدقهلية', 'الشرقية', 'القليوبية',
-  'الغربية', 'المنوفية', 'البحيرة', 'كفر الشيخ', 'دمياط', 'بورسعيد',
-  'الإسماعيلية', 'السويس', 'شمال سيناء', 'جنوب سيناء', 'بني سويف',
-  'الفيوم', 'المنيا', 'أسيوط', 'سوهاج', 'قنا', 'الأقصر', 'أسوان',
-  'مطروح', 'الوادي الجديد', 'البحر الأحمر'
-].sort();
+
 
 const TICKET_STATUSES = [
   { value: 'created', label: 'إنشاء', color: 'gray' },
@@ -1181,6 +1175,14 @@ const TICKET_STATUSES = [
   { value: 'waiting_shipping_company', label: 'انتظار ارسال شركة الشحن', color: 'yellow' }
 ];
 
+
+const EGYPT_GOVERNORATES = [
+  'القاهرة', 'الجيزة', 'الإسكندرية', 'الدقهلية', 'الشرقية', 'القليوبية',
+  'الغربية', 'المنوفية', 'البحيرة', 'كفر الشيخ', 'دمياط', 'بورسعيد',
+  'الإسماعيلية', 'السويس', 'شمال سيناء', 'جنوب سيناء', 'بني سويف',
+  'الفيوم', 'المنيا', 'أسيوط', 'سوهاج', 'قنا', 'الأقصر', 'أسوان',
+  'مطروح', 'الوادي الجديد', 'البحر الأحمر'
+].sort();
 const ticketStatusOptions = TICKET_STATUSES.map(status => ({
   value: status.value,
   label: status.label
@@ -7626,6 +7628,10 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingCommentText, setEditingCommentText] = useState('');
   
+    // أضف هذا مع باقي الـ state في بداية المكون
+  const [editingTicket, setEditingTicket] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
+
   const [products, setProducts] = useState([]);
   const [models, setModels] = useState([]);
   const [faults, setFaults] = useState([]);
@@ -7647,7 +7653,10 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   
   const [newTicket, setNewTicket] = useState({
     customerId: '', customerName: '', customerPhone: '', secondPhone: '', landline: '',
-    customerEmail: '', customerAddress: '', device: '', deviceType: '', deviceModel: '',
+    customerEmail: '', customerAddress: '', 
+    governorate: '',    // <-- أضف هذا السطر (المحافظة)
+    city: '',           // <-- أضف هذا السطر (المدينة/المنطقة)
+    device: '', deviceType: '', deviceModel: '',
     deviceSerial: '', issue: '', status: 'created', priority: 'medium',
     warrantyStatus: '', ticketType: '', source: '', nearestBranch: '',
     assignedTechnician: '', assignedMaintenanceCenter: '', assignedCallCenter: '',
@@ -7683,6 +7692,13 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     { value: 'phone_call', label: 'مكالمة هاتفية' }
   ];
 
+    // أضف هذه الدالة مع باقي الدوال
+  const openEditModal = (ticket) => {
+      setEditingTicket(ticket);
+      setEditFormData({ ...ticket });
+  };
+
+
   const WARRANTY_OPTIONS = [
     { value: 'in_warranty', label: 'داخل الضمان' },
     { value: 'out_of_warranty', label: 'خارج الضمان' }
@@ -7691,6 +7707,32 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const BRANCH_OPTIONS = systemSettings?.branches || [
     { value: 'main', label: 'الفرع الرئيسي' }
   ];
+
+
+    // أضف هذه الدالة مع باقي الدوال
+  const handleUpdateTicket = async (e) => {
+      e.preventDefault();
+      if (!editingTicket) return;
+
+      setGlobalLoading(true);
+      try {
+          const ticketRef = doc(db, 'tickets', editingTicket.id);
+          await updateDoc(ticketRef, {
+              ...editFormData,
+              updatedAt: serverTimestamp(),
+          });
+          await logUserActivity(appUser, 'تعديل تذكرة', `تم تعديل التذكرة رقم ${editingTicket.ticketNumber}`);
+          showSuccess("تم تحديث التذكرة بنجاح");
+          setEditingTicket(null);
+          setEditFormData({});
+          loadTickets(false);
+      } catch (error) {
+          console.error(error);
+          showError("حدث خطأ أثناء تحديث التذكرة");
+      }
+      setGlobalLoading(false);
+  };
+
 
   // جلب العملاء
   useEffect(() => {
@@ -7890,29 +7932,31 @@ useEffect(() => {
   };
 
   // البحث عن العملاء
-  const filteredCustomers = useMemo(() => {
-    if (!customerSearch.trim()) return [];
-    const term = normalizeSearch(customerSearch);
-    return customers.filter(c => 
-      normalizeSearch(c.name).includes(term) || normalizeSearch(c.phone).includes(term)
-    ).slice(0, 8);
-  }, [customerSearch, customers]);
+const filteredCustomers = useMemo(() => {
+  if (!customerSearch.trim()) return [];
+  const term = normalizeSearch(customerSearch);
+  return customers.filter(c => 
+    normalizeSearch(c.name).includes(term) || normalizeSearch(c.phone).includes(term)
+  ).slice(0, 8);
+}, [customerSearch, customers]);
 
-  const selectCustomer = (customer) => {
-    setNewTicket({
-      ...newTicket,
-      customerId: customer.id,
-      customerName: customer.name || '',
-      customerPhone: customer.phone || '',
-      secondPhone: customer.secondPhone || '',
-      customerEmail: customer.email || '',
-      customerAddress: customer.address || customer.addressFull || '',
-      landline: customer.landline || ''
-    });
-    setCustomerSearch('');
-    setShowCustomerDropdown(false);
-  };
-
+const selectCustomer = (customer) => {
+  setNewTicket({
+    ...newTicket,
+    customerId: customer.id,
+    customerName: customer.name || '',
+    customerPhone: customer.phone || '',
+    secondPhone: customer.secondPhone || '',
+    customerEmail: customer.email || '',
+    customerAddress: customer.address || customer.addressFull || '',
+    landline: customer.landline || '',
+    governorate: customer.governorate || '',  // ✅ تمت الإضافة
+    city: customer.city || ''                 // ✅ تمت الإضافة
+  });
+  setCustomerSearch('');
+  setShowCustomerDropdown(false);
+  showSuccess(`تم تحميل بيانات العميل: ${customer.name}`); // optional
+};
   // فتح التذكرة كاملة
   const openFullTicket = (ticket) => {
     setFullTicketView(ticket);
@@ -8239,28 +8283,56 @@ useEffect(() => {
             <form onSubmit={handleAddTicket} className="space-y-4">
               
               {/* البحث عن عميل */}
-              <div className="relative">
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">البحث عن عميل (بالاسم أو رقم الهاتف)</label>
-                <input 
-                  className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500"
-                  placeholder="ابحث عن عميل مسجل..."
-                  value={customerSearch}
-                  onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true); }}
-                  onFocus={() => setShowCustomerDropdown(true)}
-                />
-                {showCustomerDropdown && filteredCustomers.length > 0 && (
-                  <div className="absolute z-10 w-full bg-white dark:bg-slate-800 border rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
-                    {filteredCustomers.map(c => (
-                      <button key={c.id} type="button" onClick={() => selectCustomer(c)}
-                        className="w-full p-3 text-right hover:bg-slate-50 dark:hover:bg-slate-700 border-b last:border-0">
-                        <span className="font-bold block text-sm">{c.name}</span>
-                        <span className="text-xs text-slate-500">{c.phone}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+<div className="relative">
+  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+    🔍 البحث عن عميل موجود (بالاسم أو رقم الهاتف)
+  </label>
+  <input 
+    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500"
+    placeholder="ابحث عن عميل مسجل..."
+    value={customerSearch}
+    onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true); }}
+    onFocus={() => setShowCustomerDropdown(true)}
+  />
+  
+  {/* قائمة العملاء المقترحين */}
+  {showCustomerDropdown && filteredCustomers.length > 0 && (
+    <div className="absolute z-20 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
+      {filteredCustomers.map(c => (
+        <button 
+          key={c.id} 
+          type="button" 
+          onClick={() => selectCustomer(c)}
+          className="w-full p-3 text-right hover:bg-slate-50 dark:hover:bg-slate-700 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors"
+        >
+          <span className="font-bold block text-sm text-slate-800 dark:text-white">{c.name}</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400">{c.phone}</span>
+          {c.governorate && (
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">
+              📍 {c.governorate} {c.city && `- ${c.city}`}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  )}
+  
+  {/* رسالة إذا لم يتم العثور على عملاء */}
+  {showCustomerDropdown && customerSearch.trim() !== '' && filteredCustomers.length === 0 && (
+    <div className="absolute z-20 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl mt-1 shadow-lg p-4 text-center">
+      <p className="text-sm text-slate-500 dark:text-slate-400">⚠️ لا توجد نتائج مطابقة</p>
+      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">يمكنك إدخال بيانات العميل يدوياً</p>
+    </div>
+  )}
+</div>
 
+{/* رسالة توضيحية */}
+<div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-lg border border-indigo-100 dark:border-indigo-800">
+  <p className="text-xs text-indigo-800 dark:text-indigo-300 font-bold flex items-center gap-2">
+    💡 نصيحة: يمكنك البحث عن عميل موجود باستخدام مربع البحث أعلاه، 
+    سيتم تعبئة بياناته تلقائياً. إذا كان العميل جديداً، املأ البيانات يدوياً.
+  </p>
+</div>
               {/* معلومات العميل */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 <div><label className="block text-xs font-bold mb-1">اسم العميل *</label><input required className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.customerName} onChange={e => setNewTicket({...newTicket, customerName: e.target.value})} /></div>
@@ -8271,6 +8343,37 @@ useEffect(() => {
                 <div><label className="block text-xs font-bold mb-1">تليفون أرضي</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-mono" value={newTicket.landline} onChange={e => setNewTicket({...newTicket, landline: e.target.value})} dir="ltr" /></div>
                 <div><label className="block text-xs font-bold mb-1">البريد الإلكتروني</label><input type="email" className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" value={newTicket.customerEmail} onChange={e => setNewTicket({...newTicket, customerEmail: e.target.value})} /></div>
                 <div><label className="block text-xs font-bold mb-1">العنوان</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" value={newTicket.customerAddress} onChange={e => setNewTicket({...newTicket, customerAddress: e.target.value})} /></div>
+              </div>
+
+                            {/* معلومات العميل - استمرار */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                
+                {/* المحافظة - قائمة منسدلة */}
+                <div>
+                  <label className="block text-xs font-bold mb-1">المحافظة</label>
+                  <select 
+                    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
+                    value={newTicket.governorate || ''}
+                    onChange={e => setNewTicket({...newTicket, governorate: e.target.value})}
+                  >
+                    <option value="">-- اختر المحافظة --</option>
+                    {EGYPT_GOVERNORATES.map(gov => (
+                      <option key={gov} value={gov}>{gov}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                {/* المدينة - يمكن أن تكون إدخال نصي حالياً */}
+                <div>
+                  <label className="block text-xs font-bold mb-1">المدينة / المنطقة</label>
+                  <input 
+                    className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
+                    value={newTicket.city || ''}
+                    onChange={e => setNewTicket({...newTicket, city: e.target.value})}
+                    placeholder="مثال: مدينة نصر"
+                  />
+                </div>
+                
               </div>
 
               {/* ===== القوائم المتتالية: المنتج ← الموديل ← كود العطل ===== */}
@@ -8698,6 +8801,75 @@ useEffect(() => {
         </div>
       </div>
 
+      
+            {/* ===== مودال تعديل التذكرة ===== */}
+      {editingTicket && (appUser.permissions?.editTicket || appUser.role === 'admin') && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-4xl shadow-2xl max-h-[90vh] overflow-y-auto">
+                  <div className="flex justify-between items-center mb-4 border-b pb-3">
+                      <h3 className="font-black text-xl text-slate-800 dark:text-white">
+                          تعديل التذكرة #{editingTicket.ticketNumber}
+                      </h3>
+                      <button onClick={() => setEditingTicket(null)} className="text-slate-400 hover:text-rose-600">
+                          <X size={24} />
+                      </button>
+                  </div>
+                  <form onSubmit={handleUpdateTicket} className="space-y-4">
+                      {/* معلومات العميل - املأها بنفس هيكل form الإضافة */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div>
+                              <label className="block text-xs font-bold mb-1">اسم العميل *</label>
+                              <input required className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900" value={editFormData.customerName || ''} onChange={e => setEditFormData({ ...editFormData, customerName: e.target.value })} />
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold mb-1">رقم الهاتف *</label>
+                              <input required className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900" value={editFormData.customerPhone || ''} onChange={e => setEditFormData({ ...editFormData, customerPhone: e.target.value })} />
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold mb-1">الجهاز</label>
+                              <input className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900" value={editFormData.device || ''} onChange={e => setEditFormData({ ...editFormData, device: e.target.value })} />
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold mb-1">الموديل</label>
+                              <input className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900" value={editFormData.deviceModel || ''} onChange={e => setEditFormData({ ...editFormData, deviceModel: e.target.value })} />
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold mb-1">السيريال</label>
+                              <input className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900" value={editFormData.deviceSerial || ''} onChange={e => setEditFormData({ ...editFormData, deviceSerial: e.target.value })} />
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold mb-1">المشكلة</label>
+                              <textarea rows="2" className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900" value={editFormData.issue || ''} onChange={e => setEditFormData({ ...editFormData, issue: e.target.value })} />
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold mb-1">الحالة</label>
+                              <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900" value={editFormData.status || ''} onChange={e => setEditFormData({ ...editFormData, status: e.target.value })}>
+                                  {TICKET_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                              </select>
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold mb-1">الأولوية</label>
+                              <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900" value={editFormData.priority || 'medium'} onChange={e => setEditFormData({ ...editFormData, priority: e.target.value })}>
+                                  <option value="low">منخفضة</option>
+                                  <option value="medium">متوسطة</option>
+                                  <option value="high">عالية</option>
+                              </select>
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold mb-1">التكلفة التقديرية</label>
+                              <input type="number" className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900" value={editFormData.estimatedCost || 0} onChange={e => setEditFormData({ ...editFormData, estimatedCost: Number(e.target.value) })} />
+                          </div>
+                      </div>
+                      <div className="flex gap-3 pt-4">
+                          <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700">حفظ التعديلات</button>
+                          <button type="button" onClick={() => setEditingTicket(null)} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إلغاء</button>
+                      </div>
+                  </form>
+              </div>
+          </div>
+      )}
+
+
       {/* ===== جدول التذاكر ===== */}
       <div className="overflow-x-auto max-h-[70vh] custom-scrollbar">
         <table className="w-full text-right text-sm">
@@ -8741,6 +8913,16 @@ useEffect(() => {
                     <button onClick={() => { setSelectedTicket(t); setShowAssignModal(true); }} className="p-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 rounded hover:bg-amber-100" title="تعيين"><Users size={14}/></button>
                     <button onClick={() => handleViewHistory(t)} className="p-1.5 bg-purple-50 dark:bg-purple-900/30 text-purple-600 rounded hover:bg-purple-100" title="سجل"><History size={14}/></button>
                     <button onClick={() => handleGenerateInvoice(t)} className="p-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 rounded hover:bg-emerald-100" title="فاتورة"><Receipt size={14}/></button>
+                  
+                    {/* داخل زر الإجراءات */}
+                    <button
+                        onClick={(e) => { e.stopPropagation(); openEditModal(t); }}
+                        className="p-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 rounded hover:bg-emerald-100"
+                        title="تعديل"
+                    >
+                        <Edit size={14} />
+                    </button>
+
                   </div>
                 </td>
               </tr>
@@ -11383,12 +11565,13 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
   const handleSave = async () => {
     setGlobalLoading(true);
     try {
-      await setDoc(doc(db, 'settings', 'general'), settings, { merge: true });
-      setSettings(settings);
-      showSuccess("✅ تم حفظ الإعدادات بنجاح");
+        // استخدم settings (القيمة الحالية) بدلاً من localSettings
+        await setDoc(doc(db, 'settings', 'general'), settings, { merge: true });
+        setSettings(settings);
+        showSuccess("✅ تم حفظ الإعدادات بنجاح");
     } catch (error) {
-      console.error("Error saving settings:", error);
-      showError("❌ حدث خطأ في حفظ الإعدادات: " + error.message);
+        console.error("Error saving settings:", error);
+        showError("❌ حدث خطأ في حفظ الإعدادات: " + error.message);
     }
     setGlobalLoading(false);
   };
@@ -11522,8 +11705,6 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
           { id: 'api', label: 'API Keys', icon: Key },
           { id: 'branches', label: 'الفروع', icon: MapPin },
           { id: 'maintenance_centers', label: 'مراكز الصيانة', icon: WrenchIcon },
-          { id: 'products', label: 'المنتجات والموديلات', icon: Package },
-          { id: 'faults', label: 'أكواد الأعطال', icon: AlertCircle },
           { id: 'products', label: 'المنتجات والموديلات', icon: Package },
           { id: 'faults', label: 'أكواد الأعطال', icon: AlertCircle }
         
@@ -11989,8 +12170,16 @@ function ProductModelManager({ systemSettings, setLocalSettings }) {
     setNewModel('');
   };
 
-  const deleteModel = async (id) => {
-    await deleteDoc(doc(db, 'models', id));
+  const deleteModel = async (modelId) => {
+    // 1. حذف أكواد الأعطال المرتبطة بهذا الموديل
+    const faultCodesQuery = query(collection(db, 'faultCodes'), where('modelId', '==', modelId));
+    const faultCodesSnap = await getDocs(faultCodesQuery);
+    const deleteFaultsPromises = faultCodesSnap.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(deleteFaultsPromises);
+
+    // 2. حذف الموديل نفسه
+    await deleteDoc(doc(db, 'models', modelId));
+    showSuccess("تم حذف الموديل وجميع أكواد الأعطال المرتبطة به");
   };
 
   return (
