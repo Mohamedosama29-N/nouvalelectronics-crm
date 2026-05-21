@@ -8627,67 +8627,7 @@ const safeGet = (obj, path, defaultValue = '') => {
                   />
                 </div>
 
-                              {/* الضمان - النوع - المصدر */}
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                {/* الضمان وحالة الضمان في مودال التعديل */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  
-                  {/* حالة الضمان */}
-                  <div>
-                    <label className="block text-xs font-bold mb-1">حالة الضمان</label>
-                    <select 
-                      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" 
-                      value={editFormData.warrantyStatus || ''} 
-                      onChange={e => {
-                        const newStatus = e.target.value;
-                        if (newStatus === 'out_of_warranty') {
-                          setEditFormData({
-                            ...editFormData, 
-                            warrantyStatus: newStatus,
-                            warrantyPeriod: 'out_of_warranty'
-                          });
-                        } else {
-                          setEditFormData({
-                            ...editFormData, 
-                            warrantyStatus: newStatus,
-                            warrantyPeriod: editFormData.warrantyPeriod || ''
-                          });
-                        }
-                      }}
-                    >
-                      <option value="">-- اختر حالة الضمان --</option>
-                      <option value="in_warranty">✅ داخل الضمان</option>
-                      <option value="out_of_warranty">❌ خارج الضمان</option>
-                    </select>
-                  </div>
-                  
-                  {/* فترة الضمان */}
-                  {editFormData.warrantyStatus === 'in_warranty' && (
-                    <div>
-                      <label className="block text-xs font-bold mb-1">📅 فترة الضمان المتبقية</label>
-                      <select 
-                        className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" 
-                        value={editFormData.warrantyPeriod || ''} 
-                        onChange={e => setEditFormData({...editFormData, warrantyPeriod: e.target.value})}
-                      >
-                        <option value="">-- اختر الفترة --</option>
-                        {WARRANTY_PERIODS.map(period => (
-                          <option key={period.value} value={period.value}>{period.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  
-                  {editFormData.warrantyStatus === 'out_of_warranty' && (
-                    <div>
-                      <label className="block text-xs font-bold mb-1">📅 فترة الضمان</label>
-                      <div className="w-full border p-3 rounded-xl text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
-                        🔴 خارج الضمان
-                      </div>
-                    </div>
-                  )}
-                  
-                </div>
+               
 {/* الضمان وحالة الضمان */}
 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
   
