@@ -11455,6 +11455,13 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
     loadBackups();
   }, []);
 
+useEffect(() => {
+  console.log("🔍 SettingsManager - settings.maintenanceCenters:", settings.maintenanceCenters);
+  if (!settings.maintenanceCenters) {
+    setSettings({...settings, maintenanceCenters: []});
+  }
+}, []);
+
   const handleExportSettings = () => {
     const exportData = {
       systemName: settings.systemName,
