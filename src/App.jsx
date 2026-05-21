@@ -11740,7 +11740,7 @@ useEffect(() => {
           <FaultCodeManager />
         )}
 
-      {activeTab === 'maintenance_centers' && (appUser.permissions?.manageMaintenanceCenters || appUser.role === 'admin') && (
+     {activeTab === 'maintenance_centers' && (appUser.permissions?.manageMaintenanceCenters || appUser.role === 'admin') && (
   <div className="space-y-6 max-w-2xl">
     <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
       <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">🏢 قائمة مراكز الصيانة</h4>
@@ -11748,8 +11748,8 @@ useEffect(() => {
         أضف مراكز الصيانة التي ستظهر في قائمة "مركز الصيانة" عند إنشاء تذكرة
       </p>
       
-      {/* ✅ استخدم settings بدلاً من localSettings */}
-      {(settings.maintenanceCenters && settings.maintenanceCenters.length > 0) ? (
+      {/* قائمة مراكز الصيانة الحالية */}
+      {settings.maintenanceCenters && settings.maintenanceCenters.length > 0 ? (
         settings.maintenanceCenters.map((center, idx) => (
           <div key={idx} className="flex gap-3 mb-3">
             <input 
@@ -11763,13 +11763,13 @@ useEffect(() => {
                   name: e.target.value, 
                   value: e.target.value.toLowerCase().replace(/\s+/g, '_') 
                 };
-                setSettings({...settings, maintenanceCenters: newCenters});  // ✅ استخدم setSettings
+                setSettings({...settings, maintenanceCenters: newCenters});
               }}
             />
             <button 
               onClick={() => {
                 const newCenters = (settings.maintenanceCenters || []).filter((_, i) => i !== idx);
-                setSettings({...settings, maintenanceCenters: newCenters});  // ✅ استخدم setSettings
+                setSettings({...settings, maintenanceCenters: newCenters});
               }} 
               className="px-4 py-3 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
             >
@@ -11784,12 +11784,17 @@ useEffect(() => {
         </div>
       )}
       
-      {/* زر إضافة مركز صيانة جديد */}
+      {/* زر إضافة مركز صيانة جديد - مع console.log */}
       <button 
         onClick={() => {
-          const currentCenters = settings.maintenanceCenters || [];  // ✅ استخدم settings
+          console.log("🔴 1. زر الإضافة تم الضغط عليه");
+          alert("✅ الزر يعمل! هذا تنبيه تجريبي");
+          const currentCenters = settings.maintenanceCenters || [];
+          console.log("🔴 2. currentCenters:", currentCenters);
           const newCenters = [...currentCenters, { value: '', name: '' }];
-          setSettings({...settings, maintenanceCenters: newCenters});  // ✅ استخدم setSettings
+          console.log("🔴 3. newCenters:", newCenters);
+          setSettings({...settings, maintenanceCenters: newCenters});
+          console.log("🔴 4. تم استدعاء setSettings");
         }} 
         className="w-full mt-4 py-4 border-2 border-dashed border-indigo-300 dark:border-indigo-700 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center gap-2"
       >
