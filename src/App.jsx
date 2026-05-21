@@ -7640,7 +7640,44 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   
     // أضف هذا مع باقي الـ state في بداية المكون
   const [editingTicket, setEditingTicket] = useState(null);
-  const [editFormData, setEditFormData] = useState({});
+  const [editFormData, setEditFormData] = useState({
+  // معلومات أساسية
+  id: '',
+  ticketNumber: '',
+  customerName: '',
+  customerPhone: '',
+  secondPhone: '',
+  landline: '',
+  customerEmail: '',
+  customerAddress: '',
+  governorate: '',
+  city: '',
+  device: '',
+  deviceType: '',
+  deviceModel: '',
+  deviceSerial: '',
+  issue: '',
+  status: '',
+  priority: '',
+  warrantyStatus: '',
+  ticketType: '',
+  source: '',
+  nearestBranch: '',
+  assignedTechnician: '',
+  assignedMaintenanceCenter: '',
+  assignedCallCenter: '',
+  estimatedCost: 0,
+  estimatedDuration: '',
+  notes: '',
+  tags: [],
+  
+  // ✅ الخانات الجديدة
+  sparePartsWithCost: '',
+  sparePartsWithoutCost: '',
+  invoiceDate: '',
+  deliveryDate: '',
+  maintenanceEndDate: ''
+});
 
   const [products, setProducts] = useState([]);
   const [models, setModels] = useState([]);
@@ -7670,7 +7707,13 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     deviceSerial: '', issue: '', status: 'created', priority: 'medium',
     warrantyStatus: '', ticketType: '', source: '', nearestBranch: '',
     assignedTechnician: '', assignedMaintenanceCenter: '', assignedCallCenter: '',
-    estimatedCost: 0, estimatedDuration: '', notes: '', spareParts: [], tags: [], attachments: []
+    estimatedCost: 0, estimatedDuration: '', notes: '', spareParts: [], tags: [], attachments: [],
+    // ✅ الخانات الجديدة
+  sparePartsWithCost: '',      // قطع غيار بتكلفة
+  sparePartsWithoutCost: '',   // قطع غيار بدون تكلفة
+  invoiceDate: '',             // تاريخ الفاتورة / الضمان
+  deliveryDate: '',            // تاريخ تسليم العميل
+  maintenanceEndDate: ''       // تاريخ انتهاء الصيانة
   });
 
   const [lastDoc, setLastDoc] = useState(null);
@@ -7704,9 +7747,44 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
 
     // أضف هذه الدالة مع باقي الدوال
   const openEditModal = (ticket) => {
-      setEditingTicket(ticket);
-      setEditFormData({ ...ticket });
-  };
+  setEditingTicket(ticket);
+  setEditFormData({
+    // نسخ جميع بيانات التذكرة
+    ...ticket,
+    // ✅ التأكد من وجود الحقول الجديدة (بقيم افتراضية إذا لم تكن موجودة)
+    sparePartsWithCost: ticket.sparePartsWithCost || '',
+    sparePartsWithoutCost: ticket.sparePartsWithoutCost || '',
+    invoiceDate: ticket.invoiceDate || '',
+    deliveryDate: ticket.deliveryDate || '',
+    maintenanceEndDate: ticket.maintenanceEndDate || '',
+    // التأكد من وجود الحقول الأساسية
+    customerName: ticket.customerName || '',
+    customerPhone: ticket.customerPhone || '',
+    secondPhone: ticket.secondPhone || '',
+    landline: ticket.landline || '',
+    customerEmail: ticket.customerEmail || '',
+    customerAddress: ticket.customerAddress || '',
+    governorate: ticket.governorate || '',
+    city: ticket.city || '',
+    device: ticket.device || '',
+    deviceModel: ticket.deviceModel || '',
+    deviceSerial: ticket.deviceSerial || '',
+    issue: ticket.issue || '',
+    status: ticket.status || 'created',
+    priority: ticket.priority || 'medium',
+    warrantyStatus: ticket.warrantyStatus || '',
+    ticketType: ticket.ticketType || '',
+    source: ticket.source || '',
+    nearestBranch: ticket.nearestBranch || '',
+    assignedTechnician: ticket.assignedTechnician || '',
+    assignedMaintenanceCenter: ticket.assignedMaintenanceCenter || '',
+    assignedCallCenter: ticket.assignedCallCenter || '',
+    estimatedCost: ticket.estimatedCost || 0,
+    estimatedDuration: ticket.estimatedDuration || '',
+    notes: ticket.notes || '',
+    tags: ticket.tags || []
+  });
+};
 
 
   const WARRANTY_OPTIONS = [
@@ -7721,27 +7799,74 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
 
     // أضف هذه الدالة مع باقي الدوال
   const handleUpdateTicket = async (e) => {
-      e.preventDefault();
-      if (!editingTicket) return;
+  e.preventDefault();
+  if (!editingTicket) return;
 
-      setGlobalLoading(true);
-      try {
-          const ticketRef = doc(db, 'tickets', editingTicket.id);
-          await updateDoc(ticketRef, {
-              ...editFormData,
-              updatedAt: serverTimestamp(),
-          });
-          await logUserActivity(appUser, 'تعديل تذكرة', `تم تعديل التذكرة رقم ${editingTicket.ticketNumber}`);
-          showSuccess("تم تحديث التذكرة بنجاح");
-          setEditingTicket(null);
-          setEditFormData({});
-          loadTickets(false);
-      } catch (error) {
-          console.error(error);
-          showError("حدث خطأ أثناء تحديث التذكرة");
-      }
-      setGlobalLoading(false);
-  };
+  setGlobalLoading(true);
+  try {
+    const ticketRef = doc(db, 'tickets', editingTicket.id);
+    
+    // ✅ تحديد الحقول التي نريد تحديثها فقط
+    const updateData = {
+      // معلومات العميل
+      customerName: editFormData.customerName,
+      customerPhone: editFormData.customerPhone,
+      secondPhone: editFormData.secondPhone,
+      landline: editFormData.landline,
+      customerEmail: editFormData.customerEmail,
+      customerAddress: editFormData.customerAddress,
+      governorate: editFormData.governorate,
+      city: editFormData.city,
+      
+      // معلومات الجهاز
+      device: editFormData.device,
+      deviceType: editFormData.deviceType,
+      deviceModel: editFormData.deviceModel,
+      deviceSerial: editFormData.deviceSerial,
+      issue: editFormData.issue,
+      
+      // حالة التذكرة
+      status: editFormData.status,
+      priority: editFormData.priority,
+      warrantyStatus: editFormData.warrantyStatus,
+      ticketType: editFormData.ticketType,
+      source: editFormData.source,
+      nearestBranch: editFormData.nearestBranch,
+      
+      // المسؤولون
+      assignedTechnician: editFormData.assignedTechnician,
+      assignedMaintenanceCenter: editFormData.assignedMaintenanceCenter,
+      assignedCallCenter: editFormData.assignedCallCenter,
+      
+      // المبالغ والملاحظات
+      estimatedCost: editFormData.estimatedCost,
+      estimatedDuration: editFormData.estimatedDuration,
+      notes: editFormData.notes,
+      tags: editFormData.tags,
+      
+      // ✅ الخانات الجديدة
+      sparePartsWithCost: editFormData.sparePartsWithCost || '',
+      sparePartsWithoutCost: editFormData.sparePartsWithoutCost || '',
+      invoiceDate: editFormData.invoiceDate || '',
+      deliveryDate: editFormData.deliveryDate || '',
+      maintenanceEndDate: editFormData.maintenanceEndDate || '',
+      
+      // تاريخ التحديث
+      updatedAt: serverTimestamp()
+    };
+    
+    await updateDoc(ticketRef, updateData);
+    await logUserActivity(appUser, 'تعديل تذكرة', `تم تعديل التذكرة رقم ${editingTicket.ticketNumber}`);
+    showSuccess("تم تحديث التذكرة بنجاح");
+    setEditingTicket(null);
+    setEditFormData({});
+    loadTickets(false);
+  } catch (error) {
+    console.error(error);
+    showError("حدث خطأ أثناء تحديث التذكرة: " + error.message);
+  }
+  setGlobalLoading(false);
+};
 
 
   // جلب العملاء
@@ -8492,6 +8617,90 @@ const selectCustomer = (customer) => {
                 </div>
               </div>
 
+
+              {/* ===== قطع غيار بتكلفة وبدون تكلفة ===== */}
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  
+  {/* قطع غيار بتكلفة */}
+  <div>
+    <label className="block text-xs font-bold mb-1">
+      🛠️ قطع غيار بتكلفة
+    </label>
+    <textarea 
+      rows="3"
+      className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold resize-none"
+      value={newTicket.sparePartsWithCost}
+      onChange={e => setNewTicket({...newTicket, sparePartsWithCost: e.target.value})}
+      placeholder="مثال:&#10;• شاشة - 500 ج&#10;• بطارية - 300 ج&#10;• زر طاقة - 150 ج"
+    />
+    <p className="text-[10px] text-slate-400 mt-1">قطع الغيار التي لها تكلفة (اكتب السعر)</p>
+  </div>
+  
+  {/* قطع غيار بدون تكلفة */}
+  <div>
+    <label className="block text-xs font-bold mb-1">
+      🔧 قطع غيار بدون تكلفة (تحت الضمان)
+    </label>
+    <textarea 
+      rows="3"
+      className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold resize-none"
+      value={newTicket.sparePartsWithoutCost}
+      onChange={e => setNewTicket({...newTicket, sparePartsWithoutCost: e.target.value})}
+      placeholder="مثال:&#10;• سلك شحن&#10;• سماعة&#10;• غطاء خلفي"
+    />
+    <p className="text-[10px] text-slate-400 mt-1">قطع الغيار المستبدلة مجاناً تحت الضمان</p>
+  </div>
+  
+</div>
+
+{/* ===== التواريخ ===== */}
+<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+  
+  {/* تاريخ الفاتورة / الضمان */}
+  <div>
+    <label className="block text-xs font-bold mb-1">
+      📅 تاريخ الفاتورة / انتهاء الضمان
+    </label>
+    <input 
+      type="date"
+      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
+      value={newTicket.invoiceDate}
+      onChange={e => setNewTicket({...newTicket, invoiceDate: e.target.value})}
+    />
+    <p className="text-[10px] text-slate-400 mt-1">تاريخ شراء الجهاز أو انتهاء الضمان</p>
+  </div>
+  
+  {/* تاريخ انتهاء الصيانة */}
+  <div>
+    <label className="block text-xs font-bold mb-1">
+      ⏰ تاريخ انتهاء الصيانة (متوقع)
+    </label>
+    <input 
+      type="date"
+      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
+      value={newTicket.maintenanceEndDate}
+      onChange={e => setNewTicket({...newTicket, maintenanceEndDate: e.target.value})}
+    />
+    <p className="text-[10px] text-slate-400 mt-1">التاريخ المتوقع لإنهاء الصيانة</p>
+  </div>
+  
+  {/* تاريخ تسليم العميل */}
+  <div>
+    <label className="block text-xs font-bold mb-1">
+      📦 تاريخ تسليم العميل
+    </label>
+    <input 
+      type="date"
+      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
+      value={newTicket.deliveryDate}
+      onChange={e => setNewTicket({...newTicket, deliveryDate: e.target.value})}
+    />
+    <p className="text-[10px] text-slate-400 mt-1">تاريخ تسليم الجهاز للعميل بعد الصيانة</p>
+  </div>
+  
+</div>
+
+
               {/* الفرع - الأولوية - التكلفة */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
@@ -8625,6 +8834,61 @@ const selectCustomer = (customer) => {
                 <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-xl"><label className="text-xs block mb-1">المتبقي</label><p className="font-black text-lg">{((fullTicketView.totalCost || 0) - (fullTicketView.totalPaid || 0)).toLocaleString()} ج</p></div>
                 <div className="bg-purple-50 dark:bg-purple-900/30 p-3 rounded-xl"><label className="text-xs block mb-1">قطع الغيار</label><p className="font-black text-lg">{(fullTicketView.spareParts || []).length}</p></div>
               </div>
+
+
+              {/* ===== قطع الغيار في عرض التذكرة ===== */}
+<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+  
+  {fullTicketView.sparePartsWithCost && (
+    <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-xl border border-amber-200 dark:border-amber-800">
+      <label className="text-xs text-amber-600 dark:text-amber-400 block mb-1 font-bold">
+        🛠️ قطع غيار بتكلفة
+      </label>
+      <p className="text-sm whitespace-pre-wrap font-bold">
+        {fullTicketView.sparePartsWithCost}
+      </p>
+    </div>
+  )}
+  
+  {fullTicketView.sparePartsWithoutCost && (
+    <div className="bg-green-50 dark:bg-green-900/30 p-3 rounded-xl border border-green-200 dark:border-green-800">
+      <label className="text-xs text-green-600 dark:text-green-400 block mb-1 font-bold">
+        🔧 قطع غيار بدون تكلفة (ضمان)
+      </label>
+      <p className="text-sm whitespace-pre-wrap font-bold">
+        {fullTicketView.sparePartsWithoutCost}
+      </p>
+    </div>
+  )}
+  
+</div>
+
+{/* ===== التواريخ في عرض التذكرة ===== */}
+<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+  
+  {fullTicketView.invoiceDate && (
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+      <label className="text-xs text-slate-500 block mb-1 font-bold">📅 تاريخ الفاتورة / الضمان</label>
+      <p className="font-bold">{formatDate(fullTicketView.invoiceDate)}</p>
+    </div>
+  )}
+  
+  {fullTicketView.maintenanceEndDate && (
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+      <label className="text-xs text-slate-500 block mb-1 font-bold">⏰ تاريخ انتهاء الصيانة</label>
+      <p className="font-bold">{formatDate(fullTicketView.maintenanceEndDate)}</p>
+    </div>
+  )}
+  
+  {fullTicketView.deliveryDate && (
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+      <label className="text-xs text-slate-500 block mb-1 font-bold">📦 تاريخ تسليم العميل</label>
+      <p className="font-bold">{formatDate(fullTicketView.deliveryDate)}</p>
+    </div>
+  )}
+  
+</div>
+
 
               {/* التعليقات */}
               <div className="border rounded-xl p-4">
@@ -8869,6 +9133,71 @@ const selectCustomer = (customer) => {
                                   {TICKET_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                               </select>
                           </div>
+                          
+
+                          {/* قطع غيار في مودال التعديل */}
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  
+  <div>
+    <label className="block text-xs font-bold mb-1">🛠️ قطع غيار بتكلفة</label>
+    <textarea 
+      rows="3"
+      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 resize-none"
+      value={editFormData.sparePartsWithCost || ''}
+      onChange={e => setEditFormData({...editFormData, sparePartsWithCost: e.target.value})}
+      placeholder="• شاشة - 500 ج&#10;• بطارية - 300 ج"
+    />
+  </div>
+  
+  <div>
+    <label className="block text-xs font-bold mb-1">🔧 قطع غيار بدون تكلفة</label>
+    <textarea 
+      rows="3"
+      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 resize-none"
+      value={editFormData.sparePartsWithoutCost || ''}
+      onChange={e => setEditFormData({...editFormData, sparePartsWithoutCost: e.target.value})}
+      placeholder="• سلك شحن&#10;• سماعة"
+    />
+  </div>
+  
+</div>
+
+{/* التواريخ في مودال التعديل */}
+<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+  
+  <div>
+    <label className="block text-xs font-bold mb-1">📅 تاريخ الفاتورة / الضمان</label>
+    <input 
+      type="date"
+      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900"
+      value={editFormData.invoiceDate || ''}
+      onChange={e => setEditFormData({...editFormData, invoiceDate: e.target.value})}
+    />
+  </div>
+  
+  <div>
+    <label className="block text-xs font-bold mb-1">⏰ تاريخ انتهاء الصيانة</label>
+    <input 
+      type="date"
+      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900"
+      value={editFormData.maintenanceEndDate || ''}
+      onChange={e => setEditFormData({...editFormData, maintenanceEndDate: e.target.value})}
+    />
+  </div>
+  
+  <div>
+    <label className="block text-xs font-bold mb-1">📦 تاريخ تسليم العميل</label>
+    <input 
+      type="date"
+      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900"
+      value={editFormData.deliveryDate || ''}
+      onChange={e => setEditFormData({...editFormData, deliveryDate: e.target.value})}
+    />
+  </div>
+  
+</div>
+
+
                           <div>
                               <label className="block text-xs font-bold mb-1">الأولوية</label>
                               <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900" value={editFormData.priority || 'medium'} onChange={e => setEditFormData({ ...editFormData, priority: e.target.value })}>
