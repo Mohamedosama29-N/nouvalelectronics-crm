@@ -7708,13 +7708,17 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     warrantyStatus: '', ticketType: '', source: '', nearestBranch: '',
     assignedTechnician: '', assignedMaintenanceCenter: '', assignedCallCenter: '',
     estimatedCost: 0, estimatedDuration: '', notes: '', spareParts: [], tags: [], attachments: [],
-    // ✅ الخانات الجديدة
-  sparePartsWithCost: '',      // قطع غيار بتكلفة
-  sparePartsWithoutCost: '',   // قطع غيار بدون تكلفة
-  invoiceDate: '',             // تاريخ الفاتورة / الضمان
-  deliveryDate: '',            // تاريخ تسليم العميل
-  maintenanceEndDate: ''       // تاريخ انتهاء الصيانة
-  });
+    
+    warrantyStatus: '',      // inside / outside (داخل الضمان / خارج الضمان)
+    warrantyPeriod: '',      // الفترة (مثال: "سنة", "سنتين", إلخ)
+
+      // ✅ الخانات الجديدة
+    sparePartsWithCost: '',      // قطع غيار بتكلفة
+    sparePartsWithoutCost: '',   // قطع غيار بدون تكلفة
+    invoiceDate: '',             // تاريخ الفاتورة / الضمان
+    deliveryDate: '',            // تاريخ تسليم العميل
+    maintenanceEndDate: ''       // تاريخ انتهاء الصيانة
+    });
 
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
@@ -7818,6 +7822,9 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       governorate: editFormData.governorate,
       city: editFormData.city,
       
+      warrantyStatus: editFormData.warrantyStatus,
+      warrantyPeriod: editFormData.warrantyPeriod,
+
       // معلومات الجهاز
       device: editFormData.device,
       deviceType: editFormData.deviceType,
@@ -8512,95 +8519,206 @@ const selectCustomer = (customer) => {
               </div>
 
               {/* ===== القوائم المتتالية: المنتج ← الموديل ← كود العطل ===== */}
-<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-  
-  {/* المنتج */}
-  <div>
-    <label className="block text-xs font-bold mb-1">المنتج</label>
-    <select
-      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
-      value={selectedProductId}
-      onChange={e => setSelectedProductId(e.target.value)}
-    >
-      <option value="">-- اختر المنتج --</option>
-      {products.map(p => (
-        <option key={p.id} value={p.id}>{p.name}</option>
-      ))}
-    </select>
-  </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  
+                  {/* المنتج */}
+                  <div>
+                    <label className="block text-xs font-bold mb-1">المنتج</label>
+                    <select
+                      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
+                      value={selectedProductId}
+                      onChange={e => setSelectedProductId(e.target.value)}
+                    >
+                      <option value="">-- اختر المنتج --</option>
+                      {products.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
 
-  {/* الموديل */}
-  <div>
-    <label className="block text-xs font-bold mb-1">الموديل</label>
-    <select
-      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold disabled:opacity-50"
-      value={selectedModelId}
-      onChange={e => setSelectedModelId(e.target.value)}
-      disabled={!selectedProductId}
-    >
-      <option value="">-- اختر الموديل --</option>
-      {models.map(m => (
-        <option key={m.id} value={m.id}>{m.name}</option>
-      ))}
-    </select>
-  </div>
+                  {/* الموديل */}
+                  <div>
+                    <label className="block text-xs font-bold mb-1">الموديل</label>
+                    <select
+                      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold disabled:opacity-50"
+                      value={selectedModelId}
+                      onChange={e => setSelectedModelId(e.target.value)}
+                      disabled={!selectedProductId}
+                    >
+                      <option value="">-- اختر الموديل --</option>
+                      {models.map(m => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </div>
 
-  {/* السيريال (يظل كما هو - إدخال يدوي) */}
-  <div>
-    <label className="block text-xs font-bold mb-1">السيريال</label>
-    <input 
-      className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-mono" 
-      value={newTicket.deviceSerial} 
-      onChange={e => setNewTicket({...newTicket, deviceSerial: e.target.value})} 
-      placeholder="السيريال التسلسلي للجهاز"
-    />
-  </div>
+                  {/* السيريال (يظل كما هو - إدخال يدوي) */}
+                  <div>
+                    <label className="block text-xs font-bold mb-1">السيريال</label>
+                    <input 
+                      className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-mono" 
+                      value={newTicket.deviceSerial} 
+                      onChange={e => setNewTicket({...newTicket, deviceSerial: e.target.value})} 
+                      placeholder="السيريال التسلسلي للجهاز"
+                    />
+                  </div>
 
-</div>
-
-{/* كود العطل / المشكلة */}
-<div>
-  <label className="block text-xs font-bold mb-1">كود العطل / المشكلة *</label>
-  <select
-    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold disabled:opacity-50"
-    value={newTicket.issue}
-    onChange={e => setNewTicket({...newTicket, issue: e.target.value})}
-    disabled={!selectedModelId}
-    required
-  >
-    <option value="">-- اختر كود العطل --</option>
-    {faults.map(f => (
-      <option key={f.id} value={`${f.code} - ${f.description}`}>
-        {f.code} - {f.description}
-      </option>
-    ))}
-  </select>
-  {!selectedModelId && selectedProductId && (
-    <p className="text-[10px] text-amber-500 mt-1">⚠️ اختر الموديل أولاً لظهور أكواد الأعطال</p>
-  )}
-</div>
-
-{/* ملاحظات إضافية (تظل كما هي) */}
-<div>
-  <label className="block text-xs font-bold mb-1">ملاحظات إضافية</label>
-  <textarea 
-    rows="2" 
-    className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold resize-none" 
-    value={newTicket.notes} 
-    onChange={e => setNewTicket({...newTicket, notes: e.target.value})} 
-    placeholder="أي ملاحظات إضافية عن العطل..."
-  />
-</div>
-
-              {/* الضمان - النوع - المصدر */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold mb-1">الضمان</label>
-                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.warrantyStatus} onChange={e => setNewTicket({...newTicket, warrantyStatus: e.target.value})}>
-                    <option value="">-- اختر --</option>
-                    {WARRANTY_OPTIONS.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
-                  </select>
                 </div>
+
+                {/* كود العطل / المشكلة */}
+                <div>
+                  <label className="block text-xs font-bold mb-1">كود العطل / المشكلة *</label>
+                  <select
+                    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold disabled:opacity-50"
+                    value={newTicket.issue}
+                    onChange={e => setNewTicket({...newTicket, issue: e.target.value})}
+                    disabled={!selectedModelId}
+                    required
+                  >
+                    <option value="">-- اختر كود العطل --</option>
+                    {faults.map(f => (
+                      <option key={f.id} value={`${f.code} - ${f.description}`}>
+                        {f.code} - {f.description}
+                      </option>
+                    ))}
+                  </select>
+                  {!selectedModelId && selectedProductId && (
+                    <p className="text-[10px] text-amber-500 mt-1">⚠️ اختر الموديل أولاً لظهور أكواد الأعطال</p>
+                  )}
+                </div>
+
+                {/* ملاحظات إضافية (تظل كما هي) */}
+                <div>
+                  <label className="block text-xs font-bold mb-1">ملاحظات إضافية</label>
+                  <textarea 
+                    rows="2" 
+                    className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold resize-none" 
+                    value={newTicket.notes} 
+                    onChange={e => setNewTicket({...newTicket, notes: e.target.value})} 
+                    placeholder="أي ملاحظات إضافية عن العطل..."
+                  />
+                </div>
+
+                              {/* الضمان - النوع - المصدر */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {/* الضمان وحالة الضمان في مودال التعديل */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  
+                  {/* حالة الضمان */}
+                  <div>
+                    <label className="block text-xs font-bold mb-1">حالة الضمان</label>
+                    <select 
+                      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" 
+                      value={editFormData.warrantyStatus || ''} 
+                      onChange={e => {
+                        const newStatus = e.target.value;
+                        if (newStatus === 'out_of_warranty') {
+                          setEditFormData({
+                            ...editFormData, 
+                            warrantyStatus: newStatus,
+                            warrantyPeriod: 'out_of_warranty'
+                          });
+                        } else {
+                          setEditFormData({
+                            ...editFormData, 
+                            warrantyStatus: newStatus,
+                            warrantyPeriod: editFormData.warrantyPeriod || ''
+                          });
+                        }
+                      }}
+                    >
+                      <option value="">-- اختر حالة الضمان --</option>
+                      <option value="in_warranty">✅ داخل الضمان</option>
+                      <option value="out_of_warranty">❌ خارج الضمان</option>
+                    </select>
+                  </div>
+                  
+                  {/* فترة الضمان */}
+                  {editFormData.warrantyStatus === 'in_warranty' && (
+                    <div>
+                      <label className="block text-xs font-bold mb-1">📅 فترة الضمان المتبقية</label>
+                      <select 
+                        className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" 
+                        value={editFormData.warrantyPeriod || ''} 
+                        onChange={e => setEditFormData({...editFormData, warrantyPeriod: e.target.value})}
+                      >
+                        <option value="">-- اختر الفترة --</option>
+                        {WARRANTY_PERIODS.map(period => (
+                          <option key={period.value} value={period.value}>{period.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  
+                  {editFormData.warrantyStatus === 'out_of_warranty' && (
+                    <div>
+                      <label className="block text-xs font-bold mb-1">📅 فترة الضمان</label>
+                      <div className="w-full border p-3 rounded-xl text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
+                        🔴 خارج الضمان
+                      </div>
+                    </div>
+                  )}
+                  
+                </div>{/* الضمان وحالة الضمان في مودال التعديل */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  
+                  {/* حالة الضمان */}
+                  <div>
+                    <label className="block text-xs font-bold mb-1">حالة الضمان</label>
+                    <select 
+                      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" 
+                      value={editFormData.warrantyStatus || ''} 
+                      onChange={e => {
+                        const newStatus = e.target.value;
+                        if (newStatus === 'out_of_warranty') {
+                          setEditFormData({
+                            ...editFormData, 
+                            warrantyStatus: newStatus,
+                            warrantyPeriod: 'out_of_warranty'
+                          });
+                        } else {
+                          setEditFormData({
+                            ...editFormData, 
+                            warrantyStatus: newStatus,
+                            warrantyPeriod: editFormData.warrantyPeriod || ''
+                          });
+                        }
+                      }}
+                    >
+                      <option value="">-- اختر حالة الضمان --</option>
+                      <option value="in_warranty">✅ داخل الضمان</option>
+                      <option value="out_of_warranty">❌ خارج الضمان</option>
+                    </select>
+                  </div>
+                  
+                  {/* فترة الضمان */}
+                  {editFormData.warrantyStatus === 'in_warranty' && (
+                    <div>
+                      <label className="block text-xs font-bold mb-1">📅 فترة الضمان المتبقية</label>
+                      <select 
+                        className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" 
+                        value={editFormData.warrantyPeriod || ''} 
+                        onChange={e => setEditFormData({...editFormData, warrantyPeriod: e.target.value})}
+                      >
+                        <option value="">-- اختر الفترة --</option>
+                        {WARRANTY_PERIODS.map(period => (
+                          <option key={period.value} value={period.value}>{period.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  
+                  {editFormData.warrantyStatus === 'out_of_warranty' && (
+                    <div>
+                      <label className="block text-xs font-bold mb-1">📅 فترة الضمان</label>
+                      <div className="w-full border p-3 rounded-xl text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
+                        🔴 خارج الضمان
+                      </div>
+                    </div>
+                  )}
+                  
+                </div>
+                                
                 <div>
                   <label className="block text-xs font-bold mb-1">نوع التذكرة</label>
                   <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.ticketType} onChange={e => setNewTicket({...newTicket, ticketType: e.target.value})}>
@@ -9013,6 +9131,40 @@ const selectCustomer = (customer) => {
         </div>
       )}
 
+
+
+      {/* فترة الضمان في عرض التذكرة */}
+<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+  
+  {/* عرض حالة الضمان */}
+  <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+    <label className="text-xs text-slate-500 block mb-1">حالة الضمان</label>
+    <p className="font-bold">
+      {fullTicketView.warrantyStatus === 'in_warranty' ? (
+        <span className="text-green-600 dark:text-green-400">✅ داخل الضمان</span>
+      ) : fullTicketView.warrantyStatus === 'out_of_warranty' ? (
+        <span className="text-red-600 dark:text-red-400">❌ خارج الضمان</span>
+      ) : '-'}
+    </p>
+  </div>
+  
+  {/* عرض فترة الضمان */}
+  <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+    <label className="text-xs text-slate-500 block mb-1">📅 فترة الضمان</label>
+    <p className="font-bold">
+      {fullTicketView.warrantyStatus === 'in_warranty' ? (
+        <span className="text-blue-600 dark:text-blue-400">
+          {WARRANTY_PERIODS.find(p => p.value === fullTicketView.warrantyPeriod)?.label || fullTicketView.warrantyPeriod || '-'}
+        </span>
+      ) : fullTicketView.warrantyStatus === 'out_of_warranty' ? (
+        <span className="text-red-600 dark:text-red-400">خارج الضمان</span>
+      ) : '-'}
+    </p>
+  </div>
+  
+</div>
+
+
       {/* ===== مودال سجل التذكرة ===== */}
       {showHistoryModal && selectedTicket && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
@@ -9322,6 +9474,17 @@ function EnhancedUserManagement({ appUser, warehouses, notify, setGlobalLoading,
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [permissionsUser, setPermissionsUser] = useState(null);
   const [departments] = useState(['المبيعات', 'المخزون', 'الصيانة', 'المحاسبة', 'الإدارة', 'الكول سنتر']);
+
+  
+  // خيارات فترات الضمان
+const WARRANTY_PERIODS = [
+  { value: '6_months', label: '6 شهور' },
+  { value: '1_year', label: 'سنة' },
+  { value: '2_years', label: 'سنتين' },
+  { value: '3_years', label: '3 سنوات' },
+  { value: '5_years', label: '5 سنوات' }
+];
+
 
   useEffect(() => {
     if (appUser?.role !== 'admin') return;
