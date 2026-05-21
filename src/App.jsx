@@ -11733,73 +11733,86 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
           <FaultCodeManager />
         )}
 
-      {activeTab === 'maintenance_centers' && (appUser.permissions?.manageMaintenanceCenters || appUser.role === 'admin') && (
-  <div className="space-y-6 max-w-2xl">
-    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
-      <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">🏢 قائمة مراكز الصيانة</h4>
-      <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-        أضف مراكز الصيانة التي ستظهر في قائمة "مركز الصيانة" عند إنشاء تذكرة
-      </p>
-      
-      {/* قائمة مراكز الصيانة الحالية - استخدام localSettings */}
-      {(localSettings.maintenanceCenters && localSettings.maintenanceCenters.length > 0) ? (
-        localSettings.maintenanceCenters.map((center, idx) => (
-          <div key={idx} className="flex gap-3 mb-3">
-            <input 
-              className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900 focus:border-indigo-500 outline-none transition-colors"
-              placeholder="اسم مركز الصيانة"
-              value={center.name || ''}
-              onChange={e => {
-                const newCenters = [...(localSettings.maintenanceCenters || [])];
-                newCenters[idx] = { 
-                  ...center, 
-                  name: e.target.value, 
-                  value: e.target.value.toLowerCase().replace(/\s+/g, '_') 
-                };
-                setLocalSettings({...localSettings, maintenanceCenters: newCenters});
-              }}
-            />
-            <button 
-              onClick={() => {
-                const newCenters = (localSettings.maintenanceCenters || []).filter((_, i) => i !== idx);
-                setLocalSettings({...localSettings, maintenanceCenters: newCenters});
-              }} 
-              className="px-4 py-3 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
-            >
-              <Trash2 size={18}/>
-            </button>
-          </div>
-        ))
-      ) : (
-        <div className="text-center py-8 text-slate-400 dark:text-slate-500 border-2 border-dashed rounded-xl mb-4">
-          <p className="text-sm">لا توجد مراكز صيانة مضافة</p>
-          <p className="text-xs mt-1">اضغط على الزر أدناه لإضافة أول مركز صيانة</p>
-        </div>
-      )}
-      
-      {/* زر إضافة مركز صيانة جديد */}
-      <button 
-        onClick={() => {
-          console.log("✅ زر الإضافة تم الضغط عليه");
-          const currentCenters = localSettings.maintenanceCenters || [];
-          const newCenters = [...currentCenters, { value: '', name: '' }];
-          console.log("🆕 المراكز الجديدة:", newCenters);
-          setLocalSettings({...localSettings, maintenanceCenters: newCenters});
-        }} 
-        className="w-full mt-4 py-4 border-2 border-dashed border-indigo-300 dark:border-indigo-700 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center gap-2"
-      >
-        <Plus size={20}/> إضافة مركز صيانة جديد
-      </button>
-      
-      {/* رسالة تذكير بحفظ الإعدادات */}
-      <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800">
-        <p className="text-xs text-amber-700 dark:text-amber-300 font-bold flex items-center gap-2">
-          ⚠️ تذكر: بعد إضافة أو تعديل مراكز الصيانة، اضغط على زر <strong>"حفظ الإعدادات"</strong> في أسفل الصفحة لحفظ التغييرات.
+      {activeTab === 'maintenance_centers' && (() => {
+  // تحقق من وجود البيانات اللازمة
+  const hasPermission = appUser?.permissions?.manageMaintenanceCenters || appUser?.role === 'admin';
+  
+  if (!hasPermission) {
+    return (
+      <div className="p-6 text-center text-red-500">
+        ليس لديك صلاحية الوصول لهذا القسم
+      </div>
+    );
+  }
+  
+  // تأكد من وجود maintenanceCenters
+  const centers = localSettings?.maintenanceCenters || [];
+  
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+        <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">🏢 قائمة مراكز الصيانة</h4>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+          أضف مراكز الصيانة التي ستظهر في قائمة "مركز الصيانة" عند إنشاء تذكرة
         </p>
+        
+        {/* قائمة مراكز الصيانة الحالية */}
+        {centers.length > 0 ? (
+          centers.map((center, idx) => (
+            <div key={idx} className="flex gap-3 mb-3">
+              <input 
+                className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900 focus:border-indigo-500 outline-none transition-colors"
+                placeholder="اسم مركز الصيانة"
+                value={center?.name || ''}
+                onChange={e => {
+                  const newCenters = [...centers];
+                  newCenters[idx] = { 
+                    ...center, 
+                    name: e.target.value, 
+                    value: e.target.value.toLowerCase().replace(/\s+/g, '_') 
+                  };
+                  setLocalSettings({...localSettings, maintenanceCenters: newCenters});
+                }}
+              />
+              <button 
+                onClick={() => {
+                  const newCenters = centers.filter((_, i) => i !== idx);
+                  setLocalSettings({...localSettings, maintenanceCenters: newCenters});
+                }} 
+                className="px-4 py-3 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
+              >
+                <Trash2 size={18}/>
+              </button>
+            </div>
+          ))
+        ) : (
+          <div className="text-center py-8 text-slate-400 dark:text-slate-500 border-2 border-dashed rounded-xl mb-4">
+            <p className="text-sm">لا توجد مراكز صيانة مضافة</p>
+            <p className="text-xs mt-1">اضغط على الزر أدناه لإضافة أول مركز صيانة</p>
+          </div>
+        )}
+        
+        {/* زر إضافة مركز صيانة جديد */}
+        <button 
+          onClick={() => {
+            const newCenters = [...centers, { value: '', name: '' }];
+            setLocalSettings({...localSettings, maintenanceCenters: newCenters});
+          }} 
+          className="w-full mt-4 py-4 border-2 border-dashed border-indigo-300 dark:border-indigo-700 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center gap-2"
+        >
+          <Plus size={20}/> إضافة مركز صيانة جديد
+        </button>
+        
+        {/* رسالة تذكير بحفظ الإعدادات */}
+        <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800">
+          <p className="text-xs text-amber-700 dark:text-amber-300 font-bold">
+            ⚠️ تذكر: بعد إضافة أو تعديل مراكز الصيانة، اضغط على زر "حفظ الإعدادات" في أسفل الصفحة لحفظ التغييرات.
+          </p>
+        </div>
       </div>
     </div>
-  </div>
-)}
+  );
+})()}
 
       <div className="p-8 max-h-[70vh] overflow-y-auto custom-scrollbar bg-gradient-to-b from-white to-slate-50 dark:from-slate-800 dark:to-slate-900">
         {activeTab === 'general' && (appUser.permissions?.editSystemSettings || appUser.role === 'admin') && (
