@@ -8627,7 +8627,9 @@ const safeGet = (obj, path, defaultValue = '') => {
                   />
                 </div>
 
-               
+                              {/* الضمان - النوع - المصدر */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                
 {/* الضمان وحالة الضمان */}
 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
   
