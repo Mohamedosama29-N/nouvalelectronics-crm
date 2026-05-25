@@ -45,7 +45,7 @@ import {
   MessageCircle, Share2, FileJson, Server, Cloud, Zap, EyeOff,
   RotateCcw, Sparkles, Box, Layers, ShoppingBag, Truck, 
   Wrench as WrenchIcon, Headphones as HeadphonesIcon, Star as StarIcon,
-  FileText as FileTextIcon, Settings as CogIcon, Trash as TrashIcon
+  FileText as FileTextIcon, Settings as CogIcon, Trash as TrashIcon, Info
 } from 'lucide-react';
 
 // ==========================================================================
@@ -12208,7 +12208,8 @@ useEffect(() => {
           { id: 'branches', label: 'الفروع', icon: MapPin },
           { id: 'maintenance_centers', label: 'مراكز الصيانة', icon: WrenchIcon },
           { id: 'products', label: 'المنتجات والموديلات', icon: Package },
-          { id: 'faults', label: 'أكواد الأعطال', icon: AlertCircle }
+          { id: 'faults', label: 'أكواد الأعطال', icon: AlertCircle },
+          { id: 'import_data', label: 'استيراد بيانات', icon: UploadCloud }
         
         ].map(tab => (
           <button
@@ -12233,6 +12234,10 @@ useEffect(() => {
         )}
         {activeTab === 'faults' && (appUser.permissions?.manageFaultCodes || appUser.role === 'admin') && (
           <FaultCodeManager />
+        )}
+
+        {activeTab === 'import_data' && (appUser.role === 'admin') && (
+          <ExcelImportManager />
         )}
 
      {activeTab === 'maintenance_centers' && (appUser.permissions?.manageMaintenanceCenters || appUser.role === 'admin') && (
@@ -12831,6 +12836,362 @@ function FaultCodeManager() {
     </div>
   );
 }
+
+
+// ==========================================================================
+// 📊 مكون استيراد المنتجات والموديلات وأكواد الأعطال من Excel
+// ==========================================================================
+function ExcelImportManager() {
+  const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [importLog, setImportLog] = useState([]);
+  const [previewData, setPreviewData] = useState([]);
+  const [showPreview, setShowPreview] = useState(false);
+
+  // تحميل قالب الاستيراد
+  const downloadTemplate = () => {
+    const template = [
+      ['product_name', 'model_name', 'fault_code', 'fault_description'],
+      ['نوفال مكنسة ', '43LM5700', 'ERR-001', 'الا تعمل'],
+      ['خلاط نوفال ', '43LM5700', 'ERR-002', 'االموتور مقطوع'],
+      ['كنكة قهوة نوفال ', '55UM7300', 'ERR-001', 'االكنكة لا تعمل'],
+      ['تكييف', '1.5 حصان', 'ERR-101', 'لا يبرد'],
+      ['تكييف', '2.25 حصان', 'ERR-101', 'لا يبرد']
+    ];
+    
+    const csvContent = template.map(row => row.join(',')).join('\n');
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'products_models_faults_template.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+    showSuccess("تم تحميل قالب الاستيراد");
+  };
+
+  // معالجة الملف المرفوع
+  const handleFileUpload = (e) => {
+    const selectedFile = e.target.files[0];
+    if (!selectedFile) return;
+    
+    if (!selectedFile.name.endsWith('.csv') && !selectedFile.name.endsWith('.xlsx')) {
+      showError("يرجى رفع ملف CSV أو Excel فقط");
+      return;
+    }
+    
+    setFile(selectedFile);
+    setImportLog([]);
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target.result;
+      const parsedData = parseCSVData(text);
+      setPreviewData(parsedData.slice(0, 100));
+      setShowPreview(true);
+    };
+    reader.readAsText(selectedFile, 'UTF-8');
+  };
+
+  // دالة تحليل CSV
+  const parseCSVData = (text) => {
+    const lines = text.split('\n').filter(line => line.trim());
+    if (lines.length < 2) return [];
+    
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const results = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = parseCSVLine(lines[i]);
+      if (values.length < 2) continue;
+      
+      const row = {
+        product_name: values[0]?.trim(),
+        model_name: values[1]?.trim(),
+        fault_code: values[2]?.trim(),
+        fault_description: values[3]?.trim()
+      };
+      
+      if (row.product_name && row.model_name) {
+        results.push(row);
+      }
+    }
+    
+    return results;
+  };
+
+  // دالة مساعدة لتحليل سطر CSV
+  const parseCSVLine = (line) => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current);
+    return result;
+  };
+
+  // دالة الاستيراد الرئيسية
+  const handleImport = async () => {
+    if (!previewData.length) {
+      showError("لا توجد بيانات للاستيراد");
+      return;
+    }
+    
+    const confirmed = await showConfirm(
+      'تأكيد الاستيراد',
+      `سيتم استيراد ${previewData.length} صف من البيانات. سيتم إنشاء المنتجات والموديلات وأكواد الأعطال تلقائياً.`,
+      'info',
+      'نعم، استيراد'
+    );
+    
+    if (!confirmed) return;
+    
+    setLoading(true);
+    setImportLog([{ type: 'info', message: 'بدء عملية الاستيراد...' }]);
+    
+    let productsCreated = 0;
+    let modelsCreated = 0;
+    let faultsCreated = 0;
+    let errors = [];
+    
+    try {
+      const existingProductsSnap = await getDocs(collection(db, 'products'));
+      const existingProducts = new Map();
+      existingProductsSnap.docs.forEach(doc => {
+        existingProducts.set(doc.data().name, doc.id);
+      });
+      
+      const existingModelsSnap = await getDocs(collection(db, 'models'));
+      const existingModels = new Map();
+      existingModelsSnap.docs.forEach(doc => {
+        const key = `${doc.data().productId}_${doc.data().name}`;
+        existingModels.set(key, doc.id);
+      });
+      
+      const existingFaultsSnap = await getDocs(collection(db, 'faultCodes'));
+      const existingFaults = new Set();
+      existingFaultsSnap.docs.forEach(doc => {
+        existingFaults.add(`${doc.data().modelId}_${doc.data().code}`);
+      });
+      
+      for (const row of previewData) {
+        try {
+          let productId = existingProducts.get(row.product_name);
+          if (!productId) {
+            const productRef = await addDoc(collection(db, 'products'), {
+              name: row.product_name,
+              createdAt: serverTimestamp()
+            });
+            productId = productRef.id;
+            existingProducts.set(row.product_name, productId);
+            productsCreated++;
+            addLog(`✅ تم إنشاء المنتج: ${row.product_name}`, 'success');
+          }
+          
+          const modelKey = `${productId}_${row.model_name}`;
+          let modelId = existingModels.get(modelKey);
+          if (!modelId) {
+            const modelRef = await addDoc(collection(db, 'models'), {
+              productId: productId,
+              name: row.model_name,
+              createdAt: serverTimestamp()
+            });
+            modelId = modelRef.id;
+            existingModels.set(modelKey, modelId);
+            modelsCreated++;
+            addLog(`✅ تم إنشاء الموديل: ${row.model_name} (تابع لـ ${row.product_name})`, 'success');
+          }
+          
+          if (row.fault_code && row.fault_description) {
+            const faultKey = `${modelId}_${row.fault_code}`;
+            if (!existingFaults.has(faultKey)) {
+              await addDoc(collection(db, 'faultCodes'), {
+                modelId: modelId,
+                code: row.fault_code,
+                description: row.fault_description,
+                createdAt: serverTimestamp()
+              });
+              existingFaults.add(faultKey);
+              faultsCreated++;
+              addLog(`✅ تم إنشاء كود العطل: ${row.fault_code} - ${row.fault_description} (للموديل ${row.model_name})`, 'success');
+            } else {
+              addLog(`⚠️ كود العطل ${row.fault_code} موجود مسبقاً للموديل ${row.model_name}`, 'warning');
+            }
+          }
+        } catch (err) {
+          errors.push(`${row.product_name} - ${row.model_name}: ${err.message}`);
+          addLog(`❌ خطأ في استيراد: ${row.product_name} - ${row.model_name}: ${err.message}`, 'error');
+        }
+      }
+      
+      addLog(`✅ تم اكتمال الاستيراد!`, 'success');
+      addLog(`📦 المنتجات: تم إنشاء ${productsCreated} منتج جديد`, 'success');
+      addLog(`🔧 الموديلات: تم إنشاء ${modelsCreated} موديل جديد`, 'success');
+      addLog(`🏷️ أكواد الأعطال: تم إنشاء ${faultsCreated} كود عطل جديد`, 'success');
+      
+      if (errors.length > 0) {
+        addLog(`⚠️ عدد الأخطاء: ${errors.length}`, 'warning');
+      }
+      
+      showSuccess(`تم استيراد ${previewData.length} صف بنجاح. تم إنشاء ${productsCreated} منتج، ${modelsCreated} موديل، ${faultsCreated} كود عطل.`);
+      
+      setFile(null);
+      setPreviewData([]);
+      setShowPreview(false);
+      document.getElementById('excelFileInput').value = '';
+      
+    } catch (error) {
+      console.error('Import error:', error);
+      addLog(`❌ خطأ عام في الاستيراد: ${error.message}`, 'error');
+      showError("حدث خطأ أثناء عملية الاستيراد");
+    }
+    
+    setLoading(false);
+  };
+  
+  const addLog = (message, type = 'info') => {
+    setImportLog(prev => [...prev, { type, message, timestamp: new Date().toLocaleTimeString() }]);
+  };
+  
+  const getLogColor = (type) => {
+    switch(type) {
+      case 'success': return 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30';
+      case 'error': return 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/30';
+      case 'warning': return 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30';
+      default: return 'text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50';
+    }
+  };
+  
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto">
+      
+      {/* شرح طريقة الاستيراد */}
+      <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-xl border border-blue-200 dark:border-blue-800">
+        <h4 className="font-bold text-blue-800 dark:text-blue-300 mb-2 flex items-center gap-2">
+          <Info size={18}/> تعليمات استيراد المنتجات والموديلات وأكواد الأعطال
+        </h4>
+        <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1 list-disc list-inside">
+          <li>قم بتحميل قالب Excel من الزر أدناه</li>
+          <li>املأ البيانات في الأعمدة: product_name, model_name, fault_code, fault_description</li>
+          <li>نفس المنتج يمكن أن يتكرر مع عدة موديلات</li>
+          <li>نفس الموديل يمكن أن يتكرر مع عدة أكواد أعطال</li>
+          <li>سيتم إنشاء المنتجات والموديلات وأكواد الأعطال تلقائياً دون تكرار</li>
+          <li>البيانات المكررة لن تُضاف مرة أخرى</li>
+        </ul>
+      </div>
+      
+      {/* أزرار التحميل والرفع */}
+      <div className="flex flex-wrap gap-3">
+        <button
+          onClick={downloadTemplate}
+          className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2"
+        >
+          <Download size={18}/> تحميل قالب Excel
+        </button>
+        
+        <label className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors cursor-pointer flex items-center gap-2">
+          <UploadCloud size={18}/> اختيار ملف
+          <input
+            type="file"
+            id="excelFileInput"
+            accept=".csv,.xlsx"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+        </label>
+      </div>
+      
+      {/* معاينة البيانات */}
+      {showPreview && previewData.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="p-4 border-b bg-slate-50 dark:bg-slate-800 flex justify-between items-center">
+            <h4 className="font-bold">معاينة البيانات المستوردة ({previewData.length} صف)</h4>
+            <button
+              onClick={() => setShowPreview(false)}
+              className="text-slate-400 hover:text-slate-600"
+            >
+              إلغاء
+            </button>
+          </div>
+          <div className="overflow-x-auto max-h-60">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-100 dark:bg-slate-800">
+                <tr>
+                  <th className="p-2 text-right">المنتج</th>
+                  <th className="p-2 text-right">الموديل</th>
+                  <th className="p-2 text-right">كود العطل</th>
+                  <th className="p-2 text-right">وصف العطل</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {previewData.map((row, idx) => (
+                  <tr key={idx}>
+                    <td className="p-2">{row.product_name}</td>
+                    <td className="p-2">{row.model_name}</td>
+                    <td className="p-2 font-mono">{row.fault_code || '-'}</td>
+                    <td className="p-2">{row.fault_description || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="p-4 border-t bg-slate-50 dark:bg-slate-800">
+            <button
+              onClick={handleImport}
+              disabled={loading}
+              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading ? <Loader2 size={18} className="animate-spin"/> : <UploadCloud size={18}/>}
+              {loading ? 'جاري الاستيراد...' : `تأكيد استيراد ${previewData.length} صف`}
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* سجل العمليات */}
+      {importLog.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="p-4 border-b bg-slate-50 dark:bg-slate-800">
+            <h4 className="font-bold">سجل الاستيراد</h4>
+          </div>
+          <div className="max-h-60 overflow-y-auto p-2 space-y-1">
+            {importLog.map((log, idx) => (
+              <div key={idx} className={`p-2 rounded-lg text-sm ${getLogColor(log.type)}`}>
+                <span className="text-[10px] text-slate-400 ml-2">[{log.timestamp}]</span>
+                <span className="whitespace-pre-wrap">{log.message}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* حالة التحميل */}
+      {loading && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 text-center">
+            <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mx-auto mb-4" />
+            <p className="text-lg font-bold">جاري استيراد البيانات...</p>
+            <p className="text-sm text-slate-500">يرجى الانتظار، قد تستغرق العملية بضع ثوانٍ</p>
+          </div>
+        </div>
+      )}
+      
+    </div>
+  );
+}  // ← هذا القوس كان ناقصاً! الآن أصبح موجوداً
+
+
+
 
 // ==========================================================================
 // 🚀 المكون الرئيسي للتطبيق (مع حل مشكلة الرفريش والتكامل الكامل)
