@@ -7637,6 +7637,8 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const [newComment, setNewComment] = useState('');
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingCommentText, setEditingCommentText] = useState('');
+
+
   
     // أضف هذا مع باقي الـ state في بداية المكون
   const [editingTicket, setEditingTicket] = useState(null);
@@ -7679,11 +7681,19 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   maintenanceEndDate: ''
 });
 
-  const [products, setProducts] = useState([]);
-  const [models, setModels] = useState([]);
+const [selectedProductId, setSelectedProductId] = useState('');
+const [selectedModelId, setSelectedModelId] = useState('');
+const [selectedMainFaultId, setSelectedMainFaultId] = useState('');
+const [products, setProducts] = useState([]);
+const [models, setModels] = useState([]);
+const [mainFaults, setMainFaults] = useState([]);
+const [subFaults, setSubFaults] = useState([]);
+
+
+
   const [faults, setFaults] = useState([]);
-  const [selectedProductId, setSelectedProductId] = useState('');
-  const [selectedModelId, setSelectedModelId] = useState('');
+
+  
 
   const [technicians, setTechnicians] = useState([]);
   const [maintenanceCenters, setMaintenanceCenters] = useState([]);
@@ -8546,39 +8556,107 @@ const safeGet = (obj, path, defaultValue = '') => {
                 
               </div>
 
-              {/* ===== القوائم المتتالية: المنتج ← الموديل ← كود العطل ===== */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  
-                  {/* المنتج */}
-                  <div>
-                    <label className="block text-xs font-bold mb-1">المنتج</label>
-                    <select
-                      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
-                      value={selectedProductId}
-                      onChange={e => setSelectedProductId(e.target.value)}
-                    >
-                      <option value="">-- اختر المنتج --</option>
-                      {products.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
+              {/* ===== القوائم المتتالية: المنتج ← الموديل ← كود العطل الرئيسي ← كود العطل الفرعي ===== */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                
+                {/* المنتج */}
+                <div>
+                  <label className="block text-xs font-bold mb-1">المنتج</label>
+                  <select
+                    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
+                    value={selectedProductId}
+                    onChange={e => {
+                      setSelectedProductId(e.target.value);
+                      setSelectedModelId('');
+                      setSelectedMainFaultId('');
+                      setNewTicket({...newTicket, device: '', deviceModel: '', issue: ''});
+                    }}
+                  >
+                    <option value="">-- اختر المنتج --</option>
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
 
                   {/* الموديل */}
-                  <div>
-                    <label className="block text-xs font-bold mb-1">الموديل</label>
-                    <select
-                      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold disabled:opacity-50"
-                      value={selectedModelId}
-                      onChange={e => setSelectedModelId(e.target.value)}
-                      disabled={!selectedProductId}
-                    >
-                      <option value="">-- اختر الموديل --</option>
-                      {models.map(m => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </select>
-                  </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1">الموديل</label>
+                  <select
+                    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold disabled:opacity-50"
+                    value={selectedModelId}
+                    onChange={e => {
+                      setSelectedModelId(e.target.value);
+                      setSelectedMainFaultId('');
+                      const model = models.find(m => m.id === e.target.value);
+                      setNewTicket({...newTicket, deviceModel: model?.name || ''});
+                    }}
+                    disabled={!selectedProductId}
+                  >
+                    <option value="">-- اختر الموديل --</option>
+                    {models.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+
+                 {/* كود العطل الرئيسي */}
+                <div>
+                  <label className="block text-xs font-bold mb-1">كود العطل الرئيسي</label>
+                  <select
+                    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold disabled:opacity-50"
+                    value={selectedMainFaultId}
+                    onChange={e => {
+                      setSelectedMainFaultId(e.target.value);
+                      setNewTicket({...newTicket, issue: ''});
+                    }}
+                    disabled={!selectedModelId}
+                  >
+                    <option value="">-- اختر الكود الرئيسي --</option>
+                    {mainFaults.map(f => (
+                      <option key={f.id} value={f.id}>{f.code} - {f.description}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* كود العطل الفرعي */}
+                <div>
+                  <label className="block text-xs font-bold mb-1">كود العطل الفرعي</label>
+                  <select
+                    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold disabled:opacity-50"
+                    value={newTicket.issue}
+                    onChange={e => setNewTicket({...newTicket, issue: e.target.value})}
+                    disabled={!selectedMainFaultId}
+                  >
+                    <option value="">-- اختر الكود الفرعي --</option>
+                    {subFaults.map(f => (
+                      <option key={f.id} value={`${f.code} - ${f.description}`}>
+                        {f.code} - {f.description} {f.productCode && `(كود المنتج: ${f.productCode})`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+              </div>
+
+              {/* كود المنتج - يظهر إذا كان الكود الفرعي المختار له كود منتج مرتبط */}
+              {(() => {
+                const selectedSubFault = subFaults.find(f => f.description === newTicket.issue?.split(' - ')[1]);
+                if (selectedSubFault?.productCode) {
+                  return (
+                    <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                      <p className="text-xs font-bold text-indigo-800 dark:text-indigo-300">
+                        كود المنتج المرتبط: <span className="font-mono">{selectedSubFault.productCode}</span>
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
+
+
 
                   {/* السيريال (يظل كما هو - إدخال يدوي) */}
                   <div>
@@ -8593,27 +8671,7 @@ const safeGet = (obj, path, defaultValue = '') => {
 
                 </div>
 
-                {/* كود العطل / المشكلة */}
-                <div>
-                  <label className="block text-xs font-bold mb-1">كود العطل / المشكلة *</label>
-                  <select
-                    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold disabled:opacity-50"
-                    value={newTicket.issue}
-                    onChange={e => setNewTicket({...newTicket, issue: e.target.value})}
-                    disabled={!selectedModelId}
-                    required
-                  >
-                    <option value="">-- اختر كود العطل --</option>
-                    {faults.map(f => (
-                      <option key={f.id} value={`${f.code} - ${f.description}`}>
-                        {f.code} - {f.description}
-                      </option>
-                    ))}
-                  </select>
-                  {!selectedModelId && selectedProductId && (
-                    <p className="text-[10px] text-amber-500 mt-1">⚠️ اختر الموديل أولاً لظهور أكواد الأعطال</p>
-                  )}
-                </div>
+               
 
                 {/* ملاحظات إضافية (تظل كما هي) */}
                 <div>
@@ -12670,15 +12728,23 @@ const getAllDocs = async (collectionName) => {
 
 
 // ==========================================================================
-// 🏷️ إدارة المنتجات والموديلات
+// 🏷️ إدارة المنتجات والموديلات (معدل لـ 5 مستويات)
 // ==========================================================================
 function ProductModelManager({ systemSettings, setLocalSettings }) {
   const [products, setProducts] = useState([]);
   const [models, setModels] = useState([]);
+  const [mainFaults, setMainFaults] = useState([]);
+  const [subFaults, setSubFaults] = useState([]);
   const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedModelId, setSelectedModelId] = useState('');
+  const [selectedMainFaultId, setSelectedMainFaultId] = useState('');
+  
   const [newProduct, setNewProduct] = useState('');
   const [newModel, setNewModel] = useState('');
+  const [newMainFault, setNewMainFault] = useState({ code: '', description: '' });
+  const [newSubFault, setNewSubFault] = useState({ code: '', description: '' });
 
+  // تحميل المنتجات
   useEffect(() => {
     loadProducts();
   }, []);
@@ -12696,10 +12762,30 @@ function ProductModelManager({ systemSettings, setLocalSettings }) {
   };
 
   const deleteProduct = async (id) => {
+    // حذف جميع الموديلات المرتبطة بهذا المنتج
+    const modelsSnap = await getDocs(query(collection(db, 'models'), where('productId', '==', id)));
+    for (const modelDoc of modelsSnap.docs) {
+      // حذف أكواد الأعطال الرئيسية والفرعية المرتبطة بكل موديل
+      const mainFaultsSnap = await getDocs(query(collection(db, 'mainFaultCodes'), where('modelId', '==', modelDoc.id)));
+      for (const mainFaultDoc of mainFaultsSnap.docs) {
+        const subFaultsSnap = await getDocs(query(collection(db, 'subFaultCodes'), where('mainFaultId', '==', mainFaultDoc.id)));
+        for (const subFaultDoc of subFaultsSnap.docs) {
+          await deleteDoc(doc(db, 'subFaultCodes', subFaultDoc.id));
+        }
+        await deleteDoc(doc(db, 'mainFaultCodes', mainFaultDoc.id));
+      }
+      await deleteDoc(doc(db, 'models', modelDoc.id));
+    }
     await deleteDoc(doc(db, 'products', id));
     loadProducts();
+    if (selectedProductId === id) {
+      setSelectedProductId('');
+      setSelectedModelId('');
+      setSelectedMainFaultId('');
+    }
   };
 
+  // تحميل الموديلات عند اختيار منتج
   useEffect(() => {
     if (selectedProductId) {
       const q = query(collection(db, 'models'), where('productId', '==', selectedProductId));
@@ -12707,6 +12793,7 @@ function ProductModelManager({ systemSettings, setLocalSettings }) {
       return unsub;
     } else {
       setModels([]);
+      setSelectedModelId('');
     }
   }, [selectedProductId]);
 
@@ -12717,28 +12804,96 @@ function ProductModelManager({ systemSettings, setLocalSettings }) {
   };
 
   const deleteModel = async (modelId) => {
-    // 1. حذف أكواد الأعطال المرتبطة بهذا الموديل
-    const faultCodesQuery = query(collection(db, 'faultCodes'), where('modelId', '==', modelId));
-    const faultCodesSnap = await getDocs(faultCodesQuery);
-    const deleteFaultsPromises = faultCodesSnap.docs.map(doc => deleteDoc(doc.ref));
-    await Promise.all(deleteFaultsPromises);
-
-    // 2. حذف الموديل نفسه
+    // حذف أكواد الأعطال الرئيسية والفرعية المرتبطة بهذا الموديل
+    const mainFaultsSnap = await getDocs(query(collection(db, 'mainFaultCodes'), where('modelId', '==', modelId)));
+    for (const mainFaultDoc of mainFaultsSnap.docs) {
+      const subFaultsSnap = await getDocs(query(collection(db, 'subFaultCodes'), where('mainFaultId', '==', mainFaultDoc.id)));
+      for (const subFaultDoc of subFaultsSnap.docs) {
+        await deleteDoc(doc(db, 'subFaultCodes', subFaultDoc.id));
+      }
+      await deleteDoc(doc(db, 'mainFaultCodes', mainFaultDoc.id));
+    }
     await deleteDoc(doc(db, 'models', modelId));
-    showSuccess("تم حذف الموديل وجميع أكواد الأعطال المرتبطة به");
+  };
+
+  // تحميل أكواد الأعطال الرئيسية عند اختيار موديل
+  useEffect(() => {
+    if (selectedModelId) {
+      const q = query(collection(db, 'mainFaultCodes'), where('modelId', '==', selectedModelId));
+      const unsub = onSnapshot(q, snap => setMainFaults(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      return unsub;
+    } else {
+      setMainFaults([]);
+      setSelectedMainFaultId('');
+    }
+  }, [selectedModelId]);
+
+  const addMainFault = async () => {
+    if (!selectedModelId || !newMainFault.code.trim() || !newMainFault.description.trim()) return;
+    await addDoc(collection(db, 'mainFaultCodes'), {
+      modelId: selectedModelId,
+      code: newMainFault.code.trim(),
+      description: newMainFault.description.trim()
+    });
+    setNewMainFault({ code: '', description: '' });
+  };
+
+  const deleteMainFault = async (mainFaultId) => {
+    // حذف أكواد الأعطال الفرعية المرتبطة
+    const subFaultsSnap = await getDocs(query(collection(db, 'subFaultCodes'), where('mainFaultId', '==', mainFaultId)));
+    for (const subFaultDoc of subFaultsSnap.docs) {
+      await deleteDoc(doc(db, 'subFaultCodes', subFaultDoc.id));
+    }
+    await deleteDoc(doc(db, 'mainFaultCodes', mainFaultId));
+  };
+
+  // تحميل أكواد الأعطال الفرعية عند اختيار كود رئيسي
+  useEffect(() => {
+    if (selectedMainFaultId) {
+      const q = query(collection(db, 'subFaultCodes'), where('mainFaultId', '==', selectedMainFaultId));
+      const unsub = onSnapshot(q, snap => setSubFaults(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      return unsub;
+    } else {
+      setSubFaults([]);
+    }
+  }, [selectedMainFaultId]);
+
+  const addSubFault = async () => {
+    if (!selectedMainFaultId || !newSubFault.code.trim() || !newSubFault.description.trim()) return;
+    await addDoc(collection(db, 'subFaultCodes'), {
+      mainFaultId: selectedMainFaultId,
+      code: newSubFault.code.trim(),
+      description: newSubFault.description.trim()
+    });
+    setNewSubFault({ code: '', description: '' });
+  };
+
+  const deleteSubFault = async (subFaultId) => {
+    await deleteDoc(doc(db, 'subFaultCodes', subFaultId));
+  };
+
+  const getProductName = (productId) => {
+    return products.find(p => p.id === productId)?.name || '';
+  };
+
+  const getModelName = (modelId) => {
+    return models.find(m => m.id === modelId)?.name || '';
   };
 
   return (
-    <div className="space-y-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* قسم المنتجات */}
       <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border">
-        <h3 className="font-bold text-indigo-600 mb-4">المنتجات</h3>
+        <h3 className="font-bold text-indigo-600 mb-4 flex items-center gap-2">
+          <Package size={18}/> المنتجات
+        </h3>
         <div className="flex gap-2 mb-4">
           <input className="flex-1 border p-3 rounded-xl" placeholder="اسم المنتج" value={newProduct} onChange={e => setNewProduct(e.target.value)} />
           <button onClick={addProduct} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold">إضافة</button>
         </div>
         <div className="space-y-2 max-h-60 overflow-y-auto">
           {products.map(p => (
-            <div key={p.id} className={`flex justify-between items-center p-3 rounded-xl cursor-pointer ${selectedProductId === p.id ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-500' : 'hover:bg-slate-50'}`}>
+            <div key={p.id} className={`flex justify-between items-center p-3 rounded-xl cursor-pointer ${selectedProductId === p.id ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-500 border' : 'hover:bg-slate-50'}`}>
               <button onClick={() => setSelectedProductId(p.id)} className="font-bold flex-1 text-right">{p.name}</button>
               <button onClick={() => deleteProduct(p.id)} className="text-rose-500 p-2">🗑️</button>
             </div>
@@ -12746,23 +12901,86 @@ function ProductModelManager({ systemSettings, setLocalSettings }) {
         </div>
       </div>
 
-      {selectedProductId && (
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border">
-          <h3 className="font-bold text-indigo-600 mb-4">موديلات {products.find(p => p.id === selectedProductId)?.name}</h3>
-          <div className="flex gap-2 mb-4">
-            <input className="flex-1 border p-3 rounded-xl" placeholder="اسم الموديل" value={newModel} onChange={e => setNewModel(e.target.value)} />
-            <button onClick={addModel} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold">إضافة</button>
-          </div>
-          <div className="space-y-2">
-            {models.map(m => (
-              <div key={m.id} className="flex justify-between items-center p-3 border-b">
-                <span>{m.name}</span>
-                <button onClick={() => deleteModel(m.id)} className="text-rose-500">حذف</button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* قسم الموديلات */}
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border">
+        <h3 className="font-bold text-indigo-600 mb-4 flex items-center gap-2">
+          <Layers size={18}/> الموديلات {selectedProductId && `لـ ${getProductName(selectedProductId)}`}
+        </h3>
+        {!selectedProductId ? (
+          <p className="text-center text-slate-400 py-8 text-sm">اختر منتجاً أولاً</p>
+        ) : (
+          <>
+            <div className="flex gap-2 mb-4">
+              <input className="flex-1 border p-3 rounded-xl" placeholder="اسم الموديل" value={newModel} onChange={e => setNewModel(e.target.value)} />
+              <button onClick={addModel} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold">إضافة</button>
+            </div>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {models.map(m => (
+                <div key={m.id} className={`flex justify-between items-center p-3 rounded-xl cursor-pointer ${selectedModelId === m.id ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-500 border' : 'hover:bg-slate-50'}`}>
+                  <button onClick={() => setSelectedModelId(m.id)} className="font-bold flex-1 text-right">{m.name}</button>
+                  <button onClick={() => deleteModel(m.id)} className="text-rose-500 p-2">🗑️</button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* قسم أكواد الأعطال الرئيسية */}
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border">
+        <h3 className="font-bold text-indigo-600 mb-4 flex items-center gap-2">
+          <AlertCircle size={18}/> أكواد الأعطال الرئيسية {selectedModelId && `لـ ${getModelName(selectedModelId)}`}
+        </h3>
+        {!selectedModelId ? (
+          <p className="text-center text-slate-400 py-8 text-sm">اختر موديلاً أولاً</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <input className="border p-3 rounded-xl" placeholder="الكود (مثال: ERR-001)" value={newMainFault.code} onChange={e => setNewMainFault({...newMainFault, code: e.target.value})} />
+              <input className="border p-3 rounded-xl" placeholder="الوصف" value={newMainFault.description} onChange={e => setNewMainFault({...newMainFault, description: e.target.value})} />
+            </div>
+            <button onClick={addMainFault} className="w-full mb-4 bg-amber-600 text-white py-3 rounded-xl font-bold">إضافة كود رئيسي</button>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {mainFaults.map(f => (
+                <div key={f.id} className={`flex justify-between items-center p-3 rounded-xl cursor-pointer ${selectedMainFaultId === f.id ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-500 border' : 'hover:bg-slate-50'}`}>
+                  <button onClick={() => setSelectedMainFaultId(f.id)} className="flex-1 text-right">
+                    <span className="font-mono font-bold">{f.code}</span> – {f.description}
+                  </button>
+                  <button onClick={() => deleteMainFault(f.id)} className="text-rose-500 p-2">🗑️</button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* قسم أكواد الأعطال الفرعية */}
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border">
+        <h3 className="font-bold text-indigo-600 mb-4 flex items-center gap-2">
+          <GitBranch size={18}/> أكواد الأعطال الفرعية
+        </h3>
+        {!selectedMainFaultId ? (
+          <p className="text-center text-slate-400 py-8 text-sm">اختر كود عطل رئيسياً أولاً</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <input className="border p-3 rounded-xl" placeholder="الكود الفرعي" value={newSubFault.code} onChange={e => setNewSubFault({...newSubFault, code: e.target.value})} />
+              <input className="border p-3 rounded-xl" placeholder="الوصف" value={newSubFault.description} onChange={e => setNewSubFault({...newSubFault, description: e.target.value})} />
+            </div>
+            <button onClick={addSubFault} className="w-full mb-4 bg-purple-600 text-white py-3 rounded-xl font-bold">إضافة كود فرعي</button>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {subFaults.map(f => (
+                <div key={f.id} className="flex justify-between items-center p-3 rounded-xl hover:bg-slate-50">
+                  <div className="flex-1 text-right">
+                    <span className="font-mono font-bold">{f.code}</span> – {f.description}
+                  </div>
+                  <button onClick={() => deleteSubFault(f.id)} className="text-rose-500 p-2">🗑️</button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -12839,7 +13057,7 @@ function FaultCodeManager() {
 
 
 // ==========================================================================
-// 📊 مكون استيراد المنتجات والموديلات وأكواد الأعطال من Excel
+// 📊 مكون استيراد المنتجات والموديلات وأكواد الأعطال (معدل لـ 5 مستويات)
 // ==========================================================================
 function ExcelImportManager() {
   const [file, setFile] = useState(null);
@@ -12848,28 +13066,28 @@ function ExcelImportManager() {
   const [previewData, setPreviewData] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
 
-  // تحميل قالب الاستيراد
+  // تحميل قالب الاستيراد (معدل)
   const downloadTemplate = () => {
     const template = [
-      ['product_name', 'model_name', 'fault_code', 'fault_description'],
-      ['نوفال مكنسة ', '43LM5700', 'ERR-001', 'الا تعمل'],
-      ['خلاط نوفال ', '43LM5700', 'ERR-002', 'االموتور مقطوع'],
-      ['كنكة قهوة نوفال ', '55UM7300', 'ERR-001', 'االكنكة لا تعمل'],
-      ['تكييف', '1.5 حصان', 'ERR-101', 'لا يبرد'],
-      ['تكييف', '2.25 حصان', 'ERR-101', 'لا يبرد']
+      ['product_name', 'model_name', 'main_fault_code', 'main_fault_description', 'sub_fault_code', 'sub_fault_description', 'product_code'],
+      ['نوفال مكنسة', '43LM5700', 'ERR-001', 'الجهاز لا يعمل', 'SUB-001', 'لا يوجد طاقة', 'NV-MK-001'],
+      ['خلاط نوفال', 'BL-2000', 'ERR-002', 'الموتور لا يعمل', 'SUB-002', 'دوار الموتور تالف', 'NV-BL-001'],
+      ['تكييف نوفال', '1.5 حصان', 'ERR-101', 'لا يبرد', 'SUB-101', 'نقص غاز', 'NV-AC-001'],
+      ['تكييف نوفال', '1.5 حصان', 'ERR-101', 'لا يبرد', 'SUB-102', 'كمبروسر تالف', 'NV-AC-002'],
+      ['تكييف نوفال', '2.25 حصان', 'ERR-101', 'لا يبرد', 'SUB-101', 'نقص غاز', 'NV-AC-003'],
+      ['غسالة نوفال', 'WM-800', 'ERR-201', 'لا تصرف الماء', 'SUB-201', 'طلمبة تالفة', 'NV-WM-001']
     ];
     
     const csvContent = template.map(row => row.join(',')).join('\n');
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = 'products_models_faults_template.csv';
+    link.download = 'products_models_faults_template_5levels.csv';
     link.click();
     URL.revokeObjectURL(link.href);
-    showSuccess("تم تحميل قالب الاستيراد");
+    showSuccess("تم تحميل قالب الاستيراد (5 مستويات)");
   };
 
-  // معالجة الملف المرفوع
   const handleFileUpload = (e) => {
     const selectedFile = e.target.files[0];
     if (!selectedFile) return;
@@ -12892,7 +13110,6 @@ function ExcelImportManager() {
     reader.readAsText(selectedFile, 'UTF-8');
   };
 
-  // دالة تحليل CSV
   const parseCSVData = (text) => {
     const lines = text.split('\n').filter(line => line.trim());
     if (lines.length < 2) return [];
@@ -12907,8 +13124,11 @@ function ExcelImportManager() {
       const row = {
         product_name: values[0]?.trim(),
         model_name: values[1]?.trim(),
-        fault_code: values[2]?.trim(),
-        fault_description: values[3]?.trim()
+        main_fault_code: values[2]?.trim(),
+        main_fault_description: values[3]?.trim(),
+        sub_fault_code: values[4]?.trim(),
+        sub_fault_description: values[5]?.trim(),
+        product_code: values[6]?.trim()
       };
       
       if (row.product_name && row.model_name) {
@@ -12919,7 +13139,6 @@ function ExcelImportManager() {
     return results;
   };
 
-  // دالة مساعدة لتحليل سطر CSV
   const parseCSVLine = (line) => {
     const result = [];
     let current = '';
@@ -12940,7 +13159,6 @@ function ExcelImportManager() {
     return result;
   };
 
-  // دالة الاستيراد الرئيسية
   const handleImport = async () => {
     if (!previewData.length) {
       showError("لا توجد بيانات للاستيراد");
@@ -12949,7 +13167,7 @@ function ExcelImportManager() {
     
     const confirmed = await showConfirm(
       'تأكيد الاستيراد',
-      `سيتم استيراد ${previewData.length} صف من البيانات. سيتم إنشاء المنتجات والموديلات وأكواد الأعطال تلقائياً.`,
+      `سيتم استيراد ${previewData.length} صف من البيانات. سيتم إنشاء المنتجات والموديلات وأكواد الأعطال (رئيسية وفرعية) تلقائياً.`,
       'info',
       'نعم، استيراد'
     );
@@ -12961,7 +13179,8 @@ function ExcelImportManager() {
     
     let productsCreated = 0;
     let modelsCreated = 0;
-    let faultsCreated = 0;
+    let mainFaultsCreated = 0;
+    let subFaultsCreated = 0;
     let errors = [];
     
     try {
@@ -12978,14 +13197,22 @@ function ExcelImportManager() {
         existingModels.set(key, doc.id);
       });
       
-      const existingFaultsSnap = await getDocs(collection(db, 'faultCodes'));
-      const existingFaults = new Set();
-      existingFaultsSnap.docs.forEach(doc => {
-        existingFaults.add(`${doc.data().modelId}_${doc.data().code}`);
+      const existingMainFaultsSnap = await getDocs(collection(db, 'mainFaultCodes'));
+      const existingMainFaults = new Map();
+      existingMainFaultsSnap.docs.forEach(doc => {
+        const key = `${doc.data().modelId}_${doc.data().code}`;
+        existingMainFaults.set(key, doc.id);
+      });
+      
+      const existingSubFaultsSnap = await getDocs(collection(db, 'subFaultCodes'));
+      const existingSubFaults = new Set();
+      existingSubFaultsSnap.docs.forEach(doc => {
+        existingSubFaults.add(`${doc.data().mainFaultId}_${doc.data().code}`);
       });
       
       for (const row of previewData) {
         try {
+          // 1. إنشاء المنتج إذا لم يكن موجوداً
           let productId = existingProducts.get(row.product_name);
           if (!productId) {
             const productRef = await addDoc(collection(db, 'products'), {
@@ -12998,6 +13225,7 @@ function ExcelImportManager() {
             addLog(`✅ تم إنشاء المنتج: ${row.product_name}`, 'success');
           }
           
+          // 2. إنشاء الموديل إذا لم يكن موجوداً
           const modelKey = `${productId}_${row.model_name}`;
           let modelId = existingModels.get(modelKey);
           if (!modelId) {
@@ -13012,22 +13240,41 @@ function ExcelImportManager() {
             addLog(`✅ تم إنشاء الموديل: ${row.model_name} (تابع لـ ${row.product_name})`, 'success');
           }
           
-          if (row.fault_code && row.fault_description) {
-            const faultKey = `${modelId}_${row.fault_code}`;
-            if (!existingFaults.has(faultKey)) {
-              await addDoc(collection(db, 'faultCodes'), {
+          // 3. إنشاء كود العطل الرئيسي إذا كان موجوداً في البيانات
+          if (row.main_fault_code && row.main_fault_description) {
+            const mainFaultKey = `${modelId}_${row.main_fault_code}`;
+            let mainFaultId = existingMainFaults.get(mainFaultKey);
+            if (!mainFaultId) {
+              const mainFaultRef = await addDoc(collection(db, 'mainFaultCodes'), {
                 modelId: modelId,
-                code: row.fault_code,
-                description: row.fault_description,
+                code: row.main_fault_code,
+                description: row.main_fault_description,
                 createdAt: serverTimestamp()
               });
-              existingFaults.add(faultKey);
-              faultsCreated++;
-              addLog(`✅ تم إنشاء كود العطل: ${row.fault_code} - ${row.fault_description} (للموديل ${row.model_name})`, 'success');
-            } else {
-              addLog(`⚠️ كود العطل ${row.fault_code} موجود مسبقاً للموديل ${row.model_name}`, 'warning');
+              mainFaultId = mainFaultRef.id;
+              existingMainFaults.set(mainFaultKey, mainFaultId);
+              mainFaultsCreated++;
+              addLog(`✅ تم إنشاء كود العطل الرئيسي: ${row.main_fault_code} - ${row.main_fault_description}`, 'success');
+            }
+            
+            // 4. إنشاء كود العطل الفرعي إذا كان موجوداً في البيانات
+            if (row.sub_fault_code && row.sub_fault_description) {
+              const subFaultKey = `${mainFaultId}_${row.sub_fault_code}`;
+              if (!existingSubFaults.has(subFaultKey)) {
+                await addDoc(collection(db, 'subFaultCodes'), {
+                  mainFaultId: mainFaultId,
+                  code: row.sub_fault_code,
+                  description: row.sub_fault_description,
+                  productCode: row.product_code || '',
+                  createdAt: serverTimestamp()
+                });
+                existingSubFaults.add(subFaultKey);
+                subFaultsCreated++;
+                addLog(`✅ تم إنشاء كود العطل الفرعي: ${row.sub_fault_code} - ${row.sub_fault_description}${row.product_code ? ` (كود المنتج: ${row.product_code})` : ''}`, 'success');
+              }
             }
           }
+          
         } catch (err) {
           errors.push(`${row.product_name} - ${row.model_name}: ${err.message}`);
           addLog(`❌ خطأ في استيراد: ${row.product_name} - ${row.model_name}: ${err.message}`, 'error');
@@ -13037,13 +13284,14 @@ function ExcelImportManager() {
       addLog(`✅ تم اكتمال الاستيراد!`, 'success');
       addLog(`📦 المنتجات: تم إنشاء ${productsCreated} منتج جديد`, 'success');
       addLog(`🔧 الموديلات: تم إنشاء ${modelsCreated} موديل جديد`, 'success');
-      addLog(`🏷️ أكواد الأعطال: تم إنشاء ${faultsCreated} كود عطل جديد`, 'success');
+      addLog(`⚠️ أكواد الأعطال الرئيسية: تم إنشاء ${mainFaultsCreated} كود جديد`, 'success');
+      addLog(`🔹 أكواد الأعطال الفرعية: تم إنشاء ${subFaultsCreated} كود جديد`, 'success');
       
       if (errors.length > 0) {
         addLog(`⚠️ عدد الأخطاء: ${errors.length}`, 'warning');
       }
       
-      showSuccess(`تم استيراد ${previewData.length} صف بنجاح. تم إنشاء ${productsCreated} منتج، ${modelsCreated} موديل، ${faultsCreated} كود عطل.`);
+      showSuccess(`تم استيراد ${previewData.length} صف بنجاح. تم إنشاء ${productsCreated} منتج، ${modelsCreated} موديل، ${mainFaultsCreated} كود رئيسي، ${subFaultsCreated} كود فرعي.`);
       
       setFile(null);
       setPreviewData([]);
@@ -13075,17 +13323,18 @@ function ExcelImportManager() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       
-      {/* شرح طريقة الاستيراد */}
+      {/* شرح طريقة الاستيراد المعدل */}
       <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-xl border border-blue-200 dark:border-blue-800">
         <h4 className="font-bold text-blue-800 dark:text-blue-300 mb-2 flex items-center gap-2">
-          <Info size={18}/> تعليمات استيراد المنتجات والموديلات وأكواد الأعطال
+          <Info size={18}/> تعليمات استيراد البيانات (5 مستويات)
         </h4>
         <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1 list-disc list-inside">
           <li>قم بتحميل قالب Excel من الزر أدناه</li>
-          <li>املأ البيانات في الأعمدة: product_name, model_name, fault_code, fault_description</li>
+          <li>املأ البيانات في الأعمدة: product_name, model_name, main_fault_code, main_fault_description, sub_fault_code, sub_fault_description, product_code</li>
           <li>نفس المنتج يمكن أن يتكرر مع عدة موديلات</li>
-          <li>نفس الموديل يمكن أن يتكرر مع عدة أكواد أعطال</li>
-          <li>سيتم إنشاء المنتجات والموديلات وأكواد الأعطال تلقائياً دون تكرار</li>
+          <li>نفس الموديل يمكن أن يتكرر مع عدة أكواد أعطال رئيسية</li>
+          <li>نفس الكود الرئيسي يمكن أن يتكرر مع عدة أكواد فرعية</li>
+          <li>كود المنتج (product_code) مرتبط بالكود الفرعي ويمكن إدخاله يدوياً</li>
           <li>البيانات المكررة لن تُضاف مرة أخرى</li>
         </ul>
       </div>
@@ -13096,7 +13345,7 @@ function ExcelImportManager() {
           onClick={downloadTemplate}
           className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2"
         >
-          <Download size={18}/> تحميل قالب Excel
+          <Download size={18}/> تحميل قالب Excel (5 مستويات)
         </button>
         
         <label className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors cursor-pointer flex items-center gap-2">
@@ -13129,8 +13378,11 @@ function ExcelImportManager() {
                 <tr>
                   <th className="p-2 text-right">المنتج</th>
                   <th className="p-2 text-right">الموديل</th>
-                  <th className="p-2 text-right">كود العطل</th>
-                  <th className="p-2 text-right">وصف العطل</th>
+                  <th className="p-2 text-right">الكود الرئيسي</th>
+                  <th className="p-2 text-right">وصف الرئيسي</th>
+                  <th className="p-2 text-right">الكود الفرعي</th>
+                  <th className="p-2 text-right">وصف الفرعي</th>
+                  <th className="p-2 text-right">كود المنتج</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -13138,8 +13390,11 @@ function ExcelImportManager() {
                   <tr key={idx}>
                     <td className="p-2">{row.product_name}</td>
                     <td className="p-2">{row.model_name}</td>
-                    <td className="p-2 font-mono">{row.fault_code || '-'}</td>
-                    <td className="p-2">{row.fault_description || '-'}</td>
+                    <td className="p-2 font-mono">{row.main_fault_code || '-'}</td>
+                    <td className="p-2">{row.main_fault_description || '-'}</td>
+                    <td className="p-2 font-mono">{row.sub_fault_code || '-'}</td>
+                    <td className="p-2">{row.sub_fault_description || '-'}</td>
+                    <td className="p-2 font-mono text-indigo-600">{row.product_code || '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -13188,9 +13443,7 @@ function ExcelImportManager() {
       
     </div>
   );
-}  // ← هذا القوس كان ناقصاً! الآن أصبح موجوداً
-
-
+}
 
 
 // ==========================================================================
