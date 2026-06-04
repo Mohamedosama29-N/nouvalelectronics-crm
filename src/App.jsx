@@ -11646,7 +11646,7 @@ setSearch('');
 }
 
 // ==========================================================================
-// ⚙️ صفحة الإعدادات المركزية المتكاملة
+// ⚙️ صفحة الإعدادات المركزية المتكاملة (معدلة - حذف Faults Tab)
 // ==========================================================================
 function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading, appUser }) {
   const [activeTab, setActiveTab] = useState('general');
@@ -11658,10 +11658,10 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
   const [newApiKey, setNewApiKey] = useState({ name: '', permissions: [] });
 
   // مراقبة تغييرات settings
-useEffect(() => {
-  console.log("🔄 SettingsManager - settings تغيرت:", settings);
-  console.log("🔄 SettingsManager - maintenanceCenters:", settings.maintenanceCenters);
-}, [settings]);
+  useEffect(() => {
+    console.log("🔄 SettingsManager - settings تغيرت:", settings);
+    console.log("🔄 SettingsManager - maintenanceCenters:", settings.maintenanceCenters);
+  }, [settings]);
 
   useEffect(() => {
     const loadBackups = async () => {
@@ -11671,12 +11671,12 @@ useEffect(() => {
     loadBackups();
   }, []);
 
-useEffect(() => {
-  console.log("🔍 SettingsManager - settings.maintenanceCenters:", settings.maintenanceCenters);
-  if (!settings.maintenanceCenters) {
-    setSettings({...settings, maintenanceCenters: []});
-  }
-}, []);
+  useEffect(() => {
+    console.log("🔍 SettingsManager - settings.maintenanceCenters:", settings.maintenanceCenters);
+    if (!settings.maintenanceCenters) {
+      setSettings({...settings, maintenanceCenters: []});
+    }
+  }, []);
 
   const handleExportSettings = () => {
     const exportData = {
@@ -11788,13 +11788,12 @@ useEffect(() => {
   const handleSave = async () => {
     setGlobalLoading(true);
     try {
-        // استخدم settings (القيمة الحالية) بدلاً من localSettings
-        await setDoc(doc(db, 'settings', 'general'), settings, { merge: true });
-        setSettings(settings);
-        showSuccess("✅ تم حفظ الإعدادات بنجاح");
+      await setDoc(doc(db, 'settings', 'general'), settings, { merge: true });
+      setSettings(settings);
+      showSuccess("✅ تم حفظ الإعدادات بنجاح");
     } catch (error) {
-        console.error("Error saving settings:", error);
-        showError("❌ حدث خطأ في حفظ الإعدادات: " + error.message);
+      console.error("Error saving settings:", error);
+      showError("❌ حدث خطأ في حفظ الإعدادات: " + error.message);
     }
     setGlobalLoading(false);
   };
@@ -11929,9 +11928,8 @@ useEffect(() => {
           { id: 'branches', label: 'الفروع', icon: MapPin },
           { id: 'maintenance_centers', label: 'مراكز الصيانة', icon: WrenchIcon },
           { id: 'products', label: 'المنتجات والموديلات', icon: Package },
-          { id: 'faults', label: 'أكواد الأعطال', icon: AlertCircle },
-          { id: 'import_data', label: 'استيراد بيانات', icon: UploadCloud }
-        
+          { id: 'import_data', label: 'استيراد بيانات (Excel)', icon: UploadCloud }
+          // تم حذف { id: 'faults', label: 'أكواد الأعطال', icon: AlertCircle }
         ].map(tab => (
           <button
             key={tab.id}
@@ -11948,91 +11946,77 @@ useEffect(() => {
         ))}
       </div>
       
-
-
+      {/* باقي المحتوى كما هو */}
       {activeTab === 'products' && (appUser.permissions?.manageProductModels || appUser.role === 'admin') && (
-          <ProductModelManager systemSettings={settings} setLocalSettings={setLocalSettings} />
-        )}
-        {activeTab === 'faults' && (appUser.permissions?.manageFaultCodes || appUser.role === 'admin') && (
-          <FaultCodeManager />
-        )}
+        <ProductModelManager systemSettings={settings} setLocalSettings={setLocalSettings} />
+      )}
 
-        {activeTab === 'import_data' && (appUser.role === 'admin') && (
-          <ExcelImportManager />
-        )}
+      {activeTab === 'import_data' && (appUser.role === 'admin') && (
+        <ExcelImportManager />
+      )}
 
-     {activeTab === 'maintenance_centers' && (appUser.permissions?.manageMaintenanceCenters || appUser.role === 'admin') && (
-  <div className="space-y-6 max-w-2xl">
-    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
-      <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">🏢 قائمة مراكز الصيانة</h4>
-      <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-        أضف مراكز الصيانة التي ستظهر في قائمة "مركز الصيانة" عند إنشاء تذكرة
-      </p>
-      
-      {/* ✅ استخدم settings (من localSettings) للقراءة */}
-      {settings.maintenanceCenters && settings.maintenanceCenters.length > 0 ? (
-        settings.maintenanceCenters.map((center, idx) => (
-          <div key={idx} className="flex gap-3 mb-3">
-            <input 
-              className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900 focus:border-indigo-500 outline-none transition-colors"
-              placeholder="اسم مركز الصيانة"
-              value={center?.name || ''}
-              onChange={e => {
-                const newCenters = [...(settings.maintenanceCenters || [])];
-                newCenters[idx] = { 
-                  ...center, 
-                  name: e.target.value, 
-                  value: e.target.value.toLowerCase().replace(/\s+/g, '_') 
-                };
-                // ✅ استخدم setLocalSettings بدلاً من setSettings
-                setLocalSettings({...settings, maintenanceCenters: newCenters});
-              }}
-            />
+      {activeTab === 'maintenance_centers' && (appUser.permissions?.manageMaintenanceCenters || appUser.role === 'admin') && (
+        <div className="space-y-6 max-w-2xl">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+            <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">🏢 قائمة مراكز الصيانة</h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+              أضف مراكز الصيانة التي ستظهر في قائمة "مركز الصيانة" عند إنشاء تذكرة
+            </p>
+            
+            {settings.maintenanceCenters && settings.maintenanceCenters.length > 0 ? (
+              settings.maintenanceCenters.map((center, idx) => (
+                <div key={idx} className="flex gap-3 mb-3">
+                  <input 
+                    className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900 focus:border-indigo-500 outline-none transition-colors"
+                    placeholder="اسم مركز الصيانة"
+                    value={center?.name || ''}
+                    onChange={e => {
+                      const newCenters = [...(settings.maintenanceCenters || [])];
+                      newCenters[idx] = { 
+                        ...center, 
+                        name: e.target.value, 
+                        value: e.target.value.toLowerCase().replace(/\s+/g, '_') 
+                      };
+                      setLocalSettings({...settings, maintenanceCenters: newCenters});
+                    }}
+                  />
+                  <button 
+                    onClick={() => {
+                      const newCenters = (settings.maintenanceCenters || []).filter((_, i) => i !== idx);
+                      setLocalSettings({...settings, maintenanceCenters: newCenters});
+                    }} 
+                    className="px-4 py-3 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
+                  >
+                    <Trash2 size={18}/>
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-slate-400 dark:text-slate-500 border-2 border-dashed rounded-xl mb-4">
+                <p className="text-sm">لا توجد مراكز صيانة مضافة</p>
+                <p className="text-xs mt-1">اضغط على الزر أدناه لإضافة أول مركز صيانة</p>
+              </div>
+            )}
+            
             <button 
               onClick={() => {
-                const newCenters = (settings.maintenanceCenters || []).filter((_, i) => i !== idx);
-                // ✅ استخدم setLocalSettings بدلاً من setSettings
+                const currentCenters = settings.maintenanceCenters || [];
+                const newCenters = [...currentCenters, { value: '', name: '' }];
                 setLocalSettings({...settings, maintenanceCenters: newCenters});
               }} 
-              className="px-4 py-3 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
+              className="w-full mt-4 py-4 border-2 border-dashed border-indigo-300 dark:border-indigo-700 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center gap-2"
             >
-              <Trash2 size={18}/>
+              <Plus size={20}/> إضافة مركز صيانة جديد
             </button>
+            
+            <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800">
+              <p className="text-xs text-amber-700 dark:text-amber-300 font-bold flex items-center gap-2">
+                ⚠️ تذكر: بعد إضافة أو تعديل مراكز الصيانة، اضغط على زر <strong>"حفظ الإعدادات"</strong> في أسفل الصفحة لحفظ التغييرات.
+              </p>
+            </div>
           </div>
-        ))
-      ) : (
-        <div className="text-center py-8 text-slate-400 dark:text-slate-500 border-2 border-dashed rounded-xl mb-4">
-          <p className="text-sm">لا توجد مراكز صيانة مضافة</p>
-          <p className="text-xs mt-1">اضغط على الزر أدناه لإضافة أول مركز صيانة</p>
         </div>
       )}
-      
-      {/* زر إضافة مركز صيانة جديد */}
-      <button 
-        onClick={() => {
-          console.log("✅ زر الإضافة تم الضغط عليه");
-          const currentCenters = settings.maintenanceCenters || [];
-          console.log("📦 currentCenters:", currentCenters);
-          const newCenters = [...currentCenters, { value: '', name: '' }];
-          console.log("🆕 newCenters:", newCenters);
-          // ✅ استخدم setLocalSettings بدلاً من setSettings
-          setLocalSettings({...settings, maintenanceCenters: newCenters});
-          console.log("✅ تم استدعاء setLocalSettings");
-        }} 
-        className="w-full mt-4 py-4 border-2 border-dashed border-indigo-300 dark:border-indigo-700 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center gap-2"
-      >
-        <Plus size={20}/> إضافة مركز صيانة جديد
-      </button>
-      
-      {/* رسالة تذكير بحفظ الإعدادات */}
-      <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800">
-        <p className="text-xs text-amber-700 dark:text-amber-300 font-bold flex items-center gap-2">
-          ⚠️ تذكر: بعد إضافة أو تعديل مراكز الصيانة، اضغط على زر <strong>"حفظ الإعدادات"</strong> في أسفل الصفحة لحفظ التغييرات.
-        </p>
-      </div>
-    </div>
-  </div>
-)}
 
       <div className="p-8 max-h-[70vh] overflow-y-auto custom-scrollbar bg-gradient-to-b from-white to-slate-50 dark:from-slate-800 dark:to-slate-900">
         {activeTab === 'general' && (appUser.permissions?.editSystemSettings || appUser.role === 'admin') && (
@@ -12721,6 +12705,7 @@ function FaultCodeManager() {
 
 // ==========================================================================
 // 📊 مكون استيراد المنتجات والموديلات وأكواد الأعطال (معدل لـ 5 مستويات)
+// مع تحميل قالب Excel جاهز وربط تلقائي
 // ==========================================================================
 function ExcelImportManager() {
   const [file, setFile] = useState(null);
@@ -12728,20 +12713,35 @@ function ExcelImportManager() {
   const [importLog, setImportLog] = useState([]);
   const [previewData, setPreviewData] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [importStats, setImportStats] = useState({ products: 0, models: 0, mainFaults: 0, subFaults: 0 });
 
-  // تحميل قالب الاستيراد (معدل)
+  // تحميل قالب الاستيراد الجاهز
   const downloadTemplate = () => {
-    const template = [
+    const templateRows = [
       ['product_name', 'model_name', 'main_fault_code', 'main_fault_description', 'sub_fault_code', 'sub_fault_description', 'product_code'],
-      ['نوفال مكنسة', '43LM5700', 'ERR-001', 'الجهاز لا يعمل', 'SUB-001', 'لا يوجد طاقة', 'NV-MK-001'],
-      ['خلاط نوفال', 'BL-2000', 'ERR-002', 'الموتور لا يعمل', 'SUB-002', 'دوار الموتور تالف', 'NV-BL-001'],
-      ['تكييف نوفال', '1.5 حصان', 'ERR-101', 'لا يبرد', 'SUB-101', 'نقص غاز', 'NV-AC-001'],
-      ['تكييف نوفال', '1.5 حصان', 'ERR-101', 'لا يبرد', 'SUB-102', 'كمبروسر تالف', 'NV-AC-002'],
-      ['تكييف نوفال', '2.25 حصان', 'ERR-101', 'لا يبرد', 'SUB-101', 'نقص غاز', 'NV-AC-003'],
-      ['غسالة نوفال', 'WM-800', 'ERR-201', 'لا تصرف الماء', 'SUB-201', 'طلمبة تالفة', 'NV-WM-001']
+      ['نوفال مكنسة', 'LM5700', 'ERR-001', 'الجهاز لا يعمل', 'SUB-001', 'لا يوجد طاقة', 'NV-MK-001'],
+      ['نوفال مكنسة', 'LM5700', 'ERR-001', 'الجهاز لا يعمل', 'SUB-002', 'سلك الكهرباء مقطوع', 'NV-MK-002'],
+      ['نوفال مكنسة', 'LM5700', 'ERR-002', 'شفط ضعيف', 'SUB-003', 'فلتر مسدود', 'NV-MK-003'],
+      ['خلاط نوفال', 'BL-2000', 'ERR-101', 'الموتور لا يعمل', 'SUB-101', 'دوار الموتور تالف', 'NV-BL-001'],
+      ['خلاط نوفال', 'BL-2000', 'ERR-101', 'الموتور لا يعمل', 'SUB-102', 'مكثف تالف', 'NV-BL-002'],
+      ['تكييف نوفال', 'AC-1.5', 'ERR-201', 'لا يبرد', 'SUB-201', 'نقص غاز', 'NV-AC-001'],
+      ['تكييف نوفال', 'AC-1.5', 'ERR-201', 'لا يبرد', 'SUB-202', 'كمبروسر تالف', 'NV-AC-002'],
+      ['تكييف نوفال', 'AC-2.25', 'ERR-201', 'لا يبرد', 'SUB-201', 'نقص غاز', 'NV-AC-003'],
+      ['غسالة نوفال', 'WM-800', 'ERR-301', 'لا تصرف الماء', 'SUB-301', 'طلمبة تالفة', 'NV-WM-001'],
+      ['غسالة نوفال', 'WM-800', 'ERR-302', 'لا تعصر', 'SUB-302', 'حزام تالف', 'NV-WM-002']
     ];
     
-    const csvContent = template.map(row => row.join(',')).join('\n');
+    // إنشاء محتوى CSV
+    const csvContent = templateRows.map(row => {
+      // التعامل مع الخلايا التي قد تحتوي على فواصل داخل النص
+      return row.map(cell => {
+        if (cell.includes(',')) {
+          return `"${cell}"`;
+        }
+        return cell;
+      }).join(',');
+    }).join('\n');
+    
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -12762,6 +12762,7 @@ function ExcelImportManager() {
     
     setFile(selectedFile);
     setImportLog([]);
+    setImportStats({ products: 0, models: 0, mainFaults: 0, subFaults: 0 });
     
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -12777,7 +12778,17 @@ function ExcelImportManager() {
     const lines = text.split('\n').filter(line => line.trim());
     if (lines.length < 2) return [];
     
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    // قراءة الهيدر (الأعمدة)
+    const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+    
+    // التأكد من وجود الأعمدة المطلوبة
+    const requiredColumns = ['product_name', 'model_name'];
+    const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+    if (missingColumns.length > 0) {
+      showError(`الأعمدة المطلوبة غير موجودة: ${missingColumns.join(', ')}`);
+      return [];
+    }
+    
     const results = [];
     
     for (let i = 1; i < lines.length; i++) {
@@ -12794,6 +12805,7 @@ function ExcelImportManager() {
         product_code: values[6]?.trim()
       };
       
+      // تخطي الصفوف الفارغة أو التي لا تحتوي على منتج وموديل
       if (row.product_name && row.model_name) {
         results.push(row);
       }
@@ -12812,14 +12824,27 @@ function ExcelImportManager() {
       if (char === '"') {
         inQuotes = !inQuotes;
       } else if (char === ',' && !inQuotes) {
-        result.push(current);
+        result.push(current.trim());
         current = '';
       } else {
         current += char;
       }
     }
-    result.push(current);
+    result.push(current.trim());
     return result;
+  };
+
+  const addLog = (message, type = 'info') => {
+    setImportLog(prev => [...prev, { type, message, timestamp: new Date().toLocaleTimeString() }]);
+  };
+
+  const getLogColor = (type) => {
+    switch(type) {
+      case 'success': return 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30';
+      case 'error': return 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/30';
+      case 'warning': return 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30';
+      default: return 'text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50';
+    }
   };
 
   const handleImport = async () => {
@@ -12830,7 +12855,7 @@ function ExcelImportManager() {
     
     const confirmed = await showConfirm(
       'تأكيد الاستيراد',
-      `سيتم استيراد ${previewData.length} صف من البيانات. سيتم إنشاء المنتجات والموديلات وأكواد الأعطال (رئيسية وفرعية) تلقائياً.`,
+      `سيتم استيراد ${previewData.length} صف من البيانات. سيتم إنشاء المنتجات والموديلات وأكواد الأعطال (رئيسية وفرعية) تلقائياً مع الربط بينها.`,
       'info',
       'نعم، استيراد'
     );
@@ -12838,7 +12863,7 @@ function ExcelImportManager() {
     if (!confirmed) return;
     
     setLoading(true);
-    setImportLog([{ type: 'info', message: 'بدء عملية الاستيراد...' }]);
+    setImportLog([{ type: 'info', message: 'بدء عملية الاستيراد...', timestamp: new Date().toLocaleTimeString() }]);
     
     let productsCreated = 0;
     let modelsCreated = 0;
@@ -12847,6 +12872,7 @@ function ExcelImportManager() {
     let errors = [];
     
     try {
+      // جلب البيانات الموجودة مسبقاً لتجنب التكرار
       const existingProductsSnap = await getDocs(collection(db, 'products'));
       const existingProducts = new Map();
       existingProductsSnap.docs.forEach(doc => {
@@ -12873,8 +12899,14 @@ function ExcelImportManager() {
         existingSubFaults.add(`${doc.data().mainFaultId}_${doc.data().code}`);
       });
       
+      let processed = 0;
+      const total = previewData.length;
+      
       for (const row of previewData) {
         try {
+          processed++;
+          addLog(`جاري معالجة ${processed}/${total}: ${row.product_name} - ${row.model_name}`, 'info');
+          
           // 1. إنشاء المنتج إذا لم يكن موجوداً
           let productId = existingProducts.get(row.product_name);
           if (!productId) {
@@ -12917,7 +12949,7 @@ function ExcelImportManager() {
               mainFaultId = mainFaultRef.id;
               existingMainFaults.set(mainFaultKey, mainFaultId);
               mainFaultsCreated++;
-              addLog(`✅ تم إنشاء كود العطل الرئيسي: ${row.main_fault_code} - ${row.main_fault_description}`, 'success');
+              addLog(`✅ تم إنشاء كود العطل الرئيسي: ${row.main_fault_code} - ${row.main_fault_description.substring(0, 30)}...`, 'success');
             }
             
             // 4. إنشاء كود العطل الفرعي إذا كان موجوداً في البيانات
@@ -12933,7 +12965,9 @@ function ExcelImportManager() {
                 });
                 existingSubFaults.add(subFaultKey);
                 subFaultsCreated++;
-                addLog(`✅ تم إنشاء كود العطل الفرعي: ${row.sub_fault_code} - ${row.sub_fault_description}${row.product_code ? ` (كود المنتج: ${row.product_code})` : ''}`, 'success');
+                addLog(`✅ تم إنشاء كود العطل الفرعي: ${row.sub_fault_code} - ${row.sub_fault_description.substring(0, 30)}...${row.product_code ? ` (كود المنتج: ${row.product_code})` : ''}`, 'success');
+              } else {
+                addLog(`⚠️ كود العطل الفرعي ${row.sub_fault_code} موجود مسبقاً`, 'warning');
               }
             }
           }
@@ -12943,6 +12977,13 @@ function ExcelImportManager() {
           addLog(`❌ خطأ في استيراد: ${row.product_name} - ${row.model_name}: ${err.message}`, 'error');
         }
       }
+      
+      setImportStats({
+        products: productsCreated,
+        models: modelsCreated,
+        mainFaults: mainFaultsCreated,
+        subFaults: subFaultsCreated
+      });
       
       addLog(`✅ تم اكتمال الاستيراد!`, 'success');
       addLog(`📦 المنتجات: تم إنشاء ${productsCreated} منتج جديد`, 'success');
@@ -12970,23 +13011,10 @@ function ExcelImportManager() {
     setLoading(false);
   };
   
-  const addLog = (message, type = 'info') => {
-    setImportLog(prev => [...prev, { type, message, timestamp: new Date().toLocaleTimeString() }]);
-  };
-  
-  const getLogColor = (type) => {
-    switch(type) {
-      case 'success': return 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30';
-      case 'error': return 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/30';
-      case 'warning': return 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30';
-      default: return 'text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50';
-    }
-  };
-  
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       
-      {/* شرح طريقة الاستيراد المعدل */}
+      {/* شرح طريقة الاستيراد */}
       <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-xl border border-blue-200 dark:border-blue-800">
         <h4 className="font-bold text-blue-800 dark:text-blue-300 mb-2 flex items-center gap-2">
           <Info size={18}/> تعليمات استيراد البيانات (5 مستويات)
@@ -12998,8 +13026,28 @@ function ExcelImportManager() {
           <li>نفس الموديل يمكن أن يتكرر مع عدة أكواد أعطال رئيسية</li>
           <li>نفس الكود الرئيسي يمكن أن يتكرر مع عدة أكواد فرعية</li>
           <li>كود المنتج (product_code) مرتبط بالكود الفرعي ويمكن إدخاله يدوياً</li>
-          <li>البيانات المكررة لن تُضاف مرة أخرى</li>
+          <li>البيانات المكررة لن تُضاف مرة أخرى (يتم تخطيها تلقائياً)</li>
         </ul>
+      </div>
+      
+      {/* إحصائيات سريعة */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-xl text-center">
+          <p className="text-xs text-indigo-600 dark:text-indigo-400">المنتجات</p>
+          <p className="text-xl font-black">{importStats.products}</p>
+        </div>
+        <div className="bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-xl text-center">
+          <p className="text-xs text-emerald-600 dark:text-emerald-400">الموديلات</p>
+          <p className="text-xl font-black">{importStats.models}</p>
+        </div>
+        <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-xl text-center">
+          <p className="text-xs text-amber-600 dark:text-amber-400">أكواد رئيسية</p>
+          <p className="text-xl font-black">{importStats.mainFaults}</p>
+        </div>
+        <div className="bg-purple-50 dark:bg-purple-900/30 p-3 rounded-xl text-center">
+          <p className="text-xs text-purple-600 dark:text-purple-400">أكواد فرعية</p>
+          <p className="text-xl font-black">{importStats.subFaults}</p>
+        </div>
       </div>
       
       {/* أزرار التحميل والرفع */}
@@ -13051,12 +13099,12 @@ function ExcelImportManager() {
               <tbody className="divide-y">
                 {previewData.map((row, idx) => (
                   <tr key={idx}>
-                    <td className="p-2">{row.product_name}</td>
+                    <td className="p-2 font-bold">{row.product_name}</td>
                     <td className="p-2">{row.model_name}</td>
-                    <td className="p-2 font-mono">{row.main_fault_code || '-'}</td>
-                    <td className="p-2">{row.main_fault_description || '-'}</td>
-                    <td className="p-2 font-mono">{row.sub_fault_code || '-'}</td>
-                    <td className="p-2">{row.sub_fault_description || '-'}</td>
+                    <td className="p-2 font-mono text-amber-600">{row.main_fault_code || '-'}</td>
+                    <td className="p-2 text-amber-600">{row.main_fault_description || '-'}</td>
+                    <td className="p-2 font-mono text-purple-600">{row.sub_fault_code || '-'}</td>
+                    <td className="p-2 text-purple-600">{row.sub_fault_description || '-'}</td>
                     <td className="p-2 font-mono text-indigo-600">{row.product_code || '-'}</td>
                   </tr>
                 ))}
@@ -13079,13 +13127,19 @@ function ExcelImportManager() {
       {/* سجل العمليات */}
       {importLog.length > 0 && (
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-          <div className="p-4 border-b bg-slate-50 dark:bg-slate-800">
+          <div className="p-4 border-b bg-slate-50 dark:bg-slate-800 flex justify-between items-center">
             <h4 className="font-bold">سجل الاستيراد</h4>
+            <button
+              onClick={() => setImportLog([])}
+              className="text-xs text-slate-400 hover:text-slate-600"
+            >
+              مسح السجل
+            </button>
           </div>
-          <div className="max-h-60 overflow-y-auto p-2 space-y-1">
+          <div className="max-h-60 overflow-y-auto p-2 space-y-1 font-mono text-xs">
             {importLog.map((log, idx) => (
-              <div key={idx} className={`p-2 rounded-lg text-sm ${getLogColor(log.type)}`}>
-                <span className="text-[10px] text-slate-400 ml-2">[{log.timestamp}]</span>
+              <div key={idx} className={`p-2 rounded-lg ${getLogColor(log.type)}`}>
+                <span className="text-slate-400 ml-2">[{log.timestamp}]</span>
                 <span className="whitespace-pre-wrap">{log.message}</span>
               </div>
             ))}
@@ -13107,7 +13161,6 @@ function ExcelImportManager() {
     </div>
   );
 }
-
 
 // ==========================================================================
 // 🚀 المكون الرئيسي للتطبيق (مع حل مشكلة الرفريش والتكامل الكامل)
