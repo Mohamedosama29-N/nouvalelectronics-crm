@@ -7835,19 +7835,41 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   };
 
   // ========== جلب الموظفين ==========
-  useEffect(() => {
-    const fetchEmployees = async () => {
-      try {
-        const allEmps = await getDocs(query(collection(db, 'employees'), where('isDisabled', '==', false)));
-        const allData = allEmps.docs.map(d => ({ id: d.id, ...d.data() }));
-        setTechnicians(allData.filter(e => e.role === 'technician'));
-        setMaintenanceCenters(allData.filter(e => e.role === 'maintenance_center'));
-        setCallCenters(allData.filter(e => e.role === 'call_center'));
-      } catch (error) { console.error("Error fetching employees:", error); }
-    };
-    fetchEmployees();
-  }, []);
-
+ useEffect(() => {
+  const fetchEmployees = async () => {
+    try {
+      console.log("🔄 [1] بدء تحميل الموظفين من Firestore...");
+      
+      const allEmps = await getDocs(query(collection(db, 'employees'), where('isDisabled', '==', false)));
+      const allData = allEmps.docs.map(d => ({ id: d.id, ...d.data() }));
+      
+      console.log("📦 [2] جميع الموظفين المستلمين:", allData);
+      console.log("📊 [3] عدد الموظفين:", allData.length);
+      
+      // تصنيف الموظفين حسب الأدوار
+      const techniciansList = allData.filter(e => e.role === 'technician');
+      const maintenanceCentersList = allData.filter(e => e.role === 'maintenance_center');
+      const callCentersList = allData.filter(e => e.role === 'call_center');
+      
+      console.log("👨‍🔧 [4] الفنيين:", techniciansList);
+      console.log("👨‍🔧 عدد الفنيين:", techniciansList.length);
+      
+      console.log("🏢 [5] مراكز الصيانة:", maintenanceCentersList);
+      console.log("🏢 عدد مراكز الصيانة:", maintenanceCentersList.length);
+      
+      console.log("📞 [6] الكول سنتر:", callCentersList);
+      console.log("📞 عدد الكول سنتر:", callCentersList.length);
+      
+      setTechnicians(techniciansList);
+      setMaintenanceCenters(maintenanceCentersList);
+      setCallCenters(callCentersList);
+      
+    } catch (error) { 
+      console.error("❌ خطأ في تحميل الموظفين:", error); 
+    }
+  };
+  fetchEmployees();
+}, []);
   // ========== تحميل الوسوم ==========
   useEffect(() => {
     const loadTags = async () => {
@@ -8221,42 +8243,42 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
 
   // ========== دوال التعديل ==========
   const openEditModal = (ticket) => {
-    setEditingTicket(ticket);
-    setEditFormData({
-      ...ticket,
-      sparePartsWithCost: ticket.sparePartsWithCost || '',
-      sparePartsWithoutCost: ticket.sparePartsWithoutCost || '',
-      invoiceDate: ticket.invoiceDate || '',
-      deliveryDate: ticket.deliveryDate || '',
-      maintenanceEndDate: ticket.maintenanceEndDate || '',
-      customerName: ticket.customerName || '',
-      customerPhone: ticket.customerPhone || '',
-      secondPhone: ticket.secondPhone || '',
-      landline: ticket.landline || '',
-      customerEmail: ticket.customerEmail || '',
-      customerAddress: ticket.customerAddress || '',
-      governorate: ticket.governorate || '',
-      city: ticket.city || '',
-      device: ticket.device || '',
-      deviceModel: ticket.deviceModel || '',
-      deviceSerial: ticket.deviceSerial || '',
-      issue: ticket.issue || '',
-      status: ticket.status || 'created',
-      priority: ticket.priority || 'medium',
-      warrantyStatus: ticket.warrantyStatus || '',
-      warrantyPeriod: ticket.warrantyPeriod || '',
-      ticketType: ticket.ticketType || '',
-      source: ticket.source || '',
-      nearestBranch: ticket.nearestBranch || '',
-      assignedTechnician: ticket.assignedTechnician || '',
-      assignedMaintenanceCenter: ticket.assignedMaintenanceCenter || '',
-      assignedCallCenter: ticket.assignedCallCenter || '',
-      estimatedCost: ticket.estimatedCost || 0,
-      estimatedDuration: ticket.estimatedDuration || '',
-      notes: ticket.notes || '',
-      tags: ticket.tags || []
-    });
-  };
+  setEditingTicket(ticket);
+  setEditFormData({
+    ...ticket,
+    sparePartsWithCost: ticket.sparePartsWithCost || '',
+    sparePartsWithoutCost: ticket.sparePartsWithoutCost || '',
+    invoiceDate: ticket.invoiceDate || '',
+    deliveryDate: ticket.deliveryDate || '',
+    maintenanceEndDate: ticket.maintenanceEndDate || '',
+    customerName: ticket.customerName || '',
+    customerPhone: ticket.customerPhone || '',
+    secondPhone: ticket.secondPhone || '',
+    landline: ticket.landline || '',
+    customerEmail: ticket.customerEmail || '',
+    customerAddress: ticket.customerAddress || '',
+    governorate: ticket.governorate || '',
+    city: ticket.city || '',
+    device: ticket.device || '',
+    deviceModel: ticket.deviceModel || '',
+    deviceSerial: ticket.deviceSerial || '',
+    issue: ticket.issue || '',
+    status: ticket.status || 'created',
+    priority: ticket.priority || 'medium',
+    warrantyStatus: ticket.warrantyStatus || '',
+    warrantyPeriod: ticket.warrantyPeriod || '',
+    ticketType: ticket.ticketType || '',
+    source: ticket.source || '',
+    nearestBranch: ticket.nearestBranch || '',
+    assignedTechnician: ticket.assignedTechnician || '',
+    assignedMaintenanceCenter: ticket.assignedMaintenanceCenter || '',
+    assignedCallCenter: ticket.assignedCallCenter || '',
+    estimatedCost: ticket.estimatedCost || 0,
+    estimatedDuration: ticket.estimatedDuration || '',
+    notes: ticket.notes || '',
+    tags: ticket.tags || []
+  });
+};
 
   const handleUpdateTicket = async (e) => {
     e.preventDefault();
@@ -8314,6 +8336,23 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     }
     setGlobalLoading(false);
   };
+
+
+  // ========== ⬇️ ضع الـ useEffect هنا ⬇️ ==========
+// بعد تحديث التذكرة، قم بتحديث fullTicketView
+useEffect(() => {
+  if (fullTicketView && editingTicket === null) {
+    // إعادة تحميل بيانات التذكرة بعد التعديل
+    const loadUpdatedTicket = async () => {
+      const snap = await getDoc(doc(db, 'tickets', fullTicketView.id));
+      if (snap.exists()) {
+        setFullTicketView({ id: snap.id, ...snap.data() });
+      }
+    };
+    loadUpdatedTicket();
+  }
+}, [editingTicket]);
+// ========== ⬆️ نهاية الـ useEffect ⬆️ ==========
 
   // ========== ألوان مساعدة ==========
   const getPriorityColor = (p) => {
@@ -8554,22 +8593,50 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
                 <div><label className="block text-xs font-bold mb-1">التكلفة التقديرية</label><input type="number" min="0" className="w-full border p-3 rounded-xl text-sm text-center" value={newTicket.estimatedCost} onChange={e => setNewTicket({...newTicket, estimatedCost: Number(e.target.value)})} /></div>
               </div>
 
-              {/* تعيين مسؤولين */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div><label className="block text-xs font-bold mb-1">الفني المختص</label><select className="w-full border p-3 rounded-xl text-sm" value={newTicket.assignedTechnician} onChange={e => setNewTicket({...newTicket, assignedTechnician: e.target.value})}>
-                  <option value="">-- غير محدد --</option>
-                  {(systemSettings.technicians || []).map((tech, idx) => <option key={idx} value={tech}>{tech}</option>)}
-                </select></div>
-                <div><label className="block text-xs font-bold mb-1">مركز الصيانة</label><select className="w-full border p-3 rounded-xl text-sm" value={newTicket.assignedMaintenanceCenter} onChange={e => setNewTicket({...newTicket, assignedMaintenanceCenter: e.target.value})}>
-                  <option value="">-- غير محدد --</option>
-                  {(systemSettings.maintenanceCenters || []).map(center => <option key={center.value || center} value={center.value || center}>{center.name || center}</option>)}
-                </select></div>
-                <div><label className="block text-xs font-bold mb-1">الكول سنتر</label><select className="w-full border p-3 rounded-xl text-sm" value={newTicket.assignedCallCenter} onChange={e => setNewTicket({...newTicket, assignedCallCenter: e.target.value})}>
-                  <option value="">-- غير محدد --</option>
-                  {callCenters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select></div>
-              </div>
-
+              {/* تعيين المسؤولين في مودال التعديل */}
+<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+  <div>
+    <label className="block text-xs font-bold mb-1">الفني المختص</label>
+    <select 
+      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500"
+      value={editFormData.assignedTechnician || ''}
+      onChange={e => setEditFormData({ ...editFormData, assignedTechnician: e.target.value })}
+    >
+      <option value="">-- غير محدد --</option>
+      {(systemSettings.technicians || []).map((tech, idx) => (
+        <option key={idx} value={tech}>{tech}</option>
+      ))}
+    </select>
+  </div>
+  <div>
+    <label className="block text-xs font-bold mb-1">مركز الصيانة</label>
+    <select 
+      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500"
+      value={editFormData.assignedMaintenanceCenter || ''}
+      onChange={e => setEditFormData({ ...editFormData, assignedMaintenanceCenter: e.target.value })}
+    >
+      <option value="">-- غير محدد --</option>
+      {(systemSettings.maintenanceCenters || []).map(center => (
+        <option key={center.value || center} value={center.value || center}>
+          {center.name || center}
+        </option>
+      ))}
+    </select>
+  </div>
+  <div>
+    <label className="block text-xs font-bold mb-1">الكول سنتر</label>
+    <select 
+      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500"
+      value={editFormData.assignedCallCenter || ''}
+      onChange={e => setEditFormData({ ...editFormData, assignedCallCenter: e.target.value })}
+    >
+      <option value="">-- غير محدد --</option>
+      {callCenters.map(c => (
+        <option key={c.id} value={c.id}>{c.name}</option>
+      ))}
+    </select>
+  </div>
+</div>
               {/* الوسوم */}
               <div><label className="block text-xs font-bold mb-1">الوسوم</label><input className="w-full border p-3 rounded-xl text-sm" value={newTicket.tags?.join(', ')} onChange={e => setNewTicket({...newTicket, tags: e.target.value.split(',').map(t => t.trim())})} placeholder="وسم1, وسم2" /></div>
 
@@ -8736,6 +8803,16 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
 
               {/* أزرار الإجراءات */}
               <div className="flex flex-wrap gap-2 pt-4 border-t">
+
+                <button 
+                  onClick={() => {
+                    setShowFullTicketModal(false);
+                    openEditModal(fullTicketView);
+                  }} 
+                  className="px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-bold"
+                >
+                  <Edit size={14} className="inline ml-1"/> تعديل التذكرة
+                </button>
                 <button onClick={() => { setSelectedTicket(fullTicketView); setShowAssignModal(true); }} className="px-4 py-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg text-sm font-bold"><Users size={14} className="inline ml-1"/> تعيين مسؤولين</button>
                 <button onClick={() => handleGenerateInvoice(fullTicketView)} className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-sm font-bold"><Receipt size={14} className="inline ml-1"/> إنشاء فاتورة</button>
                 <button onClick={() => window.print()} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold"><Printer size={14} className="inline ml-1"/> طباعة</button>
