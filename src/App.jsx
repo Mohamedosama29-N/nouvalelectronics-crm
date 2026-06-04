@@ -7693,8 +7693,6 @@ const [subFaults, setSubFaults] = useState([]);
 
   const [faults, setFaults] = useState([]);
 
-  
-
   const [technicians, setTechnicians] = useState([]);
   const [maintenanceCenters, setMaintenanceCenters] = useState([]);
   const [callCenters, setCallCenters] = useState([]);
