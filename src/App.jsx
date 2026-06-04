@@ -7617,6 +7617,9 @@ function TicketCard({ ticket, onStatusChange, onView, onEdit }) {
 // ==========================================================================
 // 🎫 مدير التذاكر المحسن - كامل مع كل الإضافات
 // ==========================================================================
+// ==========================================================================
+// 🎫 مدير التذاكر المحسن - كامل مع كل الإضافات (النظام الجديد 5 مستويات)
+// ==========================================================================
 function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUser, warehouseMap, onGenerateInvoice }) {
   const [tickets, setTickets] = useState([]);
   const [search, setSearch] = useState('');
@@ -7638,61 +7641,29 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingCommentText, setEditingCommentText] = useState('');
 
-
-  
-    // أضف هذا مع باقي الـ state في بداية المكون
+  // ========== STATE لإدارة التعديل ==========
   const [editingTicket, setEditingTicket] = useState(null);
   const [editFormData, setEditFormData] = useState({
-  // معلومات أساسية
-  id: '',
-  ticketNumber: '',
-  customerName: '',
-  customerPhone: '',
-  secondPhone: '',
-  landline: '',
-  customerEmail: '',
-  customerAddress: '',
-  governorate: '',
-  city: '',
-  device: '',
-  deviceType: '',
-  deviceModel: '',
-  deviceSerial: '',
-  issue: '',
-  status: '',
-  priority: '',
-  warrantyStatus: '',
-  ticketType: '',
-  source: '',
-  nearestBranch: '',
-  assignedTechnician: '',
-  assignedMaintenanceCenter: '',
-  assignedCallCenter: '',
-  estimatedCost: 0,
-  estimatedDuration: '',
-  notes: '',
-  tags: [],
+    id: '', ticketNumber: '', customerName: '', customerPhone: '', secondPhone: '', landline: '',
+    customerEmail: '', customerAddress: '', governorate: '', city: '', device: '', deviceType: '',
+    deviceModel: '', deviceSerial: '', issue: '', status: '', priority: '', warrantyStatus: '',
+    ticketType: '', source: '', nearestBranch: '', assignedTechnician: '', assignedMaintenanceCenter: '',
+    assignedCallCenter: '', estimatedCost: 0, estimatedDuration: '', notes: '', tags: [],
+    sparePartsWithCost: '', sparePartsWithoutCost: '', invoiceDate: '', deliveryDate: '', maintenanceEndDate: ''
+  });
+
+  // ========== النظام الجديد (5 مستويات) ==========
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedModelId, setSelectedModelId] = useState('');
+  const [selectedMainFaultId, setSelectedMainFaultId] = useState('');
+  const [selectedSubFaultId, setSelectedSubFaultId] = useState('');
   
-  // ✅ الخانات الجديدة
-  sparePartsWithCost: '',
-  sparePartsWithoutCost: '',
-  invoiceDate: '',
-  deliveryDate: '',
-  maintenanceEndDate: ''
-});
+  const [products, setProducts] = useState([]);
+  const [models, setModels] = useState([]);
+  const [mainFaults, setMainFaults] = useState([]);
+  const [subFaults, setSubFaults] = useState([]);
 
-const [selectedProductId, setSelectedProductId] = useState('');
-const [selectedModelId, setSelectedModelId] = useState('');
-const [selectedMainFaultId, setSelectedMainFaultId] = useState('');
-const [products, setProducts] = useState([]);
-const [models, setModels] = useState([]);
-const [mainFaults, setMainFaults] = useState([]);
-const [subFaults, setSubFaults] = useState([]);
-
-
-
-  const [faults, setFaults] = useState([]);
-
+  // ========== باقي الـ State ==========
   const [technicians, setTechnicians] = useState([]);
   const [maintenanceCenters, setMaintenanceCenters] = useState([]);
   const [callCenters, setCallCenters] = useState([]);
@@ -7706,27 +7677,22 @@ const [subFaults, setSubFaults] = useState([]);
   const [filterSource, setFilterSource] = useState('all');
   const [filterBranch, setFilterBranch] = useState('all');
   
+  // بيانات التذكرة الجديدة - معدلة لتشمل الحقول الجديدة
   const [newTicket, setNewTicket] = useState({
     customerId: '', customerName: '', customerPhone: '', secondPhone: '', landline: '',
-    customerEmail: '', customerAddress: '', 
-    governorate: '',    // <-- أضف هذا السطر (المحافظة)
-    city: '',           // <-- أضف هذا السطر (المدينة/المنطقة)
-    device: '', deviceType: '', deviceModel: '',
-    deviceSerial: '', issue: '', status: 'created', priority: 'medium',
-    warrantyStatus: '', ticketType: '', source: '', nearestBranch: '',
+    customerEmail: '', customerAddress: '', governorate: '', city: '',
+    device: '', deviceType: '', deviceModel: '', deviceSerial: '',
+    // الحقول الجديدة للأعطال
+    mainFaultCode: '', mainFaultDescription: '',
+    subFaultCode: '', subFaultDescription: '',
+    productCode: '',
+    issue: '', status: 'created', priority: 'medium',
+    warrantyStatus: '', warrantyPeriod: '', ticketType: '', source: '', nearestBranch: '',
     assignedTechnician: '', assignedMaintenanceCenter: '', assignedCallCenter: '',
     estimatedCost: 0, estimatedDuration: '', notes: '', spareParts: [], tags: [], attachments: [],
-    
-    warrantyStatus: '',      // inside / outside (داخل الضمان / خارج الضمان)
-    warrantyPeriod: '',      // الفترة (مثال: "سنة", "سنتين", إلخ)
-
-      // ✅ الخانات الجديدة
-    sparePartsWithCost: '',      // قطع غيار بتكلفة
-    sparePartsWithoutCost: '',   // قطع غيار بدون تكلفة
-    invoiceDate: '',             // تاريخ الفاتورة / الضمان
-    deliveryDate: '',            // تاريخ تسليم العميل
-    maintenanceEndDate: ''       // تاريخ انتهاء الصيانة
-    });
+    sparePartsWithCost: '', sparePartsWithoutCost: '',
+    invoiceDate: '', deliveryDate: '', maintenanceEndDate: ''
+  });
 
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
@@ -7737,165 +7703,101 @@ const [subFaults, setSubFaults] = useState([]);
   const [filterTag, setFilterTag] = useState('all');
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
 
-
+  // ========== الثوابت ==========
   const WARRANTY_PERIODS = [
-    { value: '6_months', label: '6 شهور' },
-    { value: '1_year', label: 'سنة' },
-    { value: '2_years', label: 'سنتين' },
-    { value: '3_years', label: '3 سنوات' },
-    { value: '5_years', label: '5 سنوات' }
+    { value: '6_months', label: '6 شهور' }, { value: '1_year', label: 'سنة' },
+    { value: '2_years', label: 'سنتين' }, { value: '3_years', label: '3 سنوات' }, { value: '5_years', label: '5 سنوات' }
   ];
-
 
   const TICKET_TYPES = [
-    { value: 'complaint', label: 'شكوى' },
-    { value: 'inquiry', label: 'استفسار' },
-    { value: 'spare_parts', label: 'قطع غيار' },
-    { value: 'replacement', label: 'طلب استبدال' },
-    { value: 'purchase', label: 'طلب شراء' },
-    { value: 'after_sales', label: 'ما بعد البيع' },
-    { value: 'maintenance', label: 'الصيانة' }
+    { value: 'complaint', label: 'شكوى' }, { value: 'inquiry', label: 'استفسار' },
+    { value: 'spare_parts', label: 'قطع غيار' }, { value: 'replacement', label: 'طلب استبدال' },
+    { value: 'purchase', label: 'طلب شراء' }, { value: 'after_sales', label: 'ما بعد البيع' }, { value: 'maintenance', label: 'الصيانة' }
   ];
-
 
   const TICKET_SOURCES = [
-    { value: 'hotline', label: 'HOTLINE' },
-    { value: 'facebook', label: 'Facebook' },
-    { value: 'whatsapp', label: 'WhatsApp' },
-    { value: 'friend_referral', label: 'اقتراح صديق' },
-    { value: 'store_visit', label: 'زيارة المتجر' },
-    { value: 'phone_call', label: 'مكالمة هاتفية' }
+    { value: 'hotline', label: 'HOTLINE' }, { value: 'facebook', label: 'Facebook' },
+    { value: 'whatsapp', label: 'WhatsApp' }, { value: 'friend_referral', label: 'اقتراح صديق' },
+    { value: 'store_visit', label: 'زيارة المتجر' }, { value: 'phone_call', label: 'مكالمة هاتفية' }
   ];
-
-    // أضف هذه الدالة مع باقي الدوال
-  const openEditModal = (ticket) => {
-  setEditingTicket(ticket);
-  setEditFormData({
-    // نسخ جميع بيانات التذكرة
-    ...ticket,
-    // ✅ التأكد من وجود الحقول الجديدة (بقيم افتراضية إذا لم تكن موجودة)
-    sparePartsWithCost: ticket.sparePartsWithCost || '',
-    sparePartsWithoutCost: ticket.sparePartsWithoutCost || '',
-    invoiceDate: ticket.invoiceDate || '',
-    deliveryDate: ticket.deliveryDate || '',
-    maintenanceEndDate: ticket.maintenanceEndDate || '',
-    // التأكد من وجود الحقول الأساسية
-    customerName: ticket.customerName || '',
-    customerPhone: ticket.customerPhone || '',
-    secondPhone: ticket.secondPhone || '',
-    landline: ticket.landline || '',
-    customerEmail: ticket.customerEmail || '',
-    customerAddress: ticket.customerAddress || '',
-    governorate: ticket.governorate || '',
-    city: ticket.city || '',
-    device: ticket.device || '',
-    deviceModel: ticket.deviceModel || '',
-    deviceSerial: ticket.deviceSerial || '',
-    issue: ticket.issue || '',
-    status: ticket.status || 'created',
-    priority: ticket.priority || 'medium',
-    warrantyStatus: ticket.warrantyStatus || '',
-    warrantyPeriod: ticket.warrantyPeriod || '',
-    ticketType: ticket.ticketType || '',
-    source: ticket.source || '',
-    nearestBranch: ticket.nearestBranch || '',
-    assignedTechnician: ticket.assignedTechnician || '',
-    assignedMaintenanceCenter: ticket.assignedMaintenanceCenter || '',
-    assignedCallCenter: ticket.assignedCallCenter || '',
-    estimatedCost: ticket.estimatedCost || 0,
-    estimatedDuration: ticket.estimatedDuration || '',
-    notes: ticket.notes || '',
-    tags: ticket.tags || []
-  });
-};
-
 
   const WARRANTY_OPTIONS = [
-    { value: 'in_warranty', label: 'داخل الضمان' },
-    { value: 'out_of_warranty', label: 'خارج الضمان' }
+    { value: 'in_warranty', label: 'داخل الضمان' }, { value: 'out_of_warranty', label: 'خارج الضمان' }
   ];
 
-  const BRANCH_OPTIONS = systemSettings?.branches || [
-    { value: 'main', label: 'الفرع الرئيسي' }
-  ];
+  const BRANCH_OPTIONS = systemSettings?.branches || [{ value: 'main', label: 'الفرع الرئيسي' }];
 
-
-    // أضف هذه الدالة مع باقي الدوال
-  const handleUpdateTicket = async (e) => {
-  e.preventDefault();
-  if (!editingTicket) return;
-
-  setGlobalLoading(true);
-  try {
-    const ticketRef = doc(db, 'tickets', editingTicket.id);
-    
-    // ✅ تحديد الحقول التي نريد تحديثها فقط
-    const updateData = {
-      // معلومات العميل
-      customerName: editFormData.customerName,
-      customerPhone: editFormData.customerPhone,
-      secondPhone: editFormData.secondPhone,
-      landline: editFormData.landline,
-      customerEmail: editFormData.customerEmail,
-      customerAddress: editFormData.customerAddress,
-      governorate: editFormData.governorate,
-      city: editFormData.city,
-      
-      warrantyStatus: editFormData.warrantyStatus,
-      warrantyPeriod: editFormData.warrantyPeriod,
-
-      // معلومات الجهاز
-      device: editFormData.device,
-      deviceType: editFormData.deviceType,
-      deviceModel: editFormData.deviceModel,
-      deviceSerial: editFormData.deviceSerial,
-      issue: editFormData.issue,
-      
-      // حالة التذكرة
-      status: editFormData.status,
-      priority: editFormData.priority,
-      warrantyStatus: editFormData.warrantyStatus,
-      ticketType: editFormData.ticketType,
-      source: editFormData.source,
-      nearestBranch: editFormData.nearestBranch,
-      
-      // المسؤولون
-      assignedTechnician: editFormData.assignedTechnician,
-      assignedMaintenanceCenter: editFormData.assignedMaintenanceCenter,
-      assignedCallCenter: editFormData.assignedCallCenter,
-      
-      // المبالغ والملاحظات
-      estimatedCost: editFormData.estimatedCost,
-      estimatedDuration: editFormData.estimatedDuration,
-      notes: editFormData.notes,
-      tags: editFormData.tags,
-      
-      // ✅ الخانات الجديدة
-      sparePartsWithCost: editFormData.sparePartsWithCost || '',
-      sparePartsWithoutCost: editFormData.sparePartsWithoutCost || '',
-      invoiceDate: editFormData.invoiceDate || '',
-      deliveryDate: editFormData.deliveryDate || '',
-      maintenanceEndDate: editFormData.maintenanceEndDate || '',
-      
-      // تاريخ التحديث
-      updatedAt: serverTimestamp()
+  // ========== دوال النظام الجديد ==========
+  
+  // تحميل المنتجات
+  useEffect(() => {
+    const loadProducts = async () => {
+      const snap = await getDocs(collection(db, 'products'));
+      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     };
-    
-    await updateDoc(ticketRef, updateData);
-    await logUserActivity(appUser, 'تعديل تذكرة', `تم تعديل التذكرة رقم ${editingTicket.ticketNumber}`);
-    showSuccess("تم تحديث التذكرة بنجاح");
-    setEditingTicket(null);
-    setEditFormData({});
-    loadTickets(false);
-  } catch (error) {
-    console.error(error);
-    showError("حدث خطأ أثناء تحديث التذكرة: " + error.message);
-  }
-  setGlobalLoading(false);
-};
+    loadProducts();
+  }, []);
 
+  // تحميل الموديلات عند اختيار منتج
+  useEffect(() => {
+    if (selectedProductId) {
+      const q = query(collection(db, 'models'), where('productId', '==', selectedProductId));
+      const unsub = onSnapshot(q, snap => setModels(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      return unsub;
+    }
+    setModels([]);
+    setSelectedModelId('');
+  }, [selectedProductId]);
 
-  // جلب العملاء
+  // تحميل أكواد الأعطال الرئيسية عند اختيار موديل
+  useEffect(() => {
+    if (selectedModelId) {
+      const q = query(collection(db, 'mainFaultCodes'), where('modelId', '==', selectedModelId));
+      const unsub = onSnapshot(q, snap => setMainFaults(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      return unsub;
+    }
+    setMainFaults([]);
+    setSelectedMainFaultId('');
+  }, [selectedModelId]);
+
+  // تحميل أكواد الأعطال الفرعية عند اختيار كود رئيسي
+  useEffect(() => {
+    if (selectedMainFaultId) {
+      const q = query(collection(db, 'subFaultCodes'), where('mainFaultId', '==', selectedMainFaultId));
+      const unsub = onSnapshot(q, snap => setSubFaults(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      return unsub;
+    }
+    setSubFaults([]);
+    setSelectedSubFaultId('');
+  }, [selectedMainFaultId]);
+
+  // دالة اختيار كود العطل الفرعي
+  const handleSelectSubFault = (subFaultId) => {
+    const selected = subFaults.find(f => f.id === subFaultId);
+    if (selected) {
+      setSelectedSubFaultId(subFaultId);
+      const mainFault = mainFaults.find(m => m.id === selectedMainFaultId);
+      setNewTicket(prev => ({
+        ...prev,
+        mainFaultCode: mainFault?.code || '',
+        mainFaultDescription: mainFault?.description || '',
+        subFaultCode: selected.code,
+        subFaultDescription: selected.description,
+        productCode: selected.productCode || '',
+        issue: `${selected.code} - ${selected.description}`
+      }));
+    }
+  };
+
+  // إعادة تعيين القوائم
+  const resetSelections = () => {
+    setSelectedProductId('');
+    setSelectedModelId('');
+    setSelectedMainFaultId('');
+    setSelectedSubFaultId('');
+  };
+
+  // ========== جلب العملاء ==========
   useEffect(() => {
     const loadCustomers = async () => {
       try {
@@ -7906,93 +7808,33 @@ const [subFaults, setSubFaults] = useState([]);
     loadCustomers();
   }, []);
 
-  //تحميل المنتجات 
-  useEffect(() => {
-    const loadProducts = async () => {
-      const snap = await getDocs(collection(db, 'products'));
-      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    };
-    loadProducts();
-  }, []);
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch.trim()) return [];
+    const term = normalizeSearch(customerSearch);
+    return customers.filter(c => 
+      normalizeSearch(c.name).includes(term) || normalizeSearch(c.phone).includes(term)
+    ).slice(0, 8);
+  }, [customerSearch, customers]);
 
-  //لتحميل الموديات
-  useEffect(() => {
-    if (selectedProductId) {
-      const q = query(collection(db, 'models'), where('productId', '==', selectedProductId));
-      getDocs(q).then(snap => setModels(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-      setSelectedModelId('');
-      setFaults([]);
-      const product = products.find(p => p.id === selectedProductId);
-      setNewTicket(prev => ({ ...prev, device: product?.name || '' }));
-    } else {
-      setModels([]);
-    }
-  }, [selectedProductId, products]);
-
-  //لتحميل  اكواد الاعطال 
-
-  useEffect(() => {
-    if (selectedModelId) {
-      const q = query(collection(db, 'faultCodes'), where('modelId', '==', selectedModelId));
-      getDocs(q).then(snap => setFaults(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-      const model = models.find(m => m.id === selectedModelId);
-      setNewTicket(prev => ({ ...prev, deviceModel: model?.name || '' }));
-    } else {
-      setFaults([]);
-    }
-  }, [selectedModelId, models]);
-
-
-  // تحميل المنتجات من Firestore
-useEffect(() => {
-  const loadProducts = async () => {
-    try {
-      const snap = await getDocs(collection(db, 'products'));
-      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (error) {
-      console.error("Error loading products:", error);
-    }
+  const selectCustomer = (customer) => {
+    setNewTicket({
+      ...newTicket,
+      customerId: customer.id,
+      customerName: customer.name || '',
+      customerPhone: customer.phone || '',
+      secondPhone: customer.secondPhone || '',
+      customerEmail: customer.email || '',
+      customerAddress: customer.address || '',
+      landline: customer.landline || '',
+      governorate: customer.governorate || '',
+      city: customer.city || ''
+    });
+    setCustomerSearch('');
+    setShowCustomerDropdown(false);
+    showSuccess(`تم تحميل بيانات العميل: ${customer.name}`);
   };
-  loadProducts();
-}, []);
 
-// عند اختيار منتج، تحميل الموديلات الخاصة به
-useEffect(() => {
-  if (selectedProductId) {
-    const loadModels = async () => {
-      const q = query(collection(db, 'models'), where('productId', '==', selectedProductId));
-      const snap = await getDocs(q);
-      setModels(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setSelectedModelId('');
-      setFaults([]);
-      // تحديث حقل الجهاز في newTicket باسم المنتج
-      const product = products.find(p => p.id === selectedProductId);
-      setNewTicket(prev => ({ ...prev, device: product?.name || '' }));
-    };
-    loadModels();
-  } else {
-    setModels([]);
-  }
-}, [selectedProductId, products]);
-
-// عند اختيار موديل، تحميل أكواد الأعطال الخاصة به
-useEffect(() => {
-  if (selectedModelId) {
-    const loadFaults = async () => {
-      const q = query(collection(db, 'faultCodes'), where('modelId', '==', selectedModelId));
-      const snap = await getDocs(q);
-      setFaults(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      // تحديث حقل الموديل في newTicket باسم الموديل
-      const model = models.find(m => m.id === selectedModelId);
-      setNewTicket(prev => ({ ...prev, deviceModel: model?.name || '' }));
-    };
-    loadFaults();
-  } else {
-    setFaults([]);
-  }
-}, [selectedModelId, models]);
-
-  // جلب الموظفين
+  // ========== جلب الموظفين ==========
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
@@ -8006,7 +7848,7 @@ useEffect(() => {
     fetchEmployees();
   }, []);
 
-  // تحميل الوسوم
+  // ========== تحميل الوسوم ==========
   useEffect(() => {
     const loadTags = async () => {
       await tagManager.loadTags();
@@ -8015,7 +7857,7 @@ useEffect(() => {
     loadTags();
   }, []);
 
-  // تحميل التذاكر
+  // ========== تحميل التذاكر ==========
   useEffect(() => {
     loadTickets(false);
   }, [debouncedSearch, filterStatus, filterPriority, filterTechnician, filterTag, filterWarranty, filterTicketType, filterSource, filterBranch, dateRange]);
@@ -8041,7 +7883,6 @@ useEffect(() => {
       if (filterTechnician !== 'all') fetched = fetched.filter(t => t.assignedTechnician === filterTechnician);
       if (filterTag !== 'all') fetched = fetched.filter(t => t.tags?.includes(filterTag));
       
-      // فلتر البحث العام
       const term = normalizeSearch(debouncedSearch);
       if (term) {
         fetched = fetched.filter(t => 
@@ -8049,7 +7890,6 @@ useEffect(() => {
           normalizeSearch(t.customerPhone || '').includes(term) ||
           normalizeSearch(t.secondPhone || '').includes(term) ||
           normalizeSearch(t.device || '').includes(term) ||
-          normalizeSearch(t.deviceType || '').includes(term) ||
           normalizeSearch(t.deviceModel || '').includes(term) ||
           normalizeSearch(t.deviceSerial || '').includes(term) ||
           normalizeSearch(t.issue || '').includes(term) ||
@@ -8081,7 +7921,7 @@ useEffect(() => {
     setLoadingData(false);
   }, [debouncedSearch, filterStatus, filterPriority, filterTechnician, filterTag, filterWarranty, filterTicketType, filterSource, filterBranch, lastDoc, dateRange]);
 
-  // دوال التحديد
+  // ========== دوال التحديد ==========
   const toggleSelectItem = (itemId) => {
     const newSelected = new Set(selectedItems);
     newSelected.has(itemId) ? newSelected.delete(itemId) : newSelected.add(itemId);
@@ -8092,33 +7932,7 @@ useEffect(() => {
     setSelectedItems(selectedItems.size === tickets.length ? new Set() : new Set(tickets.map(t => t.id)));
   };
 
-  // البحث عن العملاء
-const filteredCustomers = useMemo(() => {
-  if (!customerSearch.trim()) return [];
-  const term = normalizeSearch(customerSearch);
-  return customers.filter(c => 
-    normalizeSearch(c.name).includes(term) || normalizeSearch(c.phone).includes(term)
-  ).slice(0, 8);
-}, [customerSearch, customers]);
-
-const selectCustomer = (customer) => {
-  setNewTicket({
-    ...newTicket,
-    customerId: customer.id,
-    customerName: customer.name || '',
-    customerPhone: customer.phone || '',
-    secondPhone: customer.secondPhone || '',
-    customerEmail: customer.email || '',
-    customerAddress: customer.address || customer.addressFull || '',
-    landline: customer.landline || '',
-    governorate: customer.governorate || '',  // ✅ تمت الإضافة
-    city: customer.city || ''                 // ✅ تمت الإضافة
-  });
-  setCustomerSearch('');
-  setShowCustomerDropdown(false);
-  showSuccess(`تم تحميل بيانات العميل: ${customer.name}`); // optional
-};
-  // فتح التذكرة كاملة
+  // ========== فتح التذكرة كاملة ==========
   const openFullTicket = (ticket) => {
     setFullTicketView(ticket);
     setTicketComments(ticket.comments || []);
@@ -8128,7 +7942,7 @@ const selectCustomer = (customer) => {
     setShowFullTicketModal(true);
   };
 
-  // التعليقات
+  // ========== التعليقات ==========
   const addComment = async () => {
     if (!newComment.trim() || !fullTicketView) return;
     const comment = {
@@ -8166,7 +7980,7 @@ const selectCustomer = (customer) => {
     } catch(e) { console.error(e); }
   };
 
-  // إضافة تذكرة
+  // ========== إضافة تذكرة (معدلة) ==========
   const handleAddTicket = async (e) => {
     e.preventDefault();
     if (!newTicket.customerName || !newTicket.customerPhone) return showError("اسم العميل ورقم الهاتف مطلوبان");
@@ -8188,16 +8002,23 @@ const selectCustomer = (customer) => {
             name: newTicket.customerName, phone: newTicket.customerPhone,
             secondPhone: newTicket.secondPhone || '', landline: newTicket.landline || '',
             email: newTicket.customerEmail || "", address: newTicket.customerAddress || '',
+            governorate: newTicket.governorate || '', city: newTicket.city || '',
             createdAt: serverTimestamp(),
-            searchKey: normalizeSearch(`${newTicket.customerName} ${newTicket.customerPhone} ${newTicket.secondPhone || ''}`),
+            searchKey: normalizeSearch(`${newTicket.customerName} ${newTicket.customerPhone}`),
             ticketsCount: 0
           });
           customerId = newCustomerRef.id;
         }
       }
 
+      // تجميع المشكلة كاملة
+      const fullIssue = newTicket.issue || 
+        `${newTicket.subFaultCode} - ${newTicket.subFaultDescription}`;
+
       const ticketData = {
-        ...newTicket, customerId,
+        ...newTicket,
+        customerId,
+        issue: fullIssue,
         ticketNumber: 'TKT-' + Date.now().toString().slice(-8),
         assignedCenter: appUser?.assignedWarehouseId || "main",
         spareParts: [], totalCost: 0, totalPaid: 0, remaining: 0, comments: [],
@@ -8206,12 +8027,8 @@ const selectCustomer = (customer) => {
         status: "created",
         statusHistory: [{ status: 'created', timestamp: new Date().toISOString(), by: appUser.name }],
         history: [{ action: 'إنشاء تذكرة', timestamp: new Date().toISOString(), by: appUser.name }],
-        searchIndex: [
-          newTicket.customerName, newTicket.customerPhone, newTicket.secondPhone || "",
-          newTicket.device || "", newTicket.deviceType || "", newTicket.deviceModel || "",
-          newTicket.deviceSerial || "", newTicket.customerAddress || "", newTicket.issue || "",
-          newTicket.ticketType || "", newTicket.source || "", newTicket.warrantyStatus || ""
-        ].join(" ").toLowerCase()
+        // حفظ معرفات الأعطال للربط
+        selectedProductId, selectedModelId, selectedMainFaultId, selectedSubFaultId
       };
 
       const docRef = await addDoc(collection(db, 'tickets'), ticketData);
@@ -8227,6 +8044,7 @@ const selectCustomer = (customer) => {
       showSuccess("تم إنشاء التذكرة بنجاح");
       setShowAddModal(false);
       resetNewTicket();
+      resetSelections();
       setLastDoc(null);
       loadTickets(false);
     } catch (error) {
@@ -8239,15 +8057,21 @@ const selectCustomer = (customer) => {
   const resetNewTicket = () => {
     setNewTicket({
       customerId: '', customerName: '', customerPhone: '', secondPhone: '', landline: '',
-      customerEmail: '', customerAddress: '', device: '', deviceType: '', deviceModel: '',
-      deviceSerial: '', issue: '', status: 'created', priority: 'medium',
-      warrantyStatus: '', ticketType: '', source: '', nearestBranch: '',
+      customerEmail: '', customerAddress: '', governorate: '', city: '',
+      device: '', deviceType: '', deviceModel: '', deviceSerial: '',
+      mainFaultCode: '', mainFaultDescription: '',
+      subFaultCode: '', subFaultDescription: '',
+      productCode: '', issue: '',
+      status: 'created', priority: 'medium',
+      warrantyStatus: '', warrantyPeriod: '', ticketType: '', source: '', nearestBranch: '',
       assignedTechnician: '', assignedMaintenanceCenter: '', assignedCallCenter: '',
-      estimatedCost: 0, estimatedDuration: '', notes: '', spareParts: [], tags: [], attachments: []
+      estimatedCost: 0, estimatedDuration: '', notes: '', spareParts: [], tags: [], attachments: [],
+      sparePartsWithCost: '', sparePartsWithoutCost: '',
+      invoiceDate: '', deliveryDate: '', maintenanceEndDate: ''
     });
   };
 
-  // تحديث حالة
+  // ========== تحديث حالة التذكرة ==========
   const handleUpdateStatus = async (ticketId, newStatus) => {
     setGlobalLoading(true);
     try {
@@ -8269,7 +8093,7 @@ const selectCustomer = (customer) => {
     setGlobalLoading(false);
   };
 
-  // إضافة قطعة غيار
+  // ========== إضافة قطعة غيار ==========
   const handleAddSparePart = async (ticketId, part) => {
     setGlobalLoading(true);
     try {
@@ -8292,7 +8116,7 @@ const selectCustomer = (customer) => {
     setGlobalLoading(false);
   };
 
-  // إضافة دفعة
+  // ========== إضافة دفعة ==========
   const handleAddPayment = async (ticketId, amount) => {
     setGlobalLoading(true);
     try {
@@ -8313,7 +8137,7 @@ const selectCustomer = (customer) => {
     setGlobalLoading(false);
   };
 
-  // تعيين المسؤولين
+  // ========== تعيين المسؤولين ==========
   const handleAssign = async (ticketId) => {
     setGlobalLoading(true);
     try {
@@ -8350,7 +8174,7 @@ const selectCustomer = (customer) => {
     setGlobalLoading(false);
   };
 
-  // إنشاء فاتورة
+  // ========== إنشاء فاتورة ==========
   const handleGenerateInvoice = (ticket) => {
     onGenerateInvoice({
       ...ticket,
@@ -8361,7 +8185,7 @@ const selectCustomer = (customer) => {
     });
   };
 
-  // حذف مجمع
+  // ========== حذف مجمع ==========
   const handleBulkDelete = async () => {
     if (selectedItems.size === 0) return showError("لم يتم تحديد أي تذاكر");
     if (bulkDeleteConfirm !== 'حذف') return showError("اكتب 'حذف' للتأكيد");
@@ -8388,23 +8212,114 @@ const selectCustomer = (customer) => {
     setGlobalLoading(false);
   };
 
-  // عرض السجل
+  // ========== عرض السجل ==========
   const handleViewHistory = (ticket) => {
     setSelectedTicket(ticket);
     setTicketHistory(ticket.history || []);
     setShowHistoryModal(true);
   };
 
-  // ألوان مساعدة
+  // ========== دوال التعديل ==========
+  const openEditModal = (ticket) => {
+    setEditingTicket(ticket);
+    setEditFormData({
+      ...ticket,
+      sparePartsWithCost: ticket.sparePartsWithCost || '',
+      sparePartsWithoutCost: ticket.sparePartsWithoutCost || '',
+      invoiceDate: ticket.invoiceDate || '',
+      deliveryDate: ticket.deliveryDate || '',
+      maintenanceEndDate: ticket.maintenanceEndDate || '',
+      customerName: ticket.customerName || '',
+      customerPhone: ticket.customerPhone || '',
+      secondPhone: ticket.secondPhone || '',
+      landline: ticket.landline || '',
+      customerEmail: ticket.customerEmail || '',
+      customerAddress: ticket.customerAddress || '',
+      governorate: ticket.governorate || '',
+      city: ticket.city || '',
+      device: ticket.device || '',
+      deviceModel: ticket.deviceModel || '',
+      deviceSerial: ticket.deviceSerial || '',
+      issue: ticket.issue || '',
+      status: ticket.status || 'created',
+      priority: ticket.priority || 'medium',
+      warrantyStatus: ticket.warrantyStatus || '',
+      warrantyPeriod: ticket.warrantyPeriod || '',
+      ticketType: ticket.ticketType || '',
+      source: ticket.source || '',
+      nearestBranch: ticket.nearestBranch || '',
+      assignedTechnician: ticket.assignedTechnician || '',
+      assignedMaintenanceCenter: ticket.assignedMaintenanceCenter || '',
+      assignedCallCenter: ticket.assignedCallCenter || '',
+      estimatedCost: ticket.estimatedCost || 0,
+      estimatedDuration: ticket.estimatedDuration || '',
+      notes: ticket.notes || '',
+      tags: ticket.tags || []
+    });
+  };
+
+  const handleUpdateTicket = async (e) => {
+    e.preventDefault();
+    if (!editingTicket) return;
+
+    setGlobalLoading(true);
+    try {
+      const ticketRef = doc(db, 'tickets', editingTicket.id);
+      
+      const updateData = {
+        customerName: editFormData.customerName,
+        customerPhone: editFormData.customerPhone,
+        secondPhone: editFormData.secondPhone,
+        landline: editFormData.landline,
+        customerEmail: editFormData.customerEmail,
+        customerAddress: editFormData.customerAddress,
+        governorate: editFormData.governorate,
+        city: editFormData.city,
+        warrantyStatus: editFormData.warrantyStatus,
+        warrantyPeriod: editFormData.warrantyPeriod,
+        device: editFormData.device,
+        deviceType: editFormData.deviceType,
+        deviceModel: editFormData.deviceModel,
+        deviceSerial: editFormData.deviceSerial,
+        issue: editFormData.issue,
+        status: editFormData.status,
+        priority: editFormData.priority,
+        ticketType: editFormData.ticketType,
+        source: editFormData.source,
+        nearestBranch: editFormData.nearestBranch,
+        assignedTechnician: editFormData.assignedTechnician,
+        assignedMaintenanceCenter: editFormData.assignedMaintenanceCenter,
+        assignedCallCenter: editFormData.assignedCallCenter,
+        estimatedCost: editFormData.estimatedCost,
+        estimatedDuration: editFormData.estimatedDuration,
+        notes: editFormData.notes,
+        tags: editFormData.tags,
+        sparePartsWithCost: editFormData.sparePartsWithCost || '',
+        sparePartsWithoutCost: editFormData.sparePartsWithoutCost || '',
+        invoiceDate: editFormData.invoiceDate || '',
+        deliveryDate: editFormData.deliveryDate || '',
+        maintenanceEndDate: editFormData.maintenanceEndDate || '',
+        updatedAt: serverTimestamp()
+      };
+      
+      await updateDoc(ticketRef, updateData);
+      await logUserActivity(appUser, 'تعديل تذكرة', `تم تعديل التذكرة رقم ${editingTicket.ticketNumber}`);
+      showSuccess("تم تحديث التذكرة بنجاح");
+      setEditingTicket(null);
+      setEditFormData({});
+      loadTickets(false);
+    } catch (error) {
+      console.error(error);
+      showError("حدث خطأ أثناء تحديث التذكرة: " + error.message);
+    }
+    setGlobalLoading(false);
+  };
+
+  // ========== ألوان مساعدة ==========
   const getPriorityColor = (p) => {
     if (p === 'high') return 'text-rose-600 bg-rose-50 dark:bg-rose-900/30';
     if (p === 'medium') return 'text-amber-600 bg-amber-50 dark:bg-amber-900/30';
     return 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30';
-  };
-
-  const getStatusColor = (status) => {
-    const info = TICKET_STATUSES.find(s => s.value === status);
-    return info?.color || 'gray';
   };
 
   const resetFilters = () => {
@@ -8414,7 +8329,6 @@ const selectCustomer = (customer) => {
     setDateRange({ from: '', to: '' }); setSearch('');
   };
 
-  // مكون StatusSelect
   const StatusSelectComp = ({ value, onChange, ticketId }) => (
     <select
       className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 bg-white dark:bg-slate-900 font-bold"
@@ -8426,23 +8340,6 @@ const selectCustomer = (customer) => {
       ))}
     </select>
   );
-
-  
-
-  // دالة مساعدة لقراءة البيانات بأمان (تتجنب الأخطاء)
-const safeGet = (obj, path, defaultValue = '') => {
-  try {
-    const keys = path.split('.');
-    let result = obj;
-    for (const key of keys) {
-      if (result === null || result === undefined) return defaultValue;
-      result = result[key];
-    }
-    return result === null || result === undefined ? defaultValue : result;
-  } catch (e) {
-    return defaultValue;
-  }
-};
 
   // ====================== RENDER ======================
   return (
@@ -8461,457 +8358,225 @@ const safeGet = (obj, path, defaultValue = '') => {
             <form onSubmit={handleAddTicket} className="space-y-4">
               
               {/* البحث عن عميل */}
-<div className="relative">
-  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-    🔍 البحث عن عميل موجود (بالاسم أو رقم الهاتف)
-  </label>
-  <input 
-    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500"
-    placeholder="ابحث عن عميل مسجل..."
-    value={customerSearch}
-    onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true); }}
-    onFocus={() => setShowCustomerDropdown(true)}
-  />
-  
-  {/* قائمة العملاء المقترحين */}
-  {showCustomerDropdown && filteredCustomers.length > 0 && (
-    <div className="absolute z-20 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
-      {filteredCustomers.map(c => (
-        <button 
-          key={c.id} 
-          type="button" 
-          onClick={() => selectCustomer(c)}
-          className="w-full p-3 text-right hover:bg-slate-50 dark:hover:bg-slate-700 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors"
-        >
-          <span className="font-bold block text-sm text-slate-800 dark:text-white">{c.name}</span>
-          <span className="text-xs text-slate-500 dark:text-slate-400">{c.phone}</span>
-          {c.governorate && (
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">
-              📍 {c.governorate} {c.city && `- ${c.city}`}
-            </span>
-          )}
-        </button>
-      ))}
-    </div>
-  )}
-  
-  {/* رسالة إذا لم يتم العثور على عملاء */}
-  {showCustomerDropdown && customerSearch.trim() !== '' && filteredCustomers.length === 0 && (
-    <div className="absolute z-20 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl mt-1 shadow-lg p-4 text-center">
-      <p className="text-sm text-slate-500 dark:text-slate-400">⚠️ لا توجد نتائج مطابقة</p>
-      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">يمكنك إدخال بيانات العميل يدوياً</p>
-    </div>
-  )}
-</div>
+              <div className="relative">
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">🔍 البحث عن عميل موجود</label>
+                <input 
+                  className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500"
+                  placeholder="ابحث عن عميل مسجل..."
+                  value={customerSearch}
+                  onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true); }}
+                  onFocus={() => setShowCustomerDropdown(true)}
+                />
+                {showCustomerDropdown && filteredCustomers.length > 0 && (
+                  <div className="absolute z-20 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
+                    {filteredCustomers.map(c => (
+                      <button key={c.id} type="button" onClick={() => selectCustomer(c)} className="w-full p-3 text-right hover:bg-slate-50 dark:hover:bg-slate-700 border-b last:border-0">
+                        <span className="font-bold block text-sm">{c.name}</span>
+                        <span className="text-xs text-slate-500">{c.phone}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-{/* رسالة توضيحية */}
-<div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-lg border border-indigo-100 dark:border-indigo-800">
-  <p className="text-xs text-indigo-800 dark:text-indigo-300 font-bold flex items-center gap-2">
-    💡 نصيحة: يمكنك البحث عن عميل موجود باستخدام مربع البحث أعلاه، 
-    سيتم تعبئة بياناته تلقائياً. إذا كان العميل جديداً، املأ البيانات يدوياً.
-  </p>
-</div>
+              <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-lg border border-indigo-100 dark:border-indigo-800">
+                <p className="text-xs text-indigo-800 dark:text-indigo-300 font-bold">💡 نصيحة: يمكنك البحث عن عميل موجود باستخدام مربع البحث أعلاه</p>
+              </div>
+
               {/* معلومات العميل */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                <div><label className="block text-xs font-bold mb-1">اسم العميل *</label><input required className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.customerName} onChange={e => setNewTicket({...newTicket, customerName: e.target.value})} /></div>
-                <div><label className="block text-xs font-bold mb-1">رقم الهاتف *</label><input required className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-mono" value={newTicket.customerPhone} onChange={e => setNewTicket({...newTicket, customerPhone: e.target.value})} dir="ltr" /></div>
-                <div><label className="block text-xs font-bold mb-1">رقم ثاني</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-mono" value={newTicket.secondPhone} onChange={e => setNewTicket({...newTicket, secondPhone: e.target.value})} dir="ltr" /></div>
-              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div><label className="block text-xs font-bold mb-1">تليفون أرضي</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-mono" value={newTicket.landline} onChange={e => setNewTicket({...newTicket, landline: e.target.value})} dir="ltr" /></div>
-                <div><label className="block text-xs font-bold mb-1">البريد الإلكتروني</label><input type="email" className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" value={newTicket.customerEmail} onChange={e => setNewTicket({...newTicket, customerEmail: e.target.value})} /></div>
-                <div><label className="block text-xs font-bold mb-1">العنوان</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" value={newTicket.customerAddress} onChange={e => setNewTicket({...newTicket, customerAddress: e.target.value})} /></div>
+                <div><label className="block text-xs font-bold mb-1">اسم العميل *</label><input required className="w-full border p-3 rounded-xl text-sm" value={newTicket.customerName} onChange={e => setNewTicket({...newTicket, customerName: e.target.value})} /></div>
+                <div><label className="block text-xs font-bold mb-1">رقم الهاتف *</label><input required className="w-full border p-3 rounded-xl text-sm font-mono" value={newTicket.customerPhone} onChange={e => setNewTicket({...newTicket, customerPhone: e.target.value})} dir="ltr" /></div>
+                <div><label className="block text-xs font-bold mb-1">رقم ثاني</label><input className="w-full border p-3 rounded-xl text-sm font-mono" value={newTicket.secondPhone} onChange={e => setNewTicket({...newTicket, secondPhone: e.target.value})} dir="ltr" /></div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div><label className="block text-xs font-bold mb-1">تليفون أرضي</label><input className="w-full border p-3 rounded-xl text-sm font-mono" value={newTicket.landline} onChange={e => setNewTicket({...newTicket, landline: e.target.value})} dir="ltr" /></div>
+                <div><label className="block text-xs font-bold mb-1">البريد الإلكتروني</label><input type="email" className="w-full border p-3 rounded-xl text-sm" value={newTicket.customerEmail} onChange={e => setNewTicket({...newTicket, customerEmail: e.target.value})} /></div>
+                <div><label className="block text-xs font-bold mb-1">العنوان</label><input className="w-full border p-3 rounded-xl text-sm" value={newTicket.customerAddress} onChange={e => setNewTicket({...newTicket, customerAddress: e.target.value})} /></div>
               </div>
 
-                            {/* معلومات العميل - استمرار */}
+              {/* المحافظة والمدينة */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                
-                {/* المحافظة - قائمة منسدلة */}
                 <div>
                   <label className="block text-xs font-bold mb-1">المحافظة</label>
-                  <select 
-                    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
-                    value={newTicket.governorate || ''}
-                    onChange={e => setNewTicket({...newTicket, governorate: e.target.value})}
-                  >
+                  <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.governorate || ''} onChange={e => setNewTicket({...newTicket, governorate: e.target.value})}>
                     <option value="">-- اختر المحافظة --</option>
-                    {EGYPT_GOVERNORATES.map(gov => (
-                      <option key={gov} value={gov}>{gov}</option>
-                    ))}
+                    {EGYPT_GOVERNORATES.map(gov => <option key={gov} value={gov}>{gov}</option>)}
                   </select>
                 </div>
-                
-                {/* المدينة - يمكن أن تكون إدخال نصي حالياً */}
                 <div>
                   <label className="block text-xs font-bold mb-1">المدينة / المنطقة</label>
-                  <input 
-                    className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
-                    value={newTicket.city || ''}
-                    onChange={e => setNewTicket({...newTicket, city: e.target.value})}
-                    placeholder="مثال: مدينة نصر"
-                  />
+                  <input className="w-full border p-3 rounded-xl text-sm" value={newTicket.city || ''} onChange={e => setNewTicket({...newTicket, city: e.target.value})} placeholder="مثال: مدينة نصر" />
                 </div>
-                
               </div>
 
-              {/* ===== القوائم المتتالية: المنتج ← الموديل ← كود العطل الرئيسي ← كود العطل الفرعي ===== */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              {/* ===== القوائم المتتالية (5 مستويات) ===== */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl">
                 
-                {/* المنتج */}
                 <div>
-                  <label className="block text-xs font-bold mb-1">المنتج</label>
-                  <select
-                    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
-                    value={selectedProductId}
-                    onChange={e => {
-                      setSelectedProductId(e.target.value);
-                      setSelectedModelId('');
-                      setSelectedMainFaultId('');
-                      setNewTicket({...newTicket, device: '', deviceModel: '', issue: ''});
-                    }}
-                  >
+                  <label className="block text-xs font-bold mb-1 text-indigo-800 dark:text-indigo-300">المنتج</label>
+                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900" value={selectedProductId} onChange={e => {
+                    setSelectedProductId(e.target.value);
+                    setSelectedModelId(''); setSelectedMainFaultId(''); setSelectedSubFaultId('');
+                    const product = products.find(p => p.id === e.target.value);
+                    setNewTicket(prev => ({ ...prev, device: product?.name || '' }));
+                  }}>
                     <option value="">-- اختر المنتج --</option>
-                    {products.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
+                    {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
 
-                  {/* الموديل */}
                 <div>
-                  <label className="block text-xs font-bold mb-1">الموديل</label>
-                  <select
-                    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold disabled:opacity-50"
-                    value={selectedModelId}
-                    onChange={e => {
-                      setSelectedModelId(e.target.value);
-                      setSelectedMainFaultId('');
-                      const model = models.find(m => m.id === e.target.value);
-                      setNewTicket({...newTicket, deviceModel: model?.name || ''});
-                    }}
-                    disabled={!selectedProductId}
-                  >
+                  <label className="block text-xs font-bold mb-1 text-indigo-800 dark:text-indigo-300">الموديل</label>
+                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 disabled:opacity-50" value={selectedModelId} onChange={e => {
+                    setSelectedModelId(e.target.value);
+                    setSelectedMainFaultId(''); setSelectedSubFaultId('');
+                    const model = models.find(m => m.id === e.target.value);
+                    setNewTicket(prev => ({ ...prev, deviceModel: model?.name || '' }));
+                  }} disabled={!selectedProductId}>
                     <option value="">-- اختر الموديل --</option>
-                    {models.map(m => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
+                    {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </select>
                 </div>
 
-
-                 {/* كود العطل الرئيسي */}
                 <div>
-                  <label className="block text-xs font-bold mb-1">كود العطل الرئيسي</label>
-                  <select
-                    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold disabled:opacity-50"
-                    value={selectedMainFaultId}
-                    onChange={e => {
-                      setSelectedMainFaultId(e.target.value);
-                      setNewTicket({...newTicket, issue: ''});
-                    }}
-                    disabled={!selectedModelId}
-                  >
+                  <label className="block text-xs font-bold mb-1 text-amber-800 dark:text-amber-300">كود العطل الرئيسي</label>
+                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 disabled:opacity-50" value={selectedMainFaultId} onChange={e => {
+                    setSelectedMainFaultId(e.target.value);
+                    setSelectedSubFaultId('');
+                  }} disabled={!selectedModelId}>
                     <option value="">-- اختر الكود الرئيسي --</option>
-                    {mainFaults.map(f => (
-                      <option key={f.id} value={f.id}>{f.code} - {f.description}</option>
-                    ))}
+                    {mainFaults.map(f => <option key={f.id} value={f.id}>{f.code} - {f.description}</option>)}
                   </select>
                 </div>
 
-                {/* كود العطل الفرعي */}
                 <div>
-                  <label className="block text-xs font-bold mb-1">كود العطل الفرعي</label>
-                  <select
-                    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold disabled:opacity-50"
-                    value={newTicket.issue}
-                    onChange={e => setNewTicket({...newTicket, issue: e.target.value})}
-                    disabled={!selectedMainFaultId}
-                  >
+                  <label className="block text-xs font-bold mb-1 text-purple-800 dark:text-purple-300">كود العطل الفرعي</label>
+                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 disabled:opacity-50" value={selectedSubFaultId} onChange={e => handleSelectSubFault(e.target.value)} disabled={!selectedMainFaultId}>
                     <option value="">-- اختر الكود الفرعي --</option>
                     {subFaults.map(f => (
-                      <option key={f.id} value={`${f.code} - ${f.description}`}>
-                        {f.code} - {f.description} {f.productCode && `(كود المنتج: ${f.productCode})`}
-                      </option>
+                      <option key={f.id} value={f.id}>{f.code} - {f.description} {f.productCode && `(كود: ${f.productCode})`}</option>
                     ))}
                   </select>
                 </div>
-
               </div>
 
-              {/* كود المنتج - يظهر إذا كان الكود الفرعي المختار له كود منتج مرتبط */}
-              {(() => {
-                const selectedSubFault = subFaults.find(f => f.description === newTicket.issue?.split(' - ')[1]);
-                if (selectedSubFault?.productCode) {
-                  return (
-                    <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800">
-                      <p className="text-xs font-bold text-indigo-800 dark:text-indigo-300">
-                        كود المنتج المرتبط: <span className="font-mono">{selectedSubFault.productCode}</span>
-                      </p>
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-
-
-
-
-                  {/* السيريال (يظل كما هو - إدخال يدوي) */}
-                  <div>
-                    <label className="block text-xs font-bold mb-1">السيريال</label>
-                    <input 
-                      className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-mono" 
-                      value={newTicket.deviceSerial} 
-                      onChange={e => setNewTicket({...newTicket, deviceSerial: e.target.value})} 
-                      placeholder="السيريال التسلسلي للجهاز"
-                    />
-                  </div>
-
-                
-
-               
-
-                {/* ملاحظات إضافية (تظل كما هي) */}
-                <div>
-                  <label className="block text-xs font-bold mb-1">ملاحظات إضافية</label>
-                  <textarea 
-                    rows="2" 
-                    className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold resize-none" 
-                    value={newTicket.notes} 
-                    onChange={e => setNewTicket({...newTicket, notes: e.target.value})} 
-                    placeholder="أي ملاحظات إضافية عن العطل..."
-                  />
+              {/* عرض كود المنتج المرتبط */}
+              {newTicket.productCode && (
+                <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                  <p className="text-xs font-bold text-indigo-800 dark:text-indigo-300">🏷️ كود المنتج المرتبط: <span className="font-mono bg-white dark:bg-slate-800 px-2 py-0.5 rounded">{newTicket.productCode}</span></p>
                 </div>
+              )}
 
-                              {/* الضمان - النوع - المصدر */}
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                
-{/* الضمان وحالة الضمان */}
-<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-  
-  {/* حالة الضمان */}
-  <div>
-    <label className="block text-xs font-bold mb-1">حالة الضمان</label>
-    <select 
-      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" 
-      value={newTicket.warrantyStatus || ''} 
-      onChange={e => {
-        const newStatus = e.target.value;
-        if (newStatus === 'out_of_warranty') {
-          setNewTicket({
-            ...newTicket, 
-            warrantyStatus: newStatus,
-            warrantyPeriod: 'out_of_warranty'
-          });
-        } else {
-          setNewTicket({
-            ...newTicket, 
-            warrantyStatus: newStatus,
-            warrantyPeriod: ''
-          });
-        }
-      }}
-    >
-      <option value="">-- اختر حالة الضمان --</option>
-      <option value="in_warranty">✅ داخل الضمان</option>
-      <option value="out_of_warranty">❌ خارج الضمان</option>
-    </select>
-  </div>
-  
-  {/* فترة الضمان - تظهر فقط إذا كان داخل الضمان */}
-  {newTicket.warrantyStatus === 'in_warranty' && (
-    <div>
-      <label className="block text-xs font-bold mb-1">📅 فترة الضمان المتبقية</label>
-      <select 
-        className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" 
-        value={newTicket.warrantyPeriod || ''} 
-        onChange={e => setNewTicket({...newTicket, warrantyPeriod: e.target.value})}
-      >
-        <option value="">-- اختر الفترة --</option>
-        {WARRANTY_PERIODS.map(period => (
-          <option key={period.value} value={period.value}>{period.label}</option>
-        ))}
-      </select>
-    </div>
-  )}
-  
-  {/* إذا كان خارج الضمان */}
-  {newTicket.warrantyStatus === 'out_of_warranty' && (
-    <div>
-      <label className="block text-xs font-bold mb-1">📅 فترة الضمان</label>
-      <div className="w-full border p-3 rounded-xl text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
-        🔴 خارج الضمان
-      </div>
-    </div>
-  )}
-  
-</div>
-                                
+              {/* السيريال */}
+              <div>
+                <label className="block text-xs font-bold mb-1">السيريال التسلسلي للجهاز</label>
+                <input className="w-full border p-3 rounded-xl text-sm font-mono" value={newTicket.deviceSerial} onChange={e => setNewTicket({...newTicket, deviceSerial: e.target.value})} placeholder="السيريال التسلسلي" />
+              </div>
+
+              {/* ملاحظات إضافية */}
+              <div>
+                <label className="block text-xs font-bold mb-1">ملاحظات إضافية</label>
+                <textarea rows="2" className="w-full border p-3 rounded-xl text-sm resize-none" value={newTicket.notes} onChange={e => setNewTicket({...newTicket, notes: e.target.value})} placeholder="أي ملاحظات إضافية..." />
+              </div>
+
+              {/* الضمان والنوع والمصدر */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold mb-1">حالة الضمان</label>
+                  <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.warrantyStatus || ''} onChange={e => {
+                    const newStatus = e.target.value;
+                    if (newStatus === 'out_of_warranty') {
+                      setNewTicket({ ...newTicket, warrantyStatus: newStatus, warrantyPeriod: 'out_of_warranty' });
+                    } else {
+                      setNewTicket({ ...newTicket, warrantyStatus: newStatus, warrantyPeriod: '' });
+                    }
+                  }}>
+                    <option value="">-- اختر --</option>
+                    <option value="in_warranty">✅ داخل الضمان</option>
+                    <option value="out_of_warranty">❌ خارج الضمان</option>
+                  </select>
+                </div>
+                {newTicket.warrantyStatus === 'in_warranty' && (
+                  <div>
+                    <label className="block text-xs font-bold mb-1">📅 فترة الضمان</label>
+                    <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.warrantyPeriod || ''} onChange={e => setNewTicket({...newTicket, warrantyPeriod: e.target.value})}>
+                      <option value="">-- اختر الفترة --</option>
+                      {WARRANTY_PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-bold mb-1">نوع التذكرة</label>
-                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.ticketType} onChange={e => setNewTicket({...newTicket, ticketType: e.target.value})}>
+                  <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.ticketType} onChange={e => setNewTicket({...newTicket, ticketType: e.target.value})}>
                     <option value="">-- اختر --</option>
                     {TICKET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold mb-1">المصدر</label>
-                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.source} onChange={e => setNewTicket({...newTicket, source: e.target.value})}>
+                  <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.source} onChange={e => setNewTicket({...newTicket, source: e.target.value})}>
                     <option value="">-- اختر --</option>
                     {TICKET_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
                 </div>
               </div>
 
+              {/* قطع غيار بتكلفة وبدون تكلفة */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold mb-1">🛠️ قطع غيار بتكلفة</label>
+                  <textarea rows="3" className="w-full border p-3 rounded-xl text-sm resize-none" value={newTicket.sparePartsWithCost} onChange={e => setNewTicket({...newTicket, sparePartsWithCost: e.target.value})} placeholder="مثال:&#10;• شاشة - 500 ج&#10;• بطارية - 300 ج" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1">🔧 قطع غيار بدون تكلفة</label>
+                  <textarea rows="3" className="w-full border p-3 rounded-xl text-sm resize-none" value={newTicket.sparePartsWithoutCost} onChange={e => setNewTicket({...newTicket, sparePartsWithoutCost: e.target.value})} placeholder="مثال:&#10;• سلك شحن&#10;• سماعة" />
+                </div>
+              </div>
 
-              {/* ===== قطع غيار بتكلفة وبدون تكلفة ===== */}
-<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-  
-  {/* قطع غيار بتكلفة */}
-  <div>
-    <label className="block text-xs font-bold mb-1">
-      🛠️ قطع غيار بتكلفة
-    </label>
-    <textarea 
-      rows="3"
-      className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold resize-none"
-      value={newTicket.sparePartsWithCost}
-      onChange={e => setNewTicket({...newTicket, sparePartsWithCost: e.target.value})}
-      placeholder="مثال:&#10;• شاشة - 500 ج&#10;• بطارية - 300 ج&#10;• زر طاقة - 150 ج"
-    />
-    <p className="text-[10px] text-slate-400 mt-1">قطع الغيار التي لها تكلفة (اكتب السعر)</p>
-  </div>
-  
-  {/* قطع غيار بدون تكلفة */}
-  <div>
-    <label className="block text-xs font-bold mb-1">
-      🔧 قطع غيار بدون تكلفة (تحت الضمان)
-    </label>
-    <textarea 
-      rows="3"
-      className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold resize-none"
-      value={newTicket.sparePartsWithoutCost}
-      onChange={e => setNewTicket({...newTicket, sparePartsWithoutCost: e.target.value})}
-      placeholder="مثال:&#10;• سلك شحن&#10;• سماعة&#10;• غطاء خلفي"
-    />
-    <p className="text-[10px] text-slate-400 mt-1">قطع الغيار المستبدلة مجاناً تحت الضمان</p>
-  </div>
-  
-</div>
-
-{/* ===== التواريخ ===== */}
-<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-  
-  {/* تاريخ الفاتورة / الضمان */}
-  <div>
-    <label className="block text-xs font-bold mb-1">
-      📅 تاريخ الفاتورة / انتهاء الضمان
-    </label>
-    <input 
-      type="date"
-      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
-      value={newTicket.invoiceDate}
-      onChange={e => setNewTicket({...newTicket, invoiceDate: e.target.value})}
-    />
-    <p className="text-[10px] text-slate-400 mt-1">تاريخ شراء الجهاز أو انتهاء الضمان</p>
-  </div>
-  
-  {/* تاريخ انتهاء الصيانة */}
-  <div>
-    <label className="block text-xs font-bold mb-1">
-      ⏰ تاريخ انتهاء الصيانة (متوقع)
-    </label>
-    <input 
-      type="date"
-      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
-      value={newTicket.maintenanceEndDate}
-      onChange={e => setNewTicket({...newTicket, maintenanceEndDate: e.target.value})}
-    />
-    <p className="text-[10px] text-slate-400 mt-1">التاريخ المتوقع لإنهاء الصيانة</p>
-  </div>
-  
-  {/* تاريخ تسليم العميل */}
-  <div>
-    <label className="block text-xs font-bold mb-1">
-      📦 تاريخ تسليم العميل
-    </label>
-    <input 
-      type="date"
-      className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold"
-      value={newTicket.deliveryDate}
-      onChange={e => setNewTicket({...newTicket, deliveryDate: e.target.value})}
-    />
-    <p className="text-[10px] text-slate-400 mt-1">تاريخ تسليم الجهاز للعميل بعد الصيانة</p>
-  </div>
-  
-</div>
-
-
-              {/* الفرع - الأولوية - التكلفة */}
+              {/* التواريخ */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold mb-1">أقرب فرع</label>
-                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.nearestBranch} onChange={e => setNewTicket({...newTicket, nearestBranch: e.target.value})}>
-                    <option value="">-- اختر --</option>
-                    {BRANCH_OPTIONS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">الأولوية</label>
-                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.priority} onChange={e => setNewTicket({...newTicket, priority: e.target.value})}>
-                    <option value="low">منخفضة</option>
-                    <option value="medium">متوسطة</option>
-                    <option value="high">عالية</option>
-                  </select>
-                </div>
-                <div><label className="block text-xs font-bold mb-1">التكلفة التقديرية</label><input type="number" min="0" className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold text-center" value={newTicket.estimatedCost} onChange={e => setNewTicket({...newTicket, estimatedCost: Number(e.target.value)})} /></div>
+                <div><label className="block text-xs font-bold mb-1">📅 تاريخ الفاتورة / الضمان</label><input type="date" className="w-full border p-3 rounded-xl text-sm" value={newTicket.invoiceDate} onChange={e => setNewTicket({...newTicket, invoiceDate: e.target.value})} /></div>
+                <div><label className="block text-xs font-bold mb-1">⏰ تاريخ انتهاء الصيانة</label><input type="date" className="w-full border p-3 rounded-xl text-sm" value={newTicket.maintenanceEndDate} onChange={e => setNewTicket({...newTicket, maintenanceEndDate: e.target.value})} /></div>
+                <div><label className="block text-xs font-bold mb-1">📦 تاريخ تسليم العميل</label><input type="date" className="w-full border p-3 rounded-xl text-sm" value={newTicket.deliveryDate} onChange={e => setNewTicket({...newTicket, deliveryDate: e.target.value})} /></div>
+              </div>
+
+              {/* الفرع والأولوية والتكلفة */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div><label className="block text-xs font-bold mb-1">أقرب فرع</label><select className="w-full border p-3 rounded-xl text-sm" value={newTicket.nearestBranch} onChange={e => setNewTicket({...newTicket, nearestBranch: e.target.value})}>
+                  <option value="">-- اختر --</option>
+                  {BRANCH_OPTIONS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+                </select></div>
+                <div><label className="block text-xs font-bold mb-1">الأولوية</label><select className="w-full border p-3 rounded-xl text-sm" value={newTicket.priority} onChange={e => setNewTicket({...newTicket, priority: e.target.value})}>
+                  <option value="low">منخفضة</option><option value="medium">متوسطة</option><option value="high">عالية</option>
+                </select></div>
+                <div><label className="block text-xs font-bold mb-1">التكلفة التقديرية</label><input type="number" min="0" className="w-full border p-3 rounded-xl text-sm text-center" value={newTicket.estimatedCost} onChange={e => setNewTicket({...newTicket, estimatedCost: Number(e.target.value)})} /></div>
               </div>
 
               {/* تعيين مسؤولين */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold mb-1">الفني المختص</label>
-                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.assignedTechnician} onChange={e => setNewTicket({...newTicket, assignedTechnician: e.target.value})}>
+                <div><label className="block text-xs font-bold mb-1">الفني المختص</label><select className="w-full border p-3 rounded-xl text-sm" value={newTicket.assignedTechnician} onChange={e => setNewTicket({...newTicket, assignedTechnician: e.target.value})}>
                   <option value="">-- غير محدد --</option>
-                  {/* ✅ استخدام systemSettings.technicians من الإعدادات بدلاً من technicians */}
-                  {(systemSettings.technicians || []).map((tech, idx) => (
-                    <option key={idx} value={tech}>{tech}</option>
-                  ))}
-                </select>
-                </div>
-                <div>
-  <label className="block text-xs font-bold mb-1">مركز الصيانة</label>
-  <select 
-    className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" 
-    value={newTicket.assignedMaintenanceCenter} 
-    onChange={e => setNewTicket({...newTicket, assignedMaintenanceCenter: e.target.value})}
-  >
-    <option value="">-- غير محدد --</option>
-    {/* ✅ استخدام systemSettings.maintenanceCenters بدلاً من maintenanceCenters */}
-    {(systemSettings.maintenanceCenters || []).map(center => (
-      <option key={center.value || center} value={center.value || center}>
-        {center.name || center}
-      </option>
-    ))}
-  </select>
-</div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">الكول سنتر</label>
-                  <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold" value={newTicket.assignedCallCenter} onChange={e => setNewTicket({...newTicket, assignedCallCenter: e.target.value})}>
-                    <option value="">-- غير محدد --</option>
-                    {callCenters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
+                  {(systemSettings.technicians || []).map((tech, idx) => <option key={idx} value={tech}>{tech}</option>)}
+                </select></div>
+                <div><label className="block text-xs font-bold mb-1">مركز الصيانة</label><select className="w-full border p-3 rounded-xl text-sm" value={newTicket.assignedMaintenanceCenter} onChange={e => setNewTicket({...newTicket, assignedMaintenanceCenter: e.target.value})}>
+                  <option value="">-- غير محدد --</option>
+                  {(systemSettings.maintenanceCenters || []).map(center => <option key={center.value || center} value={center.value || center}>{center.name || center}</option>)}
+                </select></div>
+                <div><label className="block text-xs font-bold mb-1">الكول سنتر</label><select className="w-full border p-3 rounded-xl text-sm" value={newTicket.assignedCallCenter} onChange={e => setNewTicket({...newTicket, assignedCallCenter: e.target.value})}>
+                  <option value="">-- غير محدد --</option>
+                  {callCenters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select></div>
               </div>
 
-              {/* المشكلة والملاحظات */}
-              <div><label className="block text-xs font-bold mb-1">المشكلة *</label><textarea rows="3" className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold resize-none" value={newTicket.issue} onChange={e => setNewTicket({...newTicket, issue: e.target.value})} required /></div>
-              <div><label className="block text-xs font-bold mb-1">ملاحظات إضافية</label><textarea rows="2" className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500 font-bold resize-none" value={newTicket.notes} onChange={e => setNewTicket({...newTicket, notes: e.target.value})} /></div>
-              <div><label className="block text-xs font-bold mb-1">الوسوم</label><input className="w-full border p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" value={newTicket.tags?.join(', ')} onChange={e => setNewTicket({...newTicket, tags: e.target.value.split(',').map(t => t.trim())})} placeholder="وسم1, وسم2" /></div>
+              {/* الوسوم */}
+              <div><label className="block text-xs font-bold mb-1">الوسوم</label><input className="w-full border p-3 rounded-xl text-sm" value={newTicket.tags?.join(', ')} onChange={e => setNewTicket({...newTicket, tags: e.target.value.split(',').map(t => t.trim())})} placeholder="وسم1, وسم2" /></div>
 
+              {/* الأزرار */}
               <div className="flex gap-3 pt-4 border-t">
-                <button type="submit" className="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 shadow-md transition-colors flex items-center justify-center gap-2"><Save size={18}/> إنشاء التذكرة</button>
-                <button type="button" onClick={() => setShowAddModal(false)} className="px-6 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-3.5 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">إلغاء</button>
+                <button type="submit" className="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"><Save size={18}/> إنشاء التذكرة</button>
+                <button type="button" onClick={() => setShowAddModal(false)} className="px-6 bg-slate-100 dark:bg-slate-700 py-3.5 rounded-xl font-bold hover:bg-slate-200 transition-colors">إلغاء</button>
               </div>
             </form>
           </div>
