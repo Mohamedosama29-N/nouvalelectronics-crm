@@ -8803,22 +8803,33 @@ useEffect(() => {
 
               {/* أزرار الإجراءات */}
               <div className="flex flex-wrap gap-2 pt-4 border-t">
-
-                <button 
-                  onClick={() => {
-                    setShowFullTicketModal(false);
-                    openEditModal(fullTicketView);
-                  }} 
-                  className="px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-bold"
-                >
-                  <Edit size={14} className="inline ml-1"/> تعديل التذكرة
-                </button>
-                <button onClick={() => { setSelectedTicket(fullTicketView); setShowAssignModal(true); }} className="px-4 py-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg text-sm font-bold"><Users size={14} className="inline ml-1"/> تعيين مسؤولين</button>
-                <button onClick={() => handleGenerateInvoice(fullTicketView)} className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-sm font-bold"><Receipt size={14} className="inline ml-1"/> إنشاء فاتورة</button>
-                <button onClick={() => window.print()} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold"><Printer size={14} className="inline ml-1"/> طباعة</button>
-                <button onClick={() => setShowFullTicketModal(false)} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold">إغلاق</button>
-              </div>
-
+  {/* ✅ زر تعديل التذكرة - يفتح مودال التعديل */}
+  <button 
+    onClick={() => {
+      setShowFullTicketModal(false);  // أغلق نافذة العرض
+      openEditModal(fullTicketView);   // افتح مودال التعديل
+    }} 
+    className="px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-bold"
+  >
+    <Edit size={14} className="inline ml-1"/> تعديل التذكرة
+  </button>
+  
+  <button onClick={() => { setSelectedTicket(fullTicketView); setShowAssignModal(true); }} className="px-4 py-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg text-sm font-bold">
+    <Users size={14} className="inline ml-1"/> تعيين مسؤولين
+  </button>
+  
+  <button onClick={() => handleGenerateInvoice(fullTicketView)} className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-sm font-bold">
+    <Receipt size={14} className="inline ml-1"/> إنشاء فاتورة
+  </button>
+  
+  <button onClick={() => window.print()} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold">
+    <Printer size={14} className="inline ml-1"/> طباعة
+  </button>
+  
+  <button onClick={() => setShowFullTicketModal(false)} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold">
+    إغلاق
+  </button>
+</div>
               <div className="text-xs text-slate-400 space-y-1 border-t pt-4">
                 <p>تاريخ الإنشاء: {formatDate(fullTicketView.createdAt)}</p>
                 <p>آخر تحديث: {formatDate(fullTicketView.updatedAt)}</p>
@@ -8836,14 +8847,61 @@ useEffect(() => {
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
             <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white">تعيين مسؤولين للتذكرة #{selectedTicket.ticketNumber}</h3>
             <div className="space-y-4">
-              <div><label className="block text-xs font-bold mb-1">الفني</label><select className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" value={assignData.technician} onChange={e => setAssignData({...assignData, technician: e.target.value})}><option value="">-- اختر --</option>{technicians.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
-              <div><label className="block text-xs font-bold mb-1">مركز الصيانة</label><select className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" value={assignData.center} onChange={e => setAssignData({...assignData, center: e.target.value})}><option value="">-- اختر --</option>{maintenanceCenters.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
-              <div><label className="block text-xs font-bold mb-1">الكول سنتر</label><select className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" value={assignData.callCenter} onChange={e => setAssignData({...assignData, callCenter: e.target.value})}><option value="">-- اختر --</option>{callCenters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-              <div className="flex gap-2 pt-4">
-                <button onClick={() => handleAssign(selectedTicket.id)} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold">حفظ</button>
-                <button onClick={() => { setShowAssignModal(false); setAssignData({technician:'',center:'',callCenter:''}); }} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إلغاء</button>
-              </div>
+            {/* الفني - من systemSettings.technicians */}
+            <div>
+              <label className="block text-xs font-bold mb-1">الفني</label>
+              <select 
+                className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" 
+                value={assignData.technician} 
+                onChange={e => setAssignData({...assignData, technician: e.target.value})}
+              >
+                <option value="">-- اختر --</option>
+                {/* ✅ استخدام systemSettings.technicians بدلاً من technicians */}
+                {(systemSettings.technicians || []).map((tech, idx) => (
+                  <option key={idx} value={tech}>{tech}</option>
+                ))}
+              </select>
             </div>
+            
+            {/* مركز الصيانة - من systemSettings.maintenanceCenters */}
+            <div>
+              <label className="block text-xs font-bold mb-1">مركز الصيانة</label>
+              <select 
+                className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" 
+                value={assignData.center} 
+                onChange={e => setAssignData({...assignData, center: e.target.value})}
+              >
+                <option value="">-- اختر --</option>
+                {/* ✅ استخدام systemSettings.maintenanceCenters بدلاً من maintenanceCenters */}
+                {(systemSettings.maintenanceCenters || []).map((center, idx) => (
+                  <option key={idx} value={center.value || center}>{center.name || center}</option>
+                ))}
+              </select>
+            </div>
+            
+            {/* الكول سنتر - من systemSettings.callCenters (أو من الموظفين إذا أردت) */}
+            <div>
+              <label className="block text-xs font-bold mb-1">الكول سنتر</label>
+              <select 
+                className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" 
+                value={assignData.callCenter} 
+                onChange={e => setAssignData({...assignData, callCenter: e.target.value})}
+              >
+                <option value="">-- اختر --</option>
+                {/* ✅ استخدام systemSettings.callCenters إذا كان موجوداً، أو callCenters من الـ state */}
+                {(systemSettings.callCenters || callCenters || []).map((center, idx) => (
+                  <option key={idx} value={center.value || center.id || center}>
+                    {center.name || center}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex gap-2 pt-4">
+              <button onClick={() => handleAssign(selectedTicket.id)} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold">حفظ</button>
+              <button onClick={() => { setShowAssignModal(false); setAssignData({technician:'',center:'',callCenter:''}); }} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إلغاء</button>
+            </div>
+          </div>
           </div>
         </div>
       )}
