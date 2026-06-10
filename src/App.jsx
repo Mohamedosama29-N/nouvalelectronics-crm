@@ -7653,7 +7653,8 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     warrantyPeriod: '', ticketType: '', source: '', nearestBranch: '', assignedTechnician: '',
     assignedMaintenanceCenter: '', assignedCallCenter: '', estimatedCost: 0, estimatedDuration: '',
     notes: '', tags: [], sparePartsWithCost: '', sparePartsWithoutCost: '', invoiceDate: '',
-    deliveryDate: '', maintenanceEndDate: ''
+    deliveryDate: '', maintenanceEndDate: '', maintenanceEndTime: '',
+    deliveryTime: ''
   });
 
   // النظام الجديد (5 مستويات)
@@ -7693,7 +7694,9 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     assignedTechnician: '', assignedMaintenanceCenter: '', assignedCallCenter: '',
     estimatedCost: 0, estimatedDuration: '', notes: '', spareParts: [], tags: [],
     sparePartsWithCost: '', sparePartsWithoutCost: '',
-    invoiceDate: '', deliveryDate: '', maintenanceEndDate: ''
+    invoiceDate: '', deliveryDate: '', maintenanceEndDate: '', maintenanceEndTime: '',
+    deliveryDate: '',
+    deliveryTime: ''
   });
 
   const [lastDoc, setLastDoc] = useState(null);
@@ -8152,7 +8155,10 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       assignedTechnician: '', assignedMaintenanceCenter: '', assignedCallCenter: '',
       estimatedCost: 0, estimatedDuration: '', notes: '', spareParts: [], tags: [],
       sparePartsWithCost: '', sparePartsWithoutCost: '',
-      invoiceDate: '', deliveryDate: '', maintenanceEndDate: ''
+      invoiceDate: '', deliveryDate: '', maintenanceEndDate: '',
+      maintenanceEndTime: '',
+      deliveryDate: '',
+      deliveryTime: ''
     });
   };
 
@@ -8439,7 +8445,9 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       sparePartsWithoutCost: ticket.sparePartsWithoutCost || '',
       invoiceDate: ticket.invoiceDate || '',
       deliveryDate: ticket.deliveryDate || '',
-      maintenanceEndDate: ticket.maintenanceEndDate || ''
+      maintenanceEndDate: ticket.maintenanceEndDate || '',
+      maintenanceEndTime: ticket.maintenanceEndTime || '',
+      deliveryTime: ticket.deliveryTime || ''
     });
   };
 
@@ -8485,6 +8493,8 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
         invoiceDate: editFormData.invoiceDate || '',
         deliveryDate: editFormData.deliveryDate || '',
         maintenanceEndDate: editFormData.maintenanceEndDate || '',
+        maintenanceEndTime: editFormData.maintenanceEndTime || '',
+        deliveryTime: editFormData.deliveryTime || '',
         updatedAt: serverTimestamp()
       };
       
