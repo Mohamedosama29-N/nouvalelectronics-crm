@@ -2226,7 +2226,7 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
                      {template.showPrices && <th className="pb-2 text-left">الإجمالي</th>}
                   </tr>
                </thead>
-               <<tbody>
+               <tbody>
                     {data.items && data.items.length > 0 ? (
                       data.items.map((item, idx) => (
                         <tr key={idx}>
