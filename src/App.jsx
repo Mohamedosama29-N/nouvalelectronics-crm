@@ -1080,7 +1080,7 @@ const ROLE_DEFAULT_PERMISSIONS = {
   manageProductModels: false,
   manageFaultCodes: true,     // يمكنه إدارة أكواد الأعطال
   manageMaintenanceCenters: false,
-  manageBranchesList: false
+  manageBranchesList: false,
   viewAllWarehouses: false,  // لا يرى إلا فرعه
   viewReturnsWarehouse: true,
   manageReturnsWarehouse: false,
