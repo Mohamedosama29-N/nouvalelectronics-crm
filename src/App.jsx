@@ -8570,30 +8570,17 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     setSearch('');
   };
 
-  // ==========================================================================
-// 🎯 مكون اختيار الحالة (مع منع انتشار الحدث)
-// ==========================================================================
-const StatusSelectComp = ({ value, onChange, ticketId }) => {
-  const handleChange = (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    onChange(ticketId, e.target.value);
-  };
-
-  return (
+  const StatusSelectComp = ({ value, onChange, ticketId }) => (
     <select
+      className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 bg-white dark:bg-slate-900 font-bold"
       value={value}
-      onChange={handleChange}
-      onClick={(e) => e.stopPropagation()}
-      onMouseDown={(e) => e.stopPropagation()}
-      className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 bg-white dark:bg-slate-900 font-bold cursor-pointer hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+      onChange={(e) => onChange(ticketId, e.target.value)}
     >
       {TICKET_STATUSES.map(s => (
         <option key={s.value} value={s.value}>{s.label}</option>
       ))}
     </select>
   );
-};
 
   // ====================== RENDER ======================
   return (
@@ -13915,34 +13902,6 @@ function ReturnsWarehouseManager({ appUser, notify, setGlobalLoading }) {
 }
 
 // ==========================================================================
-// 🔍 التحقق من صلاحية المستخدم للصفحة
-// ==========================================================================
-const checkPagePermission = (view, user) => {
-  if (user.role === 'admin') return true;
-  
-  const permissionMap = {
-    'dashboard': 'viewDashboard',
-    'inventory': 'viewInventory',
-    'transfers': 'viewTransfers',
-    'transactions': 'viewPOS',
-    'customers': 'viewCustomers',
-    'tickets': 'manageTickets',
-    'invoices': 'viewInvoices',
-    'reports': 'viewReports',
-    'lowstock': 'viewLowStock',
-    'settings': 'viewSettings',
-    'warehouses': 'manageWarehouses',
-    'users': 'manageUsers',
-    'returns_warehouse': 'viewReturnsWarehouse'
-  };
-  
-  const requiredPermission = permissionMap[view];
-  if (!requiredPermission) return false;
-  
-  return user.permissions?.[requiredPermission] || false;
-};
-
-// ==========================================================================
 // 🚀 المكون الرئيسي للتطبيق (مع حل مشكلة الرفريش والتكامل الكامل)
 // ==========================================================================
 export default function App() {
@@ -14057,11 +14016,6 @@ useEffect(() => {
     if (savedUser) {
       setAppUser(savedUser);
     }
-
-    const savedView = localStorage.getItem('nouval_current_view');
-  if (savedView) {
-    setCurrentView(savedView);
-  }
 
   }, []);
 
@@ -14188,7 +14142,6 @@ useEffect(() => {
      clearUserFromStorage();
      setAppUser(null);
      setCurrentView('dashboard');
-     localStorage.removeItem('nouval_current_view');
      showSuccess("تم تسجيل الخروج بنجاح");
   };
 
@@ -14236,25 +14189,6 @@ useEffect(() => {
       </>
     );
   }
-
-
-
-  // عند تغيير المستخدم، استعادة الصفحة المحفوظة
-useEffect(() => {
-  if (appUser) {
-    const savedView = localStorage.getItem('nouval_current_view');
-    if (savedView && savedView !== 'dashboard') {
-      // تأكد من أن المستخدم لديه صلاحية للصفحة المحفوظة
-      const hasPermission = checkPagePermission(savedView, appUser);
-      if (hasPermission) {
-        setCurrentView(savedView);
-      } else {
-        setCurrentView('dashboard');
-        localStorage.setItem('nouval_current_view', 'dashboard');
-      }
-    }
-  }
-}, [appUser]);
 
   return (
     <ThemeProvider>
