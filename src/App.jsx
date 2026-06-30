@@ -8526,15 +8526,15 @@ const loadTickets = useCallback(async (isNextPage = false) => {
       maintenanceEndDate: ticket.maintenanceEndDate || '',
       maintenanceEndTime: ticket.maintenanceEndTime || '',
       deliveryTime: ticket.deliveryTime || '',
-      // ✅ Follow up
-    followUpAccessibility: ticket.followUp?.accessibility || 0,
-    followUpMaintenanceTime: ticket.followUp?.maintenanceTime || 0,
-    followUpCenterDealing: ticket.followUp?.centerDealing || 0,
-    followUpDeliveryProcedures: ticket.followUp?.deliveryProcedures || 0,
-    followUpRepurchase: ticket.followUp?.repurchase || '',
-    followUpNotes: ticket.followUpNotes || '',
-    followUpDate: ticket.followUpDate || '',
-    followUpBy: ticket.followUpBy || ''
+      
+      followUpAccessibility: ticket.followUp?.accessibility || 0,
+      followUpMaintenanceTime: ticket.followUp?.maintenanceTime || 0,
+      followUpCenterDealing: ticket.followUp?.centerDealing || 0,
+      followUpDeliveryProcedures: ticket.followUp?.deliveryProcedures || 0,
+      followUpRepurchase: ticket.followUp?.repurchase || '',
+      followUpNotes: ticket.followUpNotes || '',
+      followUpDate: ticket.followUpDate || '',
+      followUpBy: ticket.followUpBy || ''
   });
     
   };
