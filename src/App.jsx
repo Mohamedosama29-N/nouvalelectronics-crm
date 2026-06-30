@@ -8032,7 +8032,9 @@ const loadTickets = useCallback(async (isNextPage = false) => {
 
   // ========== فتح التذكرة كاملة ==========
   const openFullTicket = (ticket) => {
-
+  // ✅ كل الخصائص داخل setFullTicketView
+  setFullTicketView({
+    ...ticket,
     followUp: ticket.followUp || {
       accessibility: 0,
       maintenanceTime: 0,
@@ -8043,16 +8045,14 @@ const loadTickets = useCallback(async (isNextPage = false) => {
     followUpNotes: ticket.followUpNotes || '',
     followUpDate: ticket.followUpDate || '',
     followUpBy: ticket.followUpBy || ''
+  });
   
-
-    setFullTicketView(ticket);
-    setTicketComments(ticket.comments || []);
-    setNewComment('');
-    setEditingCommentId(null);
-    setEditingCommentText('');
-    setShowFullTicketModal(true);
-  };
-
+  setTicketComments(ticket.comments || []);
+  setNewComment('');
+  setEditingCommentId(null);
+  setEditingCommentText('');
+  setShowFullTicketModal(true);
+};
   // ========== التعليقات ==========
   const addComment = async () => {
     if (!newComment.trim() || !fullTicketView) return;
