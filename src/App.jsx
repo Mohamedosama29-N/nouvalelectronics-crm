@@ -7664,8 +7664,17 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     assignedMaintenanceCenter: '', assignedCallCenter: '', estimatedCost: 0, estimatedDuration: '',
     notes: '', tags: [], sparePartsWithCost: '', sparePartsWithoutCost: '', invoiceDate: '',
     deliveryDate: '', maintenanceEndDate: '', maintenanceEndTime: '',
-    deliveryTime: ''
-  });
+    deliveryTime: '',
+    followUpAccessibility: 0,
+  followUpMaintenanceTime: 0,
+  followUpCenterDealing: 0,
+  followUpDeliveryProcedures: 0,
+  followUpRepurchase: '',
+  followUpNotes: '',
+  followUpDate: '',
+  followUpBy: ''
+});
+  
 
   // النظام الجديد (5 مستويات)
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -7709,8 +7718,20 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     sparePartsWithCost: '', sparePartsWithoutCost: '',
     invoiceDate: '', deliveryDate: '', maintenanceEndDate: '', maintenanceEndTime: '',
     deliveryDate: '',
-    deliveryTime: ''
-  });
+    deliveryTime: '',
+    followUp: {
+    accessibility: 0,        // سهولة الوصول الى الشركة (1-10)
+    maintenanceTime: 0,      // تقييم وقت الصيانة (1-10)
+    centerDealing: 0,        // التعامل داخل مركز الصيانة (1-10)
+    deliveryProcedures: 0,   // سهولة اجراءات التسليم والاستلام (1-10)
+    repurchase: ''          // شراء منتجات نوفال مرة أخرى (yes/no)
+  },
+  
+  followUpNotes: '',        // ملاحظات إضافية عن التقييم
+  followUpDate: '',         // تاريخ التقييم
+  followUpBy: ''            // من قام بالتقييم
+});
+  
 
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
@@ -8011,6 +8032,19 @@ const loadTickets = useCallback(async (isNextPage = false) => {
 
   // ========== فتح التذكرة كاملة ==========
   const openFullTicket = (ticket) => {
+
+    followUp: ticket.followUp || {
+      accessibility: 0,
+      maintenanceTime: 0,
+      centerDealing: 0,
+      deliveryProcedures: 0,
+      repurchase: ''
+    },
+    followUpNotes: ticket.followUpNotes || '',
+    followUpDate: ticket.followUpDate || '',
+    followUpBy: ticket.followUpBy || ''
+  
+
     setFullTicketView(ticket);
     setTicketComments(ticket.comments || []);
     setNewComment('');
@@ -8146,7 +8180,18 @@ const loadTickets = useCallback(async (isNextPage = false) => {
         createdBy: appUser.id,
         createdByName: appUser.name,
         statusHistory: [{ status: 'created', timestamp: new Date().toISOString(), by: appUser.name }],
-        history: [{ action: 'إنشاء تذكرة', timestamp: new Date().toISOString(), by: appUser.name }]
+        history: [{ action: 'إنشاء تذكرة', timestamp: new Date().toISOString(), by: appUser.name }],
+        // ✅ إضافة Follow up
+  followUp: newTicket.followUp || {
+    accessibility: 0,
+    maintenanceTime: 0,
+    centerDealing: 0,
+    deliveryProcedures: 0,
+    repurchase: ''
+  },
+  followUpNotes: newTicket.followUpNotes || '',
+  followUpDate: '',
+  followUpBy: ''
       };
 
       const docRef = await addDoc(collection(db, 'tickets'), ticketData);
@@ -8480,8 +8525,18 @@ const loadTickets = useCallback(async (isNextPage = false) => {
       deliveryDate: ticket.deliveryDate || '',
       maintenanceEndDate: ticket.maintenanceEndDate || '',
       maintenanceEndTime: ticket.maintenanceEndTime || '',
-      deliveryTime: ticket.deliveryTime || ''
-    });
+      deliveryTime: ticket.deliveryTime || '',
+      // ✅ Follow up
+    followUpAccessibility: ticket.followUp?.accessibility || 0,
+    followUpMaintenanceTime: ticket.followUp?.maintenanceTime || 0,
+    followUpCenterDealing: ticket.followUp?.centerDealing || 0,
+    followUpDeliveryProcedures: ticket.followUp?.deliveryProcedures || 0,
+    followUpRepurchase: ticket.followUp?.repurchase || '',
+    followUpNotes: ticket.followUpNotes || '',
+    followUpDate: ticket.followUpDate || '',
+    followUpBy: ticket.followUpBy || ''
+  });
+    
   };
 
   const handleUpdateTicket = async (e) => {
@@ -8528,6 +8583,19 @@ const loadTickets = useCallback(async (isNextPage = false) => {
         maintenanceEndDate: editFormData.maintenanceEndDate || '',
         maintenanceEndTime: editFormData.maintenanceEndTime || '',
         deliveryTime: editFormData.deliveryTime || '',
+
+        // ✅ Follow up
+          followUp: {
+            accessibility: Number(editFormData.followUpAccessibility) || 0,
+            maintenanceTime: Number(editFormData.followUpMaintenanceTime) || 0,
+            centerDealing: Number(editFormData.followUpCenterDealing) || 0,
+            deliveryProcedures: Number(editFormData.followUpDeliveryProcedures) || 0,
+            repurchase: editFormData.followUpRepurchase || ''
+          },
+          followUpNotes: editFormData.followUpNotes || '',
+          followUpDate: editFormData.followUpDate || new Date().toISOString().split('T')[0],
+          followUpBy: editFormData.followUpBy || appUser.name,
+          
         updatedAt: serverTimestamp()
       };
       
@@ -8634,28 +8702,457 @@ const StatusSelectComp = ({ value, onChange, ticketId }) => {
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-rose-600"><X size={24}/></button>
             </div>
             
-            <form onSubmit={handleAddTicket} className="space-y-4">
-              {/* البحث عن عميل */}
-              <div className="relative">
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">🔍 البحث عن عميل موجود</label>
-                <input 
-                  className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500"
-                  placeholder="ابحث عن عميل مسجل..."
-                  value={customerSearch}
-                  onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true); }}
-                  onFocus={() => setShowCustomerDropdown(true)}
-                />
-                {showCustomerDropdown && filteredCustomers.length > 0 && (
-                  <div className="absolute z-20 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
-                    {filteredCustomers.map(c => (
-                      <button key={c.id} type="button" onClick={() => selectCustomer(c)} className="w-full p-3 text-right hover:bg-slate-50 dark:hover:bg-slate-700 border-b last:border-0">
-                        <span className="font-bold block text-sm">{c.name}</span>
-                        <span className="text-xs text-slate-500">{c.phone}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+           <form onSubmit={handleAddTicket} className="space-y-4">
+  {/* البحث عن عميل */}
+  <div className="relative">
+    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">🔍 البحث عن عميل موجود</label>
+    <input 
+      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500"
+      placeholder="ابحث عن عميل مسجل..."
+      value={customerSearch}
+      onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true); }}
+      onFocus={() => setShowCustomerDropdown(true)}
+    />
+    {showCustomerDropdown && filteredCustomers.length > 0 && (
+      <div className="absolute z-20 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
+        {filteredCustomers.map(c => (
+          <button key={c.id} type="button" onClick={() => selectCustomer(c)} className="w-full p-3 text-right hover:bg-slate-50 dark:hover:bg-slate-700 border-b last:border-0">
+            <span className="font-bold block text-sm">{c.name}</span>
+            <span className="text-xs text-slate-500">{c.phone}</span>
+          </button>
+        ))}
+      </div>
+    )}
+  </div>
+
+  {/* معلومات العميل الأساسية */}
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div>
+      <label className="block text-xs font-bold mb-1">اسم العميل *</label>
+      <input required className="w-full border p-3 rounded-xl text-sm" value={newTicket.customerName} onChange={e => setNewTicket({...newTicket, customerName: e.target.value})} />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">رقم الهاتف *</label>
+      <input required className="w-full border p-3 rounded-xl text-sm font-mono" value={newTicket.customerPhone} onChange={e => setNewTicket({...newTicket, customerPhone: e.target.value})} dir="ltr" />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">رقم ثاني</label>
+      <input className="w-full border p-3 rounded-xl text-sm font-mono" value={newTicket.secondPhone} onChange={e => setNewTicket({...newTicket, secondPhone: e.target.value})} dir="ltr" />
+    </div>
+  </div>
+  
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div>
+      <label className="block text-xs font-bold mb-1">تليفون أرضي</label>
+      <input className="w-full border p-3 rounded-xl text-sm font-mono" value={newTicket.landline} onChange={e => setNewTicket({...newTicket, landline: e.target.value})} dir="ltr" />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">البريد الإلكتروني</label>
+      <input type="email" className="w-full border p-3 rounded-xl text-sm" value={newTicket.customerEmail} onChange={e => setNewTicket({...newTicket, customerEmail: e.target.value})} />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">العنوان</label>
+      <input className="w-full border p-3 rounded-xl text-sm" value={newTicket.customerAddress} onChange={e => setNewTicket({...newTicket, customerAddress: e.target.value})} />
+    </div>
+  </div>
+
+  {/* المحافظة والمدينة */}
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <div>
+      <label className="block text-xs font-bold mb-1">المحافظة</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.governorate || ''} onChange={e => setNewTicket({...newTicket, governorate: e.target.value})}>
+        <option value="">-- اختر المحافظة --</option>
+        {EGYPT_GOVERNORATES.map(gov => <option key={gov} value={gov}>{gov}</option>)}
+      </select>
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">المدينة / المنطقة</label>
+      <input className="w-full border p-3 rounded-xl text-sm" value={newTicket.city || ''} onChange={e => setNewTicket({...newTicket, city: e.target.value})} placeholder="مثال: مدينة نصر" />
+    </div>
+  </div>
+
+  {/* القوائم المتتالية */}
+  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl">
+    <div>
+      <label className="block text-xs font-bold mb-1 text-indigo-800 dark:text-indigo-300">المنتج</label>
+      <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900" value={selectedProductId} onChange={e => {
+        setSelectedProductId(e.target.value);
+        setSelectedModelId('');
+        setSelectedMainFaultId('');
+        setSelectedSubFaultId('');
+        const product = products.find(p => p.id === e.target.value);
+        setNewTicket(prev => ({ ...prev, device: product?.name || '' }));
+      }}>
+        <option value="">-- اختر المنتج --</option>
+        {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+    </div>
+
+    <div>
+      <label className="block text-xs font-bold mb-1 text-indigo-800 dark:text-indigo-300">الموديل</label>
+      <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 disabled:opacity-50" value={selectedModelId} onChange={e => {
+        setSelectedModelId(e.target.value);
+        setSelectedMainFaultId('');
+        setSelectedSubFaultId('');
+        const model = models.find(m => m.id === e.target.value);
+        setNewTicket(prev => ({ ...prev, deviceModel: model?.name || '' }));
+      }} disabled={!selectedProductId}>
+        <option value="">-- اختر الموديل --</option>
+        {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+      </select>
+    </div>
+
+    <div>
+      <label className="block text-xs font-bold mb-1 text-amber-800 dark:text-amber-300">كود العطل الرئيسي</label>
+      <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 disabled:opacity-50" value={selectedMainFaultId} onChange={e => {
+        setSelectedMainFaultId(e.target.value);
+        setSelectedSubFaultId('');
+      }} disabled={!selectedModelId}>
+        <option value="">-- اختر الكود الرئيسي --</option>
+        {mainFaults.map(f => <option key={f.id} value={f.id}>{f.code} - {f.description}</option>)}
+      </select>
+    </div>
+
+    <div>
+      <label className="block text-xs font-bold mb-1 text-purple-800 dark:text-purple-300">كود العطل الفرعي</label>
+      <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 disabled:opacity-50" value={selectedSubFaultId} onChange={e => handleSelectSubFault(e.target.value)} disabled={!selectedMainFaultId}>
+        <option value="">-- اختر الكود الفرعي --</option>
+        {subFaults.map(f => (
+          <option key={f.id} value={f.id}>{f.code} - {f.description}</option>
+        ))}
+      </select>
+    </div>
+  </div>
+
+  {/* السيريال */}
+  <div>
+    <label className="block text-xs font-bold mb-1">السيريال التسلسلي للجهاز</label>
+    <input className="w-full border p-3 rounded-xl text-sm font-mono" value={newTicket.deviceSerial} onChange={e => setNewTicket({...newTicket, deviceSerial: e.target.value})} placeholder="السيريال التسلسلي" />
+  </div>
+
+  {/* ملاحظات إضافية */}
+  <div>
+    <label className="block text-xs font-bold mb-1">ملاحظات إضافية</label>
+    <textarea rows="2" className="w-full border p-3 rounded-xl text-sm resize-none" value={newTicket.notes} onChange={e => setNewTicket({...newTicket, notes: e.target.value})} placeholder="أي ملاحظات إضافية..." />
+  </div>
+
+  {/* الضمان والنوع والمصدر */}
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div>
+      <label className="block text-xs font-bold mb-1">حالة الضمان</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.warrantyStatus || ''} onChange={e => {
+        const newStatus = e.target.value;
+        if (newStatus === 'out_of_warranty') {
+          setNewTicket({ ...newTicket, warrantyStatus: newStatus, warrantyPeriod: 'out_of_warranty' });
+        } else {
+          setNewTicket({ ...newTicket, warrantyStatus: newStatus, warrantyPeriod: '' });
+        }
+      }}>
+        <option value="">-- اختر --</option>
+        <option value="in_warranty">✅ داخل الضمان</option>
+        <option value="out_of_warranty">❌ خارج الضمان</option>
+      </select>
+    </div>
+    {newTicket.warrantyStatus === 'in_warranty' && (
+      <div>
+        <label className="block text-xs font-bold mb-1">📅 فترة الضمان</label>
+        <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.warrantyPeriod || ''} onChange={e => setNewTicket({...newTicket, warrantyPeriod: e.target.value})}>
+          <option value="">-- اختر الفترة --</option>
+          {WARRANTY_PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+        </select>
+      </div>
+    )}
+    <div>
+      <label className="block text-xs font-bold mb-1">نوع التذكرة</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.ticketType} onChange={e => setNewTicket({...newTicket, ticketType: e.target.value})}>
+        <option value="">-- اختر --</option>
+        {TICKET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+      </select>
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">المصدر</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.source} onChange={e => setNewTicket({...newTicket, source: e.target.value})}>
+        <option value="">-- اختر --</option>
+        {TICKET_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+      </select>
+    </div>
+  </div>
+
+  {/* قطع غيار */}
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
+      <label className="block text-xs font-bold mb-1">🛠️ قطع غيار بتكلفة</label>
+      <textarea rows="3" className="w-full border p-3 rounded-xl text-sm resize-none" value={newTicket.sparePartsWithCost} onChange={e => setNewTicket({...newTicket, sparePartsWithCost: e.target.value})} placeholder="مثال:&#10;• شاشة - 500 ج&#10;• بطارية - 300 ج" />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">🔧 قطع غيار بدون تكلفة</label>
+      <textarea rows="3" className="w-full border p-3 rounded-xl text-sm resize-none" value={newTicket.sparePartsWithoutCost} onChange={e => setNewTicket({...newTicket, sparePartsWithoutCost: e.target.value})} placeholder="مثال:&#10;• سلك شحن&#10;• سماعة" />
+    </div>
+  </div>
+
+  {/* التواريخ */}
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div>
+      <label className="block text-xs font-bold mb-1">📅 تاريخ الفاتورة / الضمان</label>
+      <input type="date" className="w-full border p-3 rounded-xl text-sm" value={newTicket.invoiceDate} onChange={e => setNewTicket({...newTicket, invoiceDate: e.target.value})} />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">⏰ تاريخ انتهاء الصيانة</label>
+      <input type="date" className="w-full border p-3 rounded-xl text-sm" value={newTicket.maintenanceEndDate} onChange={e => setNewTicket({...newTicket, maintenanceEndDate: e.target.value})} />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">📦 تاريخ تسليم العميل</label>
+      <input type="date" className="w-full border p-3 rounded-xl text-sm" value={newTicket.deliveryDate} onChange={e => setNewTicket({...newTicket, deliveryDate: e.target.value})} />
+    </div>
+  </div>
+
+  {/* الفرع والأولوية والتكلفة */}
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div>
+      <label className="block text-xs font-bold mb-1">أقرب فرع</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.nearestBranch} onChange={e => setNewTicket({...newTicket, nearestBranch: e.target.value})}>
+        <option value="">-- اختر --</option>
+        {BRANCH_OPTIONS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+      </select>
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">الأولوية</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.priority} onChange={e => setNewTicket({...newTicket, priority: e.target.value})}>
+        <option value="low">منخفضة</option>
+        <option value="medium">متوسطة</option>
+        <option value="high">عالية</option>
+      </select>
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">التكلفة التقديرية</label>
+      <input type="number" min="0" className="w-full border p-3 rounded-xl text-sm text-center" value={newTicket.estimatedCost} onChange={e => setNewTicket({...newTicket, estimatedCost: Number(e.target.value)})} />
+    </div>
+  </div>
+
+  {/* تعيين مسؤولين */}
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div>
+      <label className="block text-xs font-bold mb-1">الفني المختص</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.assignedTechnician} onChange={e => setNewTicket({...newTicket, assignedTechnician: e.target.value})}>
+        <option value="">-- غير محدد --</option>
+        {(systemSettings?.technicians || []).map((tech, idx) => <option key={idx} value={tech}>{tech}</option>)}
+      </select>
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">مركز الصيانة</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.assignedMaintenanceCenter} onChange={e => setNewTicket({...newTicket, assignedMaintenanceCenter: e.target.value})}>
+        <option value="">-- غير محدد --</option>
+        {(systemSettings?.maintenanceCenters || []).map(center => (
+          <option key={typeof center === 'string' ? center : center.value} value={typeof center === 'string' ? center : center.name}>
+            {typeof center === 'string' ? center : center.name}
+          </option>
+        ))}
+      </select>
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">الكول سنتر</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.assignedCallCenter} onChange={e => setNewTicket({...newTicket, assignedCallCenter: e.target.value})}>
+        <option value="">-- غير محدد --</option>
+        {callCenters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+      </select>
+    </div>
+  </div>
+
+  {/* الوسوم */}
+  <div>
+    <label className="block text-xs font-bold mb-1">الوسوم</label>
+    <input className="w-full border p-3 rounded-xl text-sm" value={newTicket.tags?.join(', ')} onChange={e => setNewTicket({...newTicket, tags: e.target.value.split(',').map(t => t.trim())})} placeholder="وسم1, وسم2" />
+  </div>
+
+  {/* ===== ✅ قسم Follow up Callcenter ===== */}
+  <div className="border-t-2 border-indigo-200 dark:border-indigo-800 pt-4 mt-4">
+    <h4 className="font-black text-lg text-indigo-700 dark:text-indigo-300 mb-4 flex items-center gap-2">
+      <Headphones size={20} className="text-indigo-600" />
+      📋 Follow up Callcenter
+    </h4>
+    
+    <div className="space-y-4">
+      {/* السؤال 1 */}
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+          1- سهولة الوصول الى الشركة
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {[1,2,3,4,5,6,7,8,9,10].map(num => (
+            <label key={num} className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="accessibility"
+                value={num}
+                checked={newTicket.followUp?.accessibility === num}
+                onChange={(e) => setNewTicket({
+                  ...newTicket,
+                  followUp: {
+                    ...newTicket.followUp,
+                    accessibility: Number(e.target.value)
+                  }
+                })}
+                className="w-4 h-4 accent-indigo-600"
+              />
+              <span className="text-xs font-bold">{num}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+      
+      {/* السؤال 2 */}
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+          2- تقييم وقت الصيانة
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {[1,2,3,4,5,6,7,8,9,10].map(num => (
+            <label key={num} className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="maintenanceTime"
+                value={num}
+                checked={newTicket.followUp?.maintenanceTime === num}
+                onChange={(e) => setNewTicket({
+                  ...newTicket,
+                  followUp: {
+                    ...newTicket.followUp,
+                    maintenanceTime: Number(e.target.value)
+                  }
+                })}
+                className="w-4 h-4 accent-indigo-600"
+              />
+              <span className="text-xs font-bold">{num}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+      
+      {/* السؤال 3 */}
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+          3- التعامل داخل مركز الصيانة
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {[1,2,3,4,5,6,7,8,9,10].map(num => (
+            <label key={num} className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="centerDealing"
+                value={num}
+                checked={newTicket.followUp?.centerDealing === num}
+                onChange={(e) => setNewTicket({
+                  ...newTicket,
+                  followUp: {
+                    ...newTicket.followUp,
+                    centerDealing: Number(e.target.value)
+                  }
+                })}
+                className="w-4 h-4 accent-indigo-600"
+              />
+              <span className="text-xs font-bold">{num}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+      
+      {/* السؤال 4 */}
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+          4- سهولة اجراءات التسليم و الاستلام
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {[1,2,3,4,5,6,7,8,9,10].map(num => (
+            <label key={num} className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="deliveryProcedures"
+                value={num}
+                checked={newTicket.followUp?.deliveryProcedures === num}
+                onChange={(e) => setNewTicket({
+                  ...newTicket,
+                  followUp: {
+                    ...newTicket.followUp,
+                    deliveryProcedures: Number(e.target.value)
+                  }
+                })}
+                className="w-4 h-4 accent-indigo-600"
+              />
+              <span className="text-xs font-bold">{num}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+      
+      {/* السؤال 5 */}
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+          5- حضرتك ممكن تشتري منتجات نوفال مرة اخرى ؟
+        </label>
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="repurchase"
+              value="yes"
+              checked={newTicket.followUp?.repurchase === 'yes'}
+              onChange={(e) => setNewTicket({
+                ...newTicket,
+                followUp: {
+                  ...newTicket.followUp,
+                  repurchase: e.target.value
+                }
+              })}
+              className="w-4 h-4 accent-emerald-600"
+            />
+            <span className="font-bold text-emerald-600">✅ نعم</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="repurchase"
+              value="no"
+              checked={newTicket.followUp?.repurchase === 'no'}
+              onChange={(e) => setNewTicket({
+                ...newTicket,
+                followUp: {
+                  ...newTicket.followUp,
+                  repurchase: e.target.value
+                }
+              })}
+              className="w-4 h-4 accent-rose-600"
+            />
+            <span className="font-bold text-rose-600">❌ لا</span>
+          </label>
+        </div>
+      </div>
+      
+      {/* ملاحظات التقييم */}
+      <div>
+        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+          📝 ملاحظات إضافية عن التقييم
+        </label>
+        <textarea
+          rows="2"
+          className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm resize-none bg-white dark:bg-slate-900"
+          value={newTicket.followUpNotes || ''}
+          onChange={(e) => setNewTicket({...newTicket, followUpNotes: e.target.value})}
+          placeholder="أي ملاحظات إضافية عن تجربة العميل..."
+        />
+      </div>
+    </div>
+  </div>
+
+  {/* الأزرار */}
+  <div className="flex gap-3 pt-4 border-t">
+    <button type="submit" className="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2">
+      <Save size={18}/> إنشاء التذكرة
+    </button>
+    <button type="button" onClick={() => setShowAddModal(false)} className="px-6 bg-slate-100 dark:bg-slate-700 py-3.5 rounded-xl font-bold hover:bg-slate-200 transition-colors">
+      إلغاء
+    </button>
+  </div>
+</form>
 
               {/* معلومات العميل الأساسية */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -8907,7 +9404,6 @@ const StatusSelectComp = ({ value, onChange, ticketId }) => {
               </div>
             </form>
           </div>
-        </div>
       )}
 
       {/* ===== مودال فتح التذكرة كاملة ===== */}
@@ -8936,224 +9432,340 @@ const StatusSelectComp = ({ value, onChange, ticketId }) => {
             </div>
 
             <div className="p-6 space-y-6">
-              {/* معلومات العميل */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                  <label className="text-xs text-slate-500 block mb-1">رقم الهاتف</label>
-                  <p className="font-bold font-mono" dir="ltr">{fullTicketView.customerPhone}</p>
-                </div>
-                {fullTicketView.secondPhone && (
-                  <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                    <label className="text-xs text-slate-500 block mb-1">رقم ثاني</label>
-                    <p className="font-bold font-mono" dir="ltr">{fullTicketView.secondPhone}</p>
-                  </div>
-                )}
-                {fullTicketView.landline && (
-                  <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                    <label className="text-xs text-slate-500 block mb-1">أرضي</label>
-                    <p className="font-bold font-mono" dir="ltr">{fullTicketView.landline}</p>
-                  </div>
-                )}
-                {fullTicketView.customerEmail && (
-                  <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                    <label className="text-xs text-slate-500 block mb-1">البريد</label>
-                    <p className="font-bold text-sm">{fullTicketView.customerEmail}</p>
-                  </div>
-                )}
-              </div>
+  {/* معلومات العميل */}
+  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">رقم الهاتف</label>
+      <p className="font-bold font-mono" dir="ltr">{fullTicketView.customerPhone}</p>
+    </div>
+    {fullTicketView.secondPhone && (
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+        <label className="text-xs text-slate-500 block mb-1">رقم ثاني</label>
+        <p className="font-bold font-mono" dir="ltr">{fullTicketView.secondPhone}</p>
+      </div>
+    )}
+    {fullTicketView.landline && (
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+        <label className="text-xs text-slate-500 block mb-1">أرضي</label>
+        <p className="font-bold font-mono" dir="ltr">{fullTicketView.landline}</p>
+      </div>
+    )}
+    {fullTicketView.customerEmail && (
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+        <label className="text-xs text-slate-500 block mb-1">البريد</label>
+        <p className="font-bold text-sm">{fullTicketView.customerEmail}</p>
+      </div>
+    )}
+  </div>
 
-              {/* الجهاز والضمان */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                  <label className="text-xs text-slate-500 block mb-1">الجهاز</label>
-                  <p className="font-bold">{fullTicketView.device || '-'}</p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                  <label className="text-xs text-slate-500 block mb-1">الموديل</label>
-                  <p className="font-bold">{fullTicketView.deviceModel || '-'}</p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                  <label className="text-xs text-slate-500 block mb-1">السيريال</label>
-                  <p className="font-bold font-mono">{fullTicketView.deviceSerial || '-'}</p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                  <label className="text-xs text-slate-500 block mb-1">الضمان</label>
-                  <p className="font-bold">{WARRANTY_OPTIONS.find(w => w.value === fullTicketView.warrantyStatus)?.label || '-'}</p>
-                </div>
-              </div>
+  {/* الجهاز والضمان */}
+  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">الجهاز</label>
+      <p className="font-bold">{fullTicketView.device || '-'}</p>
+    </div>
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">الموديل</label>
+      <p className="font-bold">{fullTicketView.deviceModel || '-'}</p>
+    </div>
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">السيريال</label>
+      <p className="font-bold font-mono">{fullTicketView.deviceSerial || '-'}</p>
+    </div>
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">الضمان</label>
+      <p className="font-bold">{WARRANTY_OPTIONS.find(w => w.value === fullTicketView.warrantyStatus)?.label || '-'}</p>
+    </div>
+  </div>
 
-              {/* النوع والمصدر والفرع */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                  <label className="text-xs text-slate-500 block mb-1">نوع التذكرة</label>
-                  <p className="font-bold">{TICKET_TYPES.find(t => t.value === fullTicketView.ticketType)?.label || '-'}</p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                  <label className="text-xs text-slate-500 block mb-1">المصدر</label>
-                  <p className="font-bold">{TICKET_SOURCES.find(s => s.value === fullTicketView.source)?.label || '-'}</p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                  <label className="text-xs text-slate-500 block mb-1">أقرب فرع</label>
-                  <p className="font-bold">{BRANCH_OPTIONS.find(b => b.value === fullTicketView.nearestBranch)?.label || '-'}</p>
-                </div>
-              </div>
+  {/* النوع والمصدر والفرع */}
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">نوع التذكرة</label>
+      <p className="font-bold">{TICKET_TYPES.find(t => t.value === fullTicketView.ticketType)?.label || '-'}</p>
+    </div>
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">المصدر</label>
+      <p className="font-bold">{TICKET_SOURCES.find(s => s.value === fullTicketView.source)?.label || '-'}</p>
+    </div>
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">أقرب فرع</label>
+      <p className="font-bold">{BRANCH_OPTIONS.find(b => b.value === fullTicketView.nearestBranch)?.label || '-'}</p>
+    </div>
+  </div>
 
-              {/* العنوان والمشكلة */}
-              {fullTicketView.customerAddress && (
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                  <label className="text-xs text-slate-500 block mb-1">العنوان</label>
-                  <p className="font-bold">{fullTicketView.customerAddress}</p>
-                </div>
-              )}
-              
-              <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                <label className="text-xs text-slate-500 block mb-1">المشكلة</label>
-                <p className="font-bold">{fullTicketView.issue || '-'}</p>
-              </div>
+  {/* العنوان والمشكلة */}
+  {fullTicketView.customerAddress && (
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">العنوان</label>
+      <p className="font-bold">{fullTicketView.customerAddress}</p>
+    </div>
+  )}
+  
+  <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+    <label className="text-xs text-slate-500 block mb-1">المشكلة</label>
+    <p className="font-bold">{fullTicketView.issue || '-'}</p>
+  </div>
 
-              {/* المسؤولون */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                  <label className="text-xs text-slate-500 block mb-1">الفني</label>
-                  <p className="font-bold">{fullTicketView.assignedTechnician || '-'}</p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                  <label className="text-xs text-slate-500 block mb-1">مركز الصيانة</label>
-                  <p className="font-bold">{fullTicketView.assignedMaintenanceCenter || '-'}</p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-                  <label className="text-xs text-slate-500 block mb-1">الكول سنتر</label>
-                  <p className="font-bold">{fullTicketView.assignedCallCenter || '-'}</p>
-                </div>
-              </div>
+  {/* المسؤولون */}
+  <div className="grid grid-cols-3 gap-3">
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">الفني</label>
+      <p className="font-bold">{fullTicketView.assignedTechnician || '-'}</p>
+    </div>
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">مركز الصيانة</label>
+      <p className="font-bold">{fullTicketView.assignedMaintenanceCenter || '-'}</p>
+    </div>
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">الكول سنتر</label>
+      <p className="font-bold">{fullTicketView.assignedCallCenter || '-'}</p>
+    </div>
+  </div>
 
-              {/* المبالغ */}
-              <div className="grid grid-cols-4 gap-3 text-center">
-                <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-xl">
-                  <label className="text-xs block mb-1">التكلفة</label>
-                  <p className="font-black text-lg">{(fullTicketView.totalCost || fullTicketView.estimatedCost || 0).toLocaleString()} ج</p>
-                </div>
-                <div className="bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-xl">
-                  <label className="text-xs block mb-1">المدفوع</label>
-                  <p className="font-black text-lg">{(fullTicketView.totalPaid || 0).toLocaleString()} ج</p>
-                </div>
-                <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-xl">
-                  <label className="text-xs block mb-1">المتبقي</label>
-                  <p className="font-black text-lg">{((fullTicketView.totalCost || 0) - (fullTicketView.totalPaid || 0)).toLocaleString()} ج</p>
-                </div>
-                <div className="bg-purple-50 dark:bg-purple-900/30 p-3 rounded-xl">
-                  <label className="text-xs block mb-1">قطع الغيار</label>
-                  <p className="font-black text-lg">{(fullTicketView.spareParts || []).length}</p>
-                </div>
-              </div>
+  {/* المبالغ */}
+  <div className="grid grid-cols-4 gap-3 text-center">
+    <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-xl">
+      <label className="text-xs block mb-1">التكلفة</label>
+      <p className="font-black text-lg">{(fullTicketView.totalCost || fullTicketView.estimatedCost || 0).toLocaleString()} ج</p>
+    </div>
+    <div className="bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-xl">
+      <label className="text-xs block mb-1">المدفوع</label>
+      <p className="font-black text-lg">{(fullTicketView.totalPaid || 0).toLocaleString()} ج</p>
+    </div>
+    <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-xl">
+      <label className="text-xs block mb-1">المتبقي</label>
+      <p className="font-black text-lg">{((fullTicketView.totalCost || 0) - (fullTicketView.totalPaid || 0)).toLocaleString()} ج</p>
+    </div>
+    <div className="bg-purple-50 dark:bg-purple-900/30 p-3 rounded-xl">
+      <label className="text-xs block mb-1">قطع الغيار</label>
+      <p className="font-black text-lg">{(fullTicketView.spareParts || []).length}</p>
+    </div>
+  </div>
 
-              {/* قطع غيار */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {fullTicketView.sparePartsWithCost && (
-                  <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-xl border border-amber-200 dark:border-amber-800">
-                    <label className="text-xs text-amber-600 dark:text-amber-400 block mb-1 font-bold">🛠️ قطع غيار بتكلفة</label>
-                    <p className="text-sm whitespace-pre-wrap font-bold">{fullTicketView.sparePartsWithCost}</p>
-                  </div>
-                )}
-                {fullTicketView.sparePartsWithoutCost && (
-                  <div className="bg-green-50 dark:bg-green-900/30 p-3 rounded-xl border border-green-200 dark:border-green-800">
-                    <label className="text-xs text-green-600 dark:text-green-400 block mb-1 font-bold">🔧 قطع غيار بدون تكلفة</label>
-                    <p className="text-sm whitespace-pre-wrap font-bold">{fullTicketView.sparePartsWithoutCost}</p>
-                  </div>
-                )}
-              </div>
+  {/* قطع غيار */}
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+    {fullTicketView.sparePartsWithCost && (
+      <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-xl border border-amber-200 dark:border-amber-800">
+        <label className="text-xs text-amber-600 dark:text-amber-400 block mb-1 font-bold">🛠️ قطع غيار بتكلفة</label>
+        <p className="text-sm whitespace-pre-wrap font-bold">{fullTicketView.sparePartsWithCost}</p>
+      </div>
+    )}
+    {fullTicketView.sparePartsWithoutCost && (
+      <div className="bg-green-50 dark:bg-green-900/30 p-3 rounded-xl border border-green-200 dark:border-green-800">
+        <label className="text-xs text-green-600 dark:text-green-400 block mb-1 font-bold">🔧 قطع غيار بدون تكلفة</label>
+        <p className="text-sm whitespace-pre-wrap font-bold">{fullTicketView.sparePartsWithoutCost}</p>
+      </div>
+    )}
+  </div>
 
-              {/* التواريخ */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {fullTicketView.invoiceDate && (
-                  <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <label className="text-xs text-slate-500 block mb-1 font-bold">📅 تاريخ الفاتورة</label>
-                    <p className="font-bold">{formatDate(fullTicketView.invoiceDate)}</p>
-                  </div>
-                )}
-                {fullTicketView.maintenanceEndDate && (
-                  <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <label className="text-xs text-slate-500 block mb-1 font-bold">⏰ تاريخ انتهاء الصيانة</label>
-                    <p className="font-bold">{formatDate(fullTicketView.maintenanceEndDate)}</p>
-                  </div>
-                )}
-                {fullTicketView.deliveryDate && (
-                  <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <label className="text-xs text-slate-500 block mb-1 font-bold">📦 تاريخ تسليم العميل</label>
-                    <p className="font-bold">{formatDate(fullTicketView.deliveryDate)}</p>
-                  </div>
-                )}
-              </div>
+  {/* التواريخ */}
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    {fullTicketView.invoiceDate && (
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+        <label className="text-xs text-slate-500 block mb-1 font-bold">📅 تاريخ الفاتورة</label>
+        <p className="font-bold">{formatDate(fullTicketView.invoiceDate)}</p>
+      </div>
+    )}
+    {fullTicketView.maintenanceEndDate && (
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+        <label className="text-xs text-slate-500 block mb-1 font-bold">⏰ تاريخ انتهاء الصيانة</label>
+        <p className="font-bold">{formatDate(fullTicketView.maintenanceEndDate)}</p>
+      </div>
+    )}
+    {fullTicketView.deliveryDate && (
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+        <label className="text-xs text-slate-500 block mb-1 font-bold">📦 تاريخ تسليم العميل</label>
+        <p className="font-bold">{formatDate(fullTicketView.deliveryDate)}</p>
+      </div>
+    )}
+  </div>
 
-              {/* التعليقات */}
-              <div className="border rounded-xl p-4">
-                <h3 className="font-bold mb-3 flex items-center gap-2">
-                  <MessageSquare size={18} className="text-indigo-600"/> التعليقات ({ticketComments.length})
-                </h3>
-                <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
-                  {ticketComments.map(comment => (
-                    <div key={comment.id} className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg">
-                      {editingCommentId === comment.id ? (
-                        <div className="flex gap-2">
-                          <input className="flex-1 border p-2 rounded-lg text-sm" value={editingCommentText} onChange={e => setEditingCommentText(e.target.value)} />
-                          <button onClick={() => editComment(comment.id)} className="px-3 py-1 bg-indigo-600 text-white rounded text-xs">حفظ</button>
-                          <button onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }} className="px-3 py-1 bg-slate-200 rounded text-xs">إلغاء</button>
-                        </div>
-                      ) : (
-                        <div>
-                          <p className="text-sm">{comment.text}</p>
-                          <div className="flex justify-between items-center mt-2">
-                            <div>
-                              <span className="text-xs text-slate-500">{comment.createdBy}</span>
-                              <span className="text-xs text-slate-400 mx-2">•</span>
-                              <span className="text-xs text-slate-400">{new Date(comment.createdAt).toLocaleString('ar-EG')}</span>
-                              {comment.editedAt && <span className="text-xs text-amber-500 mr-2">(معدل)</span>}
-                            </div>
-                            <div className="flex gap-2">
-                              <button onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text); }} className="text-xs text-indigo-500">تعديل</button>
-                              <button onClick={() => deleteComment(comment.id)} className="text-xs text-rose-500">حذف</button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <input className="flex-1 border p-2 rounded-lg text-sm" placeholder="أضف تعليقاً..." value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addComment(); }} />
-                  <button onClick={addComment} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold">إضافة</button>
-                </div>
-              </div>
-
-              {/* أزرار الإجراءات */}
-              <div className="flex flex-wrap gap-2 pt-4 border-t">
-                <button onClick={() => { setSelectedTicket(fullTicketView); setShowAssignModal(true); }} className="px-4 py-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg text-sm font-bold">
-                  <Users size={14} className="inline ml-1"/> تعيين مسؤولين
-                </button>
-                <button onClick={() => { openEditModal(fullTicketView); setShowFullTicketModal(false); }} className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-sm font-bold">
-                  <Edit size={14} className="inline ml-1"/> تعديل التذكرة
-                </button>
-                <button onClick={() => handleGenerateInvoice(fullTicketView)} className="px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-sm font-bold">
-                  <Receipt size={14} className="inline ml-1"/> إنشاء فاتورة
-                </button>
-                <button onClick={() => window.print()} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold">
-                  <Printer size={14} className="inline ml-1"/> طباعة
-                </button>
-                <button onClick={() => setShowFullTicketModal(false)} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold">
-                  إغلاق
-                </button>
-              </div>
-
-              <div className="text-xs text-slate-400 space-y-1 border-t pt-4">
-                <p>تاريخ الإنشاء: {formatDate(fullTicketView.createdAt)}</p>
-                <p>آخر تحديث: {formatDate(fullTicketView.updatedAt)}</p>
-                <p>تم الإنشاء بواسطة: {fullTicketView.createdByName}</p>
-                <p>المركز: {warehouseMap?.[fullTicketView.assignedCenter] || fullTicketView.assignedCenter}</p>
-              </div>
+  {/* ===== ✅ قسم Follow up Callcenter - عرض ===== */}
+  {(fullTicketView.followUp?.accessibility > 0 || 
+    fullTicketView.followUp?.maintenanceTime > 0 || 
+    fullTicketView.followUp?.centerDealing > 0 || 
+    fullTicketView.followUp?.deliveryProcedures > 0 || 
+    fullTicketView.followUp?.repurchase) && (
+    
+    <div className="border-t-2 border-indigo-200 dark:border-indigo-800 pt-4 mt-4">
+      <h4 className="font-black text-lg text-indigo-700 dark:text-indigo-300 mb-4 flex items-center gap-2">
+        <Headphones size={20} className="text-indigo-600" />
+        📋 تقييم خدمة العملاء (Follow up)
+      </h4>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* السؤال 1 */}
+        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">سهولة الوصول الى الشركة</p>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+              {fullTicketView.followUp?.accessibility || 0}
+            </span>
+            <span className="text-sm text-slate-500">/ 10</span>
+            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
+              <div 
+                className="h-2 bg-indigo-600 rounded-full transition-all"
+                style={{ width: `${((fullTicketView.followUp?.accessibility || 0) / 10) * 100}%` }}
+              />
             </div>
           </div>
         </div>
-      )}
+        
+        {/* السؤال 2 */}
+        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">تقييم وقت الصيانة</p>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+              {fullTicketView.followUp?.maintenanceTime || 0}
+            </span>
+            <span className="text-sm text-slate-500">/ 10</span>
+            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
+              <div 
+                className="h-2 bg-indigo-600 rounded-full transition-all"
+                style={{ width: `${((fullTicketView.followUp?.maintenanceTime || 0) / 10) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+        
+        {/* السؤال 3 */}
+        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">التعامل داخل مركز الصيانة</p>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+              {fullTicketView.followUp?.centerDealing || 0}
+            </span>
+            <span className="text-sm text-slate-500">/ 10</span>
+            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
+              <div 
+                className="h-2 bg-indigo-600 rounded-full transition-all"
+                style={{ width: `${((fullTicketView.followUp?.centerDealing || 0) / 10) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+        
+        {/* السؤال 4 */}
+        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">سهولة اجراءات التسليم والاستلام</p>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+              {fullTicketView.followUp?.deliveryProcedures || 0}
+            </span>
+            <span className="text-sm text-slate-500">/ 10</span>
+            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
+              <div 
+                className="h-2 bg-indigo-600 rounded-full transition-all"
+                style={{ width: `${((fullTicketView.followUp?.deliveryProcedures || 0) / 10) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+        
+        {/* السؤال 5 */}
+        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl md:col-span-2">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">شراء منتجات نوفال مرة أخرى</p>
+          <div className="flex items-center gap-4">
+            <span className={`text-xl font-black ${fullTicketView.followUp?.repurchase === 'yes' ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {fullTicketView.followUp?.repurchase === 'yes' ? '✅ نعم' : 
+               fullTicketView.followUp?.repurchase === 'no' ? '❌ لا' : 'لم يتم التقييم'}
+            </span>
+          </div>
+        </div>
+        
+        {/* ملاحظات */}
+        {fullTicketView.followUpNotes && (
+          <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl md:col-span-2">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">📝 ملاحظات التقييم</p>
+            <p className="font-bold text-sm">{fullTicketView.followUpNotes}</p>
+          </div>
+        )}
+        
+        {/* معلومات التقييم */}
+        {(fullTicketView.followUpBy || fullTicketView.followUpDate) && (
+          <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl md:col-span-2">
+            <div className="flex flex-wrap gap-4 text-xs text-slate-500">
+              {fullTicketView.followUpBy && (
+                <p>👤 تم التقييم بواسطة: <span className="font-bold text-slate-700">{fullTicketView.followUpBy}</span></p>
+              )}
+              {fullTicketView.followUpDate && (
+                <p>📅 تاريخ التقييم: <span className="font-bold text-slate-700">{formatDate(fullTicketView.followUpDate)}</span></p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )}
+
+  {/* التعليقات */}
+  <div className="border rounded-xl p-4">
+    <h3 className="font-bold mb-3 flex items-center gap-2">
+      <MessageSquare size={18} className="text-indigo-600"/> التعليقات ({ticketComments.length})
+    </h3>
+    <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+      {ticketComments.map(comment => (
+        <div key={comment.id} className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg">
+          {editingCommentId === comment.id ? (
+            <div className="flex gap-2">
+              <input className="flex-1 border p-2 rounded-lg text-sm" value={editingCommentText} onChange={e => setEditingCommentText(e.target.value)} />
+              <button onClick={() => editComment(comment.id)} className="px-3 py-1 bg-indigo-600 text-white rounded text-xs">حفظ</button>
+              <button onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }} className="px-3 py-1 bg-slate-200 rounded text-xs">إلغاء</button>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm">{comment.text}</p>
+              <div className="flex justify-between items-center mt-2">
+                <div>
+                  <span className="text-xs text-slate-500">{comment.createdBy}</span>
+                  <span className="text-xs text-slate-400 mx-2">•</span>
+                  <span className="text-xs text-slate-400">{new Date(comment.createdAt).toLocaleString('ar-EG')}</span>
+                  {comment.editedAt && <span className="text-xs text-amber-500 mr-2">(معدل)</span>}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text); }} className="text-xs text-indigo-500">تعديل</button>
+                  <button onClick={() => deleteComment(comment.id)} className="text-xs text-rose-500">حذف</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+    <div className="flex gap-2">
+      <input className="flex-1 border p-2 rounded-lg text-sm" placeholder="أضف تعليقاً..." value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addComment(); }} />
+      <button onClick={addComment} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold">إضافة</button>
+    </div>
+  </div>
+
+  {/* أزرار الإجراءات */}
+  <div className="flex flex-wrap gap-2 pt-4 border-t">
+    <button onClick={() => { setSelectedTicket(fullTicketView); setShowAssignModal(true); }} className="px-4 py-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg text-sm font-bold">
+      <Users size={14} className="inline ml-1"/> تعيين مسؤولين
+    </button>
+    <button onClick={() => { openEditModal(fullTicketView); setShowFullTicketModal(false); }} className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-sm font-bold">
+      <Edit size={14} className="inline ml-1"/> تعديل التذكرة
+    </button>
+    <button onClick={() => handleGenerateInvoice(fullTicketView)} className="px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-sm font-bold">
+      <Receipt size={14} className="inline ml-1"/> إنشاء فاتورة
+    </button>
+    <button onClick={() => window.print()} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold">
+      <Printer size={14} className="inline ml-1"/> طباعة
+    </button>
+    <button onClick={() => setShowFullTicketModal(false)} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold">
+      إغلاق
+    </button>
+  </div>
+
+  <div className="text-xs text-slate-400 space-y-1 border-t pt-4">
+    <p>تاريخ الإنشاء: {formatDate(fullTicketView.createdAt)}</p>
+    <p>آخر تحديث: {formatDate(fullTicketView.updatedAt)}</p>
+    <p>تم الإنشاء بواسطة: {fullTicketView.createdByName}</p>
+    <p>المركز: {warehouseMap?.[fullTicketView.assignedCenter] || fullTicketView.assignedCenter}</p>
+  </div>
+</div>
+
 
       {/* ===== مودال تعيين مسؤولين ===== */}
       {showAssignModal && selectedTicket && (
@@ -9315,177 +9927,371 @@ const StatusSelectComp = ({ value, onChange, ticketId }) => {
               <button onClick={() => setEditingTicket(null)} className="text-slate-400 hover:text-rose-600"><X size={24}/></button>
             </div>
             <form onSubmit={handleUpdateTicket} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold mb-1">اسم العميل *</label>
-                  <input required className="w-full border p-3 rounded-xl text-sm" value={editFormData.customerName} onChange={e => setEditFormData({ ...editFormData, customerName: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">رقم الهاتف *</label>
-                  <input required className="w-full border p-3 rounded-xl text-sm font-mono" value={editFormData.customerPhone} onChange={e => setEditFormData({ ...editFormData, customerPhone: e.target.value })} dir="ltr" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">رقم ثاني</label>
-                  <input className="w-full border p-3 rounded-xl text-sm font-mono" value={editFormData.secondPhone} onChange={e => setEditFormData({ ...editFormData, secondPhone: e.target.value })} dir="ltr" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">تليفون أرضي</label>
-                  <input className="w-full border p-3 rounded-xl text-sm font-mono" value={editFormData.landline} onChange={e => setEditFormData({ ...editFormData, landline: e.target.value })} dir="ltr" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">البريد الإلكتروني</label>
-                  <input type="email" className="w-full border p-3 rounded-xl text-sm" value={editFormData.customerEmail} onChange={e => setEditFormData({ ...editFormData, customerEmail: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">العنوان</label>
-                  <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.customerAddress} onChange={e => setEditFormData({ ...editFormData, customerAddress: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">المحافظة</label>
-                  <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.governorate} onChange={e => setEditFormData({ ...editFormData, governorate: e.target.value })}>
-                    <option value="">-- اختر --</option>
-                    {EGYPT_GOVERNORATES.map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">المدينة</label>
-                  <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.city} onChange={e => setEditFormData({ ...editFormData, city: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">الجهاز</label>
-                  <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.device} onChange={e => setEditFormData({ ...editFormData, device: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">الموديل</label>
-                  <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.deviceModel} onChange={e => setEditFormData({ ...editFormData, deviceModel: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">السيريال</label>
-                  <input className="w-full border p-3 rounded-xl text-sm font-mono" value={editFormData.deviceSerial} onChange={e => setEditFormData({ ...editFormData, deviceSerial: e.target.value })} />
-                </div>
-                <div className="md:col-span-3">
-                  <label className="block text-xs font-bold mb-1">المشكلة</label>
-                  <textarea rows="2" className="w-full border p-3 rounded-xl text-sm" value={editFormData.issue} onChange={e => setEditFormData({ ...editFormData, issue: e.target.value })} />
-                </div>
-              </div>
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div>
+      <label className="block text-xs font-bold mb-1">اسم العميل *</label>
+      <input required className="w-full border p-3 rounded-xl text-sm" value={editFormData.customerName} onChange={e => setEditFormData({ ...editFormData, customerName: e.target.value })} />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">رقم الهاتف *</label>
+      <input required className="w-full border p-3 rounded-xl text-sm font-mono" value={editFormData.customerPhone} onChange={e => setEditFormData({ ...editFormData, customerPhone: e.target.value })} dir="ltr" />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">رقم ثاني</label>
+      <input className="w-full border p-3 rounded-xl text-sm font-mono" value={editFormData.secondPhone} onChange={e => setEditFormData({ ...editFormData, secondPhone: e.target.value })} dir="ltr" />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">تليفون أرضي</label>
+      <input className="w-full border p-3 rounded-xl text-sm font-mono" value={editFormData.landline} onChange={e => setEditFormData({ ...editFormData, landline: e.target.value })} dir="ltr" />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">البريد الإلكتروني</label>
+      <input type="email" className="w-full border p-3 rounded-xl text-sm" value={editFormData.customerEmail} onChange={e => setEditFormData({ ...editFormData, customerEmail: e.target.value })} />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">العنوان</label>
+      <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.customerAddress} onChange={e => setEditFormData({ ...editFormData, customerAddress: e.target.value })} />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">المحافظة</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.governorate} onChange={e => setEditFormData({ ...editFormData, governorate: e.target.value })}>
+        <option value="">-- اختر --</option>
+        {EGYPT_GOVERNORATES.map(g => <option key={g} value={g}>{g}</option>)}
+      </select>
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">المدينة</label>
+      <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.city} onChange={e => setEditFormData({ ...editFormData, city: e.target.value })} />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">الجهاز</label>
+      <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.device} onChange={e => setEditFormData({ ...editFormData, device: e.target.value })} />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">الموديل</label>
+      <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.deviceModel} onChange={e => setEditFormData({ ...editFormData, deviceModel: e.target.value })} />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">السيريال</label>
+      <input className="w-full border p-3 rounded-xl text-sm font-mono" value={editFormData.deviceSerial} onChange={e => setEditFormData({ ...editFormData, deviceSerial: e.target.value })} />
+    </div>
+    <div className="md:col-span-3">
+      <label className="block text-xs font-bold mb-1">المشكلة</label>
+      <textarea rows="2" className="w-full border p-3 rounded-xl text-sm" value={editFormData.issue} onChange={e => setEditFormData({ ...editFormData, issue: e.target.value })} />
+    </div>
+  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold mb-1">🛠️ قطع غيار بتكلفة</label>
-                  <textarea rows="3" className="w-full border p-3 rounded-xl text-sm resize-none" value={editFormData.sparePartsWithCost} onChange={e => setEditFormData({...editFormData, sparePartsWithCost: e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">🔧 قطع غيار بدون تكلفة</label>
-                  <textarea rows="3" className="w-full border p-3 rounded-xl text-sm resize-none" value={editFormData.sparePartsWithoutCost} onChange={e => setEditFormData({...editFormData, sparePartsWithoutCost: e.target.value})} />
-                </div>
-              </div>
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
+      <label className="block text-xs font-bold mb-1">🛠️ قطع غيار بتكلفة</label>
+      <textarea rows="3" className="w-full border p-3 rounded-xl text-sm resize-none" value={editFormData.sparePartsWithCost} onChange={e => setEditFormData({...editFormData, sparePartsWithCost: e.target.value})} />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">🔧 قطع غيار بدون تكلفة</label>
+      <textarea rows="3" className="w-full border p-3 rounded-xl text-sm resize-none" value={editFormData.sparePartsWithoutCost} onChange={e => setEditFormData({...editFormData, sparePartsWithoutCost: e.target.value})} />
+    </div>
+  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold mb-1">📅 تاريخ الفاتورة</label>
-                  <input type="date" className="w-full border p-3 rounded-xl text-sm" value={editFormData.invoiceDate} onChange={e => setEditFormData({...editFormData, invoiceDate: e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">⏰ تاريخ انتهاء الصيانة</label>
-                  <input type="date" className="w-full border p-3 rounded-xl text-sm" value={editFormData.maintenanceEndDate} onChange={e => setEditFormData({...editFormData, maintenanceEndDate: e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">📦 تاريخ تسليم العميل</label>
-                  <input type="date" className="w-full border p-3 rounded-xl text-sm" value={editFormData.deliveryDate} onChange={e => setEditFormData({...editFormData, deliveryDate: e.target.value})} />
-                </div>
-              </div>
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div>
+      <label className="block text-xs font-bold mb-1">📅 تاريخ الفاتورة</label>
+      <input type="date" className="w-full border p-3 rounded-xl text-sm" value={editFormData.invoiceDate} onChange={e => setEditFormData({...editFormData, invoiceDate: e.target.value})} />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">⏰ تاريخ انتهاء الصيانة</label>
+      <input type="date" className="w-full border p-3 rounded-xl text-sm" value={editFormData.maintenanceEndDate} onChange={e => setEditFormData({...editFormData, maintenanceEndDate: e.target.value})} />
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">📦 تاريخ تسليم العميل</label>
+      <input type="date" className="w-full border p-3 rounded-xl text-sm" value={editFormData.deliveryDate} onChange={e => setEditFormData({...editFormData, deliveryDate: e.target.value})} />
+    </div>
+  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold mb-1">الحالة</label>
-                  <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.status} onChange={e => setEditFormData({ ...editFormData, status: e.target.value })}>
-                    {TICKET_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">الأولوية</label>
-                  <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.priority} onChange={e => setEditFormData({ ...editFormData, priority: e.target.value })}>
-                    <option value="low">منخفضة</option>
-                    <option value="medium">متوسطة</option>
-                    <option value="high">عالية</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">التكلفة التقديرية</label>
-                  <input type="number" className="w-full border p-3 rounded-xl text-sm" value={editFormData.estimatedCost} onChange={e => setEditFormData({ ...editFormData, estimatedCost: Number(e.target.value) })} />
-                </div>
-              </div>
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div>
+      <label className="block text-xs font-bold mb-1">الحالة</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.status} onChange={e => setEditFormData({ ...editFormData, status: e.target.value })}>
+        {TICKET_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+      </select>
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">الأولوية</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.priority} onChange={e => setEditFormData({ ...editFormData, priority: e.target.value })}>
+        <option value="low">منخفضة</option>
+        <option value="medium">متوسطة</option>
+        <option value="high">عالية</option>
+      </select>
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">التكلفة التقديرية</label>
+      <input type="number" className="w-full border p-3 rounded-xl text-sm" value={editFormData.estimatedCost} onChange={e => setEditFormData({ ...editFormData, estimatedCost: Number(e.target.value) })} />
+    </div>
+  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold mb-1">نوع التذكرة</label>
-                  <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.ticketType} onChange={e => setEditFormData({ ...editFormData, ticketType: e.target.value })}>
-                    <option value="">-- اختر --</option>
-                    {TICKET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">المصدر</label>
-                  <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.source} onChange={e => setEditFormData({ ...editFormData, source: e.target.value })}>
-                    <option value="">-- اختر --</option>
-                    {TICKET_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">أقرب فرع</label>
-                  <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.nearestBranch} onChange={e => setEditFormData({ ...editFormData, nearestBranch: e.target.value })}>
-                    <option value="">-- اختر --</option>
-                    {BRANCH_OPTIONS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
-                  </select>
-                </div>
-              </div>
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div>
+      <label className="block text-xs font-bold mb-1">نوع التذكرة</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.ticketType} onChange={e => setEditFormData({ ...editFormData, ticketType: e.target.value })}>
+        <option value="">-- اختر --</option>
+        {TICKET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+      </select>
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">المصدر</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.source} onChange={e => setEditFormData({ ...editFormData, source: e.target.value })}>
+        <option value="">-- اختر --</option>
+        {TICKET_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+      </select>
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">أقرب فرع</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.nearestBranch} onChange={e => setEditFormData({ ...editFormData, nearestBranch: e.target.value })}>
+        <option value="">-- اختر --</option>
+        {BRANCH_OPTIONS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+      </select>
+    </div>
+  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold mb-1">الفني المختص</label>
-                  <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.assignedTechnician} onChange={e => setEditFormData({...editFormData, assignedTechnician: e.target.value})}>
-                    <option value="">-- غير محدد --</option>
-                    {(systemSettings?.technicians || []).map((tech, idx) => <option key={idx} value={tech}>{tech}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">مركز الصيانة</label>
-                  <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.assignedMaintenanceCenter} onChange={e => setEditFormData({...editFormData, assignedMaintenanceCenter: e.target.value})}>
-                    <option value="">-- غير محدد --</option>
-                    {(systemSettings?.maintenanceCenters || []).map(center => (
-                      <option key={typeof center === 'string' ? center : center.value} value={typeof center === 'string' ? center : center.name}>
-                        {typeof center === 'string' ? center : center.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">الكول سنتر</label>
-                  <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.assignedCallCenter} onChange={e => setEditFormData({...editFormData, assignedCallCenter: e.target.value})}>
-                    <option value="">-- غير محدد --</option>
-                    {callCenters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                  </select>
-                </div>
-              </div>
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div>
+      <label className="block text-xs font-bold mb-1">الفني المختص</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.assignedTechnician} onChange={e => setEditFormData({...editFormData, assignedTechnician: e.target.value})}>
+        <option value="">-- غير محدد --</option>
+        {(systemSettings?.technicians || []).map((tech, idx) => <option key={idx} value={tech}>{tech}</option>)}
+      </select>
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">مركز الصيانة</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.assignedMaintenanceCenter} onChange={e => setEditFormData({...editFormData, assignedMaintenanceCenter: e.target.value})}>
+        <option value="">-- غير محدد --</option>
+        {(systemSettings?.maintenanceCenters || []).map(center => (
+          <option key={typeof center === 'string' ? center : center.value} value={typeof center === 'string' ? center : center.name}>
+            {typeof center === 'string' ? center : center.name}
+          </option>
+        ))}
+      </select>
+    </div>
+    <div>
+      <label className="block text-xs font-bold mb-1">الكول سنتر</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.assignedCallCenter} onChange={e => setEditFormData({...editFormData, assignedCallCenter: e.target.value})}>
+        <option value="">-- غير محدد --</option>
+        {callCenters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+      </select>
+    </div>
+  </div>
 
-              <div>
-                <label className="block text-xs font-bold mb-1">الوسوم</label>
-                <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.tags?.join(', ')} onChange={e => setEditFormData({...editFormData, tags: e.target.value.split(',').map(t => t.trim())})} />
-              </div>
-              
-              <div>
-                <label className="block text-xs font-bold mb-1">ملاحظات</label>
-                <textarea rows="2" className="w-full border p-3 rounded-xl text-sm" value={editFormData.notes} onChange={e => setEditFormData({...editFormData, notes: e.target.value})} />
-              </div>
+  <div>
+    <label className="block text-xs font-bold mb-1">الوسوم</label>
+    <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.tags?.join(', ')} onChange={e => setEditFormData({...editFormData, tags: e.target.value.split(',').map(t => t.trim())})} />
+  </div>
+  
+  <div>
+    <label className="block text-xs font-bold mb-1">ملاحظات</label>
+    <textarea rows="2" className="w-full border p-3 rounded-xl text-sm" value={editFormData.notes} onChange={e => setEditFormData({...editFormData, notes: e.target.value})} />
+  </div>
 
-              <div className="flex gap-3 pt-4">
-                <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700">حفظ التعديلات</button>
-                <button type="button" onClick={() => setEditingTicket(null)} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إلغاء</button>
-              </div>
-            </form>
-          </div>
+  {/* ===== ✅ قسم Follow up Callcenter - تعديل ===== */}
+  <div className="border-t-2 border-indigo-200 dark:border-indigo-800 pt-4 mt-4">
+    <h4 className="font-black text-lg text-indigo-700 dark:text-indigo-300 mb-4 flex items-center gap-2">
+      <Headphones size={20} className="text-indigo-600" />
+      📋 Follow up Callcenter
+    </h4>
+    
+    <div className="space-y-4">
+      {/* السؤال 1 */}
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+          1- سهولة الوصول الى الشركة
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {[1,2,3,4,5,6,7,8,9,10].map(num => (
+            <label key={num} className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="editAccessibility"
+                value={num}
+                checked={editFormData.followUpAccessibility === num}
+                onChange={(e) => setEditFormData({
+                  ...editFormData,
+                  followUpAccessibility: Number(e.target.value)
+                })}
+                className="w-4 h-4 accent-indigo-600"
+              />
+              <span className="text-xs font-bold">{num}</span>
+            </label>
+          ))}
         </div>
-      )}
+      </div>
+      
+      {/* السؤال 2 */}
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+          2- تقييم وقت الصيانة
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {[1,2,3,4,5,6,7,8,9,10].map(num => (
+            <label key={num} className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="editMaintenanceTime"
+                value={num}
+                checked={editFormData.followUpMaintenanceTime === num}
+                onChange={(e) => setEditFormData({
+                  ...editFormData,
+                  followUpMaintenanceTime: Number(e.target.value)
+                })}
+                className="w-4 h-4 accent-indigo-600"
+              />
+              <span className="text-xs font-bold">{num}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+      
+      {/* السؤال 3 */}
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+          3- التعامل داخل مركز الصيانة
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {[1,2,3,4,5,6,7,8,9,10].map(num => (
+            <label key={num} className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="editCenterDealing"
+                value={num}
+                checked={editFormData.followUpCenterDealing === num}
+                onChange={(e) => setEditFormData({
+                  ...editFormData,
+                  followUpCenterDealing: Number(e.target.value)
+                })}
+                className="w-4 h-4 accent-indigo-600"
+              />
+              <span className="text-xs font-bold">{num}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+      
+      {/* السؤال 4 */}
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+          4- سهولة اجراءات التسليم و الاستلام
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {[1,2,3,4,5,6,7,8,9,10].map(num => (
+            <label key={num} className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="editDeliveryProcedures"
+                value={num}
+                checked={editFormData.followUpDeliveryProcedures === num}
+                onChange={(e) => setEditFormData({
+                  ...editFormData,
+                  followUpDeliveryProcedures: Number(e.target.value)
+                })}
+                className="w-4 h-4 accent-indigo-600"
+              />
+              <span className="text-xs font-bold">{num}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+      
+      {/* السؤال 5 */}
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+          5- حضرتك ممكن تشتري منتجات نوفال مرة اخرى ؟
+        </label>
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="editRepurchase"
+              value="yes"
+              checked={editFormData.followUpRepurchase === 'yes'}
+              onChange={(e) => setEditFormData({
+                ...editFormData,
+                followUpRepurchase: e.target.value
+              })}
+              className="w-4 h-4 accent-emerald-600"
+            />
+            <span className="font-bold text-emerald-600">✅ نعم</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="editRepurchase"
+              value="no"
+              checked={editFormData.followUpRepurchase === 'no'}
+              onChange={(e) => setEditFormData({
+                ...editFormData,
+                followUpRepurchase: e.target.value
+              })}
+              className="w-4 h-4 accent-rose-600"
+            />
+            <span className="font-bold text-rose-600">❌ لا</span>
+          </label>
+        </div>
+      </div>
+      
+      {/* ملاحظات التقييم */}
+      <div>
+        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+          📝 ملاحظات إضافية عن التقييم
+        </label>
+        <textarea
+          rows="2"
+          className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm resize-none bg-white dark:bg-slate-900"
+          value={editFormData.followUpNotes || ''}
+          onChange={(e) => setEditFormData({
+            ...editFormData,
+            followUpNotes: e.target.value
+          })}
+          placeholder="أي ملاحظات إضافية عن تجربة العميل..."
+        />
+      </div>
+      
+      {/* من قام بالتقييم */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+            👤 من قام بالتقييم
+          </label>
+          <input
+            className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-white dark:bg-slate-900"
+            value={editFormData.followUpBy || appUser.name}
+            onChange={(e) => setEditFormData({
+              ...editFormData,
+              followUpBy: e.target.value
+            })}
+            placeholder="اسم المقيم"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+            📅 تاريخ التقييم
+          </label>
+          <input
+            type="date"
+            className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-white dark:bg-slate-900"
+            value={editFormData.followUpDate || new Date().toISOString().split('T')[0]}
+            onChange={(e) => setEditFormData({
+              ...editFormData,
+              followUpDate: e.target.value
+            })}
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {/* أزرار الحفظ والإلغاء */}
+  <div className="flex gap-3 pt-4 border-t">
+    <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700">حفظ التعديلات</button>
+    <button type="button" onClick={() => setEditingTicket(null)} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إلغاء</button>
+  </div>
+</form>
 
       {/* ===== رأس الصفحة ===== */}
       <div className="p-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
