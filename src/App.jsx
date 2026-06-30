@@ -2106,6 +2106,9 @@ function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry,
 // ==========================================================================
 // 🧾 مكون عرض الفاتورة المحسن
 // ==========================================================================
+// ==========================================================================
+// 🧾 مكون عرض الفاتورة - نسخة مبسطة (سعر إجمالي واحد)
+// ==========================================================================
 function InvoiceRenderer({ data, systemSettings, onBack }) {
   const { darkMode } = useTheme();
   const printRef = useRef();
@@ -2132,10 +2135,6 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
     showStoreName: true,
     showCustomerInfo: true,
     showItems: true,
-    showPrices: true,
-    showDiscount: true,
-    showTax: true,
-    showFees: true,
     showFooter: true,
     showPaymentMethod: true,
     showNotes: true,
@@ -2165,39 +2164,27 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
     return Number(value || 0).toLocaleString() + ' ج.م';
   };
 
-  // ✅ فلترة العناصر: فصل القطع عن الخدمات
-  const parts = data.items?.filter(item => !item.isService) || [];
-  const services = data.items?.filter(item => item.isService) || [];
-  
-  // ✅ حساب الإجمالي مع مراعاة الضمان
-  const calculateTotal = () => {
-    let total = 0;
-    parts.forEach(item => {
-      const price = item.underWarranty ? 0 : (Number(item.price) || 0);
-      total += price * (item.quantity || 1);
-    });
-    services.forEach(item => {
-      total += (Number(item.price) || 0) * (item.quantity || 1);
-    });
-    return total;
-  };
+  // ✅ حساب الإجمالي النهائي (شامل الضريبة والرسوم والخدمات)
+  const finalTotal = Number(data.finalTotal) || 0;
 
-  const subtotal = calculateTotal();
-  
-  // ✅ الخصم والضريبة
-  const discountAmount = Number(data.discountAmount) || 0;
-  const taxAmount = Number(data.taxAmount) || 0;
-  const installAmount = Number(data.installAmount) || 0;
-  const servicesAmount = services.reduce((sum, item) => sum + (Number(item.price) || 0) * (item.quantity || 1), 0);
-  
-  // ✅ الإجمالي النهائي
-  const finalTotal = subtotal - discountAmount + taxAmount + installAmount;
+  // ✅ حساب إجمالي القطع (للعلم فقط - لا يظهر في الفاتورة)
+  const itemsTotal = (data.items || []).reduce((sum, item) => {
+    if (item.isService) return sum;
+    const price = item.underWarranty ? 0 : (Number(item.price) || 0);
+    return sum + (price * (item.quantity || 1));
+  }, 0);
+
+  // ✅ حساب الخدمات (للعلم فقط - لا يظهر في الفاتورة)
+  const servicesTotal = (data.items || []).reduce((sum, item) => {
+    if (!item.isService) return sum;
+    return sum + ((Number(item.price) || 0) * (item.quantity || 1));
+  }, 0);
 
   const handleSendWhatsApp = () => {
     if (data.phone) {
       const message = `فاتورة رقم ${data.invoiceNumber}\n`;
-      const itemsText = parts.map(item => 
-        `- ${item.name} × ${item.quantity || 1} = ${item.underWarranty ? '0' : (item.price * (item.quantity || 1))} ج`
+      const itemsText = (data.items || []).map(item => 
+        `- ${item.name} × ${item.quantity || 1}`
       ).join('\n');
       sendWhatsApp(data.phone, message + itemsText + `\nالإجمالي: ${finalTotal} ج`);
     }
@@ -2215,7 +2202,7 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
     <div id="invoice-print" className="flex justify-center p-6 bg-slate-100 dark:bg-slate-900 min-h-full" dir="rtl">
       <div ref={printRef} className={`bg-white dark:bg-slate-800 ${getPaperWidth()} w-full p-6 text-black dark:text-white border shadow-lg print:shadow-none print:border-none print:m-0 ${getFontSize()}`}>
         
-        {/* الشعار واسم المتجر */}
+        {/* ===== الشعار واسم المتجر ===== */}
         {template.showLogo && systemSettings.invoiceLogo && (
           <div className="text-center mb-4">
             <img src={systemSettings.invoiceLogo} alt="Logo" className="max-h-16 mx-auto" crossOrigin="anonymous" />
@@ -2230,7 +2217,7 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
           </div>
         )}
 
-        {/* معلومات العميل */}
+        {/* ===== معلومات العميل ===== */}
         {template.showCustomerInfo && (
           <div className="text-[11px] mb-4 space-y-1.5 font-bold text-right">
             <div className="flex justify-between"><span>العميل:</span><span>{data.customerName}</span></div>
@@ -2242,18 +2229,17 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
           </div>
         )}
 
-        {/* ✅ جدول القطع فقط (الخدمات لا تظهر) */}
-        {template.showItems && parts.length > 0 && (
+        {/* ===== جدول الأصناف (اسم + كمية فقط) ===== */}
+        {template.showItems && (data.items || []).length > 0 && (
           <table className="w-full text-[11px] border-y border-black dark:border-white border-dashed py-2 mb-4 text-right">
             <thead>
               <tr className="font-bold border-b border-gray-300 dark:border-gray-600">
                 <th className="pb-2 text-right">الصنف</th>
                 <th className="pb-2 text-center">الكمية</th>
-                <th className="pb-2 text-center">تحت الضمان</th>
               </tr>
             </thead>
             <tbody>
-              {parts.map((item, idx) => (
+              {(data.items || []).filter(item => !item.isService).map((item, idx) => (
                 <tr key={idx}>
                   <td className="py-2 text-right font-bold">
                     {item.name}
@@ -2261,73 +2247,22 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
                     <span className="text-[9px] font-mono text-gray-500 dark:text-gray-500 mt-0.5 block">{item.serialNumber}</span>
                   </td>
                   <td className="text-center py-2 font-bold">{item.quantity || 1}</td>
-                  <td className="text-center py-2">
-                    {item.underWarranty ? (
-                      <span className="px-2 py-1 rounded-full text-[9px] font-bold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
-                        ✅ نعم
-                      </span>
-                    ) : (
-                      <span className="px-2 py-1 rounded-full text-[9px] font-bold bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300">
-                        ❌ لا
-                      </span>
-                    )}
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
 
-        {/* ✅ الإجمالي من الأسفل (السعر يظهر هنا فقط) */}
-        <div className="text-[11px] space-y-1.5 font-bold border-b border-black dark:border-white border-dashed pb-4 mb-4 text-right">
-          
-          {/* قيمة القطع */}
-          <div className="flex justify-between">
-            <span>قيمة القطع:</span>
-            <span>{formatCurrency(subtotal)}</span>
+        {/* ===== الإجمالي النهائي فقط (شامل الضريبة والرسوم) ===== */}
+        <div className="text-center border-t-2 border-black dark:border-white pt-4 mb-4">
+          <div className="flex justify-between text-[16px] font-black">
+            <span>الإجمالي شامل الضريبة:</span>
+            <span className="text-emerald-600 dark:text-emerald-400">{formatCurrency(finalTotal)}</span>
           </div>
           
-          {/* قيمة الخدمات (مخفية ولكن تظهر في الإجمالي) */}
-          {servicesAmount > 0 && (
-            <div className="flex justify-between text-slate-500 dark:text-slate-400">
-              <span>الخدمات:</span>
-              <span>+ {formatCurrency(servicesAmount)}</span>
-            </div>
-          )}
-          
-          {/* الخصم */}
-          {template.showDiscount && discountAmount > 0 && 
-            <div className="flex justify-between text-black dark:text-white">
-              <span>الخصم:</span>
-              <span>- {formatCurrency(discountAmount)}</span>
-            </div>
-          }
-          
-          {/* الضريبة */}
-          {template.showTax && taxAmount > 0 && 
-            <div className="flex justify-between">
-              <span>الضريبة ({systemSettings.taxRate || 14}%):</span>
-              <span>+ {formatCurrency(taxAmount)}</span>
-            </div>
-          }
-          
-          {/* الرسوم الإضافية */}
-          {template.showFees && installAmount > 0 && 
-            <div className="flex justify-between">
-              <span>رسوم إضافية:</span>
-              <span>+ {formatCurrency(installAmount)}</span>
-            </div>
-          }
-          
-          {/* ✅ الصافي المطلوب */}
-          <div className="flex justify-between border-t border-black dark:border-white pt-2 mt-2 text-[14px] font-black">
-            <span>الصافي المطلوب:</span>
-            <span>{formatCurrency(finalTotal)}</span>
-          </div>
-          
-          {/* طريقة الدفع */}
+          {/* ===== طريقة الدفع ===== */}
           {template.showPaymentMethod && data.paymentMethod && (
-            <div className="flex justify-between text-[10px]">
+            <div className="flex justify-between text-[10px] text-gray-600 dark:text-gray-400 mt-2">
               <span>طريقة الدفع:</span>
               <span>
                 {data.paymentMethod === 'cash' ? 'نقداً' : 
@@ -2338,14 +2273,14 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
           )}
         </div>
 
-        {/* التذييل */}
+        {/* ===== التذييل ===== */}
         {template.showFooter && (
-          <div className="text-center text-[9px] font-bold italic text-gray-700 dark:text-gray-400 leading-relaxed">
+          <div className="text-center text-[9px] font-bold italic text-gray-700 dark:text-gray-400 leading-relaxed border-t border-black dark:border-white border-dashed pt-4">
             <p>{systemSettings.footerText || 'شكراً لتعاملكم معنا'}</p>
           </div>
         )}
 
-        {/* أزرار الإجراءات */}
+        {/* ===== أزرار الإجراءات ===== */}
         <div className="mt-8 flex flex-wrap gap-2 print:hidden">
           <button onClick={() => window.print()} className="flex-1 bg-black text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-gray-800">
             <Printer size={16}/> طباعة
