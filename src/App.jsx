@@ -979,6 +979,9 @@ const ROLE_DEFAULT_PERMISSIONS = {
     viewSettings: false,
     manageSettings: false,
     viewAllTickets: true,
+    viewAllInvoices: true,
+    viewReturns: true,
+    manageReturns: true,
 
   editSystemSettings: true,      // لا يمكنه تعديل إعدادات النظام العامة
   editInvoiceTemplate: true,      // يمكنه تعديل قالب الفاتورة
@@ -1022,6 +1025,9 @@ const ROLE_DEFAULT_PERMISSIONS = {
     viewUsers: false,
     manageUsers: false,
     viewSettings: false,
+    viewAllInvoices: true,
+      viewReturns: true,
+      manageReturns: true,
     manageSettings: false,
     viewAllTickets: false
   },
@@ -1056,6 +1062,9 @@ const ROLE_DEFAULT_PERMISSIONS = {
   manageBranchesList: false,
   viewAllWarehouses: false,
   viewReturnsWarehouse: false,
+  viewAllInvoices: false,
+    viewReturns: false,
+    manageReturns: false,
   manageReturnsWarehouse: false,
   viewInvoices: false
   
@@ -1093,6 +1102,9 @@ const ROLE_DEFAULT_PERMISSIONS = {
   viewReturnsWarehouse: true,
   manageReturnsWarehouse: false,
   viewInvoices: false,
+   viewAllInvoices: false,
+  viewReturns: false,
+  manageReturns: false,
   viewAllTickets: false
 
   },
@@ -15411,6 +15423,18 @@ useEffect(() => {
                 {currentView === 'customers' && appUser.permissions?.viewCustomers && 
                   <EnhancedCustomerManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} />
                 }
+
+                {/* ✅ صفحة إدارة المرتجعات */}
+                {currentView === 'returns' && (appUser.permissions?.viewReturns || appUser.role === 'admin') && (
+                  <ReturnsManager
+                    appUser={appUser}
+                    systemSettings={systemSettings}
+                    notify={notify}
+                    setGlobalLoading={setGlobalLoading}
+                    warehouses={warehouses}
+                    warehouseMap={warehouseMap}
+                  />
+                )}
                 
                 {currentView === 'tickets' && appUser.permissions?.manageTickets && 
                   <EnhancedTicketManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} onGenerateInvoice={handleGenerateInvoiceFromTicket} />
