@@ -876,6 +876,7 @@ const ALL_PERMISSIONS = [
   { key: 'assignTechnician', label: 'تعيين فني', category: 'صيانة' },
   { key: 'assignMaintenanceCenter', label: 'تعيين مركز صيانة', category: 'صيانة' },
   { key: 'assignCallCenter', label: 'تعيين كول سنتر', category: 'صيانة' },
+  { key: 'viewAllTickets', label: 'رؤية كل تذاكر الصيانة (حتى تذاكر الفروع الأخرى)', category: 'صيانة' },
   
   // تحويلات
   { key: 'viewTransfers', label: 'عرض التحويلات', category: 'تحويلات' },
@@ -972,8 +973,9 @@ const ROLE_DEFAULT_PERMISSIONS = {
     manageUsers: false,
     viewSettings: false,
     manageSettings: false,
-    
-    editSystemSettings: true,      // لا يمكنه تعديل إعدادات النظام العامة
+    viewAllTickets: true,
+
+  editSystemSettings: true,      // لا يمكنه تعديل إعدادات النظام العامة
   editInvoiceTemplate: true,      // يمكنه تعديل قالب الفاتورة
   manageTechniciansList: true,    // يمكنه إدارة الفنيين
   manageFeesAndCategories: false, // لا يمكنه تعديل الرسوم والتصنيفات
@@ -1015,7 +1017,8 @@ const ROLE_DEFAULT_PERMISSIONS = {
     viewUsers: false,
     manageUsers: false,
     viewSettings: false,
-    manageSettings: false
+    manageSettings: false,
+    viewAllTickets: false
   },
   
   technician: {
@@ -1084,7 +1087,8 @@ const ROLE_DEFAULT_PERMISSIONS = {
   viewAllWarehouses: false,  // لا يرى إلا فرعه
   viewReturnsWarehouse: true,
   manageReturnsWarehouse: false,
-  viewInvoices: false
+  viewInvoices: false,
+  viewAllTickets: false
 
   },
   
@@ -1112,7 +1116,8 @@ const ROLE_DEFAULT_PERMISSIONS = {
   manageProductModels: false,
   manageFaultCodes: false,
   manageMaintenanceCenters: false,
-  manageBranchesList: false
+  manageBranchesList: false,
+  viewAllTickets: false
 
   },
   
@@ -1143,7 +1148,8 @@ const ROLE_DEFAULT_PERMISSIONS = {
   manageProductModels: false,
   manageFaultCodes: false,
   manageMaintenanceCenters: false,
-  manageBranchesList: false
+  manageBranchesList: false,
+  viewAllTickets: false
 
   },
   
@@ -1161,7 +1167,8 @@ const ROLE_DEFAULT_PERMISSIONS = {
     exportReports: true,
     exportPDF: true,
     printReports: true,
-    viewSettings: false
+    viewSettings: false,
+    viewAllTickets: false
   }
 };
 
@@ -7606,6 +7613,9 @@ function TicketCard({ ticket, onStatusChange, onView, onEdit }) {
 // ==========================================================================
 // 🎫 مدير التذاكر المحسن - كامل مع كل الإضافات
 // ==========================================================================
+// ==========================================================================
+// 🎫 مدير التذاكر المحسن - كامل مع كل الإضافات
+// ==========================================================================
 function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUser, warehouseMap, onGenerateInvoice }) {
   const [tickets, setTickets] = useState([]);
   const [search, setSearch] = useState('');
@@ -7663,6 +7673,9 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const [filterTicketType, setFilterTicketType] = useState('all');
   const [filterSource, setFilterSource] = useState('all');
   const [filterBranch, setFilterBranch] = useState('all');
+  
+  // ✅ إضافة فلتر جديد لمركز الصيانة
+  const [filterMaintenanceCenter, setFilterMaintenanceCenter] = useState('all');
   
   // بيانات التذكرة الجديدة
   const [newTicket, setNewTicket] = useState({
@@ -7859,13 +7872,20 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   }, [systemSettings]);
 
   // ========== تحميل التذاكر ==========
-  const loadTickets = useCallback(async (isNextPage = false) => {
+  // ==========================================================================
+// 📦 تحميل التذاكر مع صلاحيات متقدمة وفلتر مركز الصيانة
+// ==========================================================================
+const loadTickets = useCallback(async (isNextPage = false) => {
   setLoadingData(true);
   try {
     let constraints = [orderBy('createdAt', 'desc')];
 
     // ✅ التحكم في البيانات حسب صلاحيات المستخدم
-    if (appUser.role !== 'admin' && !appUser.permissions?.viewAllWarehouses) {
+    // إذا كان المستخدم لديه صلاحية viewAllTickets أو هو أدمن، يرى كل التذاكر
+    // وإلا يرى فقط تذاكر مركزه المخصص
+    const canViewAllTickets = appUser.role === 'admin' || appUser.permissions?.viewAllTickets === true;
+    
+    if (!canViewAllTickets) {
       constraints.push(where('assignedCenter', '==', appUser.assignedWarehouseId || 'main'));
     }
 
@@ -7896,6 +7916,11 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
       fetched = fetched.filter(t => t.assignedTechnician === filterTechnician);
     }
     
+    // ✅ فلتر جديد: مركز الصيانة
+    if (filterMaintenanceCenter !== 'all') {
+      fetched = fetched.filter(t => t.assignedMaintenanceCenter === filterMaintenanceCenter);
+    }
+    
     // ✅ البحث الشامل (يشمل الفني ومركز الصيانة)
     const term = normalizeSearch(debouncedSearch);
     if (term) {
@@ -7904,7 +7929,9 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
         normalizeSearch(t.customerPhone || '').includes(term) ||
         normalizeSearch(t.ticketNumber || '').includes(term) ||
         normalizeSearch(t.assignedTechnician || '').includes(term) ||
-        normalizeSearch(t.assignedMaintenanceCenter || '').includes(term)
+        normalizeSearch(t.assignedMaintenanceCenter || '').includes(term) ||
+        normalizeSearch(t.device || '').includes(term) ||
+        normalizeSearch(t.deviceSerial || '').includes(term)
       );
     }
 
@@ -7940,8 +7967,7 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   }
   setLoadingData(false);
 }, [appUser, debouncedSearch, filterStatus, filterPriority, filterWarranty, 
-    filterTicketType, filterSource, filterBranch, filterTechnician, lastDoc, dateRange]);
-
+    filterTicketType, filterSource, filterBranch, filterTechnician, filterMaintenanceCenter, lastDoc, dateRange]);
 
   useEffect(() => {
     loadTickets(false);
@@ -8531,22 +8557,34 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     setFilterSource('all');
     setFilterBranch('all');
     setFilterTechnician('all');
+    setFilterMaintenanceCenter('all'); // ✅ إعادة تعيين فلتر مركز الصيانة
     setFilterTag('all');
     setDateRange({ from: '', to: '' });
     setSearch('');
   };
 
-  const StatusSelectComp = ({ value, onChange, ticketId }) => (
-    <select
-      className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 bg-white dark:bg-slate-900 font-bold"
-      value={value}
-      onChange={(e) => onChange(ticketId, e.target.value)}
-    >
-      {TICKET_STATUSES.map(s => (
-        <option key={s.value} value={s.value}>{s.label}</option>
-      ))}
-    </select>
-  );
+  // ✅ مكون StatusSelect مع منع انتشار الحدث بالكامل
+  const StatusSelectComp = ({ value, onChange, ticketId }) => {
+    const handleChange = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      onChange(ticketId, e.target.value);
+    };
+
+    return (
+      <select
+        value={value}
+        onChange={handleChange}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 bg-white dark:bg-slate-900 font-bold cursor-pointer hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+      >
+        {TICKET_STATUSES.map(s => (
+          <option key={s.value} value={s.value}>{s.label}</option>
+        ))}
+      </select>
+    );
+  };
 
   // ====================== RENDER ======================
   return (
@@ -9461,6 +9499,21 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
             {TICKET_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
           
+          {/* ✅ فلتر مركز الصيانة الجديد */}
+          <select className="border p-2 rounded-lg text-xs bg-white dark:bg-slate-900" value={filterMaintenanceCenter} onChange={e => setFilterMaintenanceCenter(e.target.value)}>
+            <option value="all">كل مراكز الصيانة</option>
+            {maintenanceCenters.map(center => (
+              <option key={center.id} value={center.name}>{center.name}</option>
+            ))}
+          </select>
+          
+          <select className="border p-2 rounded-lg text-xs bg-white dark:bg-slate-900" value={filterTechnician} onChange={e => setFilterTechnician(e.target.value)}>
+            <option value="all">كل الفنيين</option>
+            {technicians.map(tech => (
+              <option key={tech} value={tech}>{tech}</option>
+            ))}
+          </select>
+          
           <button onClick={resetFilters} className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs font-bold">
             <RotateCcw size={14}/>
           </button>
@@ -9493,6 +9546,7 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
               <th className="p-3">الأولوية</th>
               <th className="p-3">الضمان</th>
               <th className="p-3">المصدر</th>
+              <th className="p-3">مركز الصيانة</th>
               <th className="p-3">الفني</th>
               <th className="p-3">آخر تحديث</th>
               <th className="p-3 text-center">إجراءات</th>
@@ -9501,11 +9555,21 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
           <tbody className="divide-y divide-slate-50 dark:divide-slate-700 font-medium text-xs">
             {tickets.length === 0 && !loadingData ? (
               <tr>
-                <td colSpan="13" className="p-10 text-center text-slate-400">لا توجد تذاكر</td>
+                <td colSpan="14" className="p-10 text-center text-slate-400">لا توجد تذاكر</td>
               </tr>
             ) : (
               tickets.map(t => (
-                <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors cursor-pointer" onClick={() => openFullTicket(t)}>
+                <tr 
+                  key={t.id} 
+                  className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors cursor-pointer" 
+                  onClick={(e) => {
+                    // ✅ منع فتح التذكرة عند النقر على select أو button
+                    if (e.target.closest('select') || e.target.closest('button')) {
+                      return;
+                    }
+                    openFullTicket(t);
+                  }}
+                >
                   <td className="p-3" onClick={e => e.stopPropagation()}>
                     <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={selectedItems.has(t.id)} onChange={() => toggleSelectItem(t.id)} />
                   </td>
@@ -9524,20 +9588,21 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
                   </td>
                   <td className="p-3">{WARRANTY_OPTIONS.find(w => w.value === t.warrantyStatus)?.label || '-'}</td>
                   <td className="p-3">{TICKET_SOURCES.find(s => s.value === t.source)?.label || '-'}</td>
+                  <td className="p-3 font-bold text-amber-600 dark:text-amber-400">{t.assignedMaintenanceCenter || '-'}</td>
                   <td className="p-3">{t.assignedTechnician || '-'}</td>
                   <td className="p-3 text-[9px]">{formatDate(t.updatedAt || t.createdAt)}</td>
                   <td className="p-3 text-center" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-center gap-1">
-                      <button onClick={() => openFullTicket(t)} className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded hover:bg-indigo-100" title="فتح">
+                      <button onClick={(e) => { e.stopPropagation(); openFullTicket(t); }} className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded hover:bg-indigo-100" title="فتح">
                         <Eye size={14}/>
                       </button>
-                      <button onClick={() => { setSelectedTicket(t); setShowAssignModal(true); }} className="p-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 rounded hover:bg-amber-100" title="تعيين">
+                      <button onClick={(e) => { e.stopPropagation(); setSelectedTicket(t); setShowAssignModal(true); }} className="p-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 rounded hover:bg-amber-100" title="تعيين">
                         <Users size={14}/>
                       </button>
-                      <button onClick={() => handleViewHistory(t)} className="p-1.5 bg-purple-50 dark:bg-purple-900/30 text-purple-600 rounded hover:bg-purple-100" title="سجل">
+                      <button onClick={(e) => { e.stopPropagation(); handleViewHistory(t); }} className="p-1.5 bg-purple-50 dark:bg-purple-900/30 text-purple-600 rounded hover:bg-purple-100" title="سجل">
                         <History size={14}/>
                       </button>
-                      <button onClick={() => handleGenerateInvoice(t)} className="p-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 rounded hover:bg-emerald-100" title="فاتورة">
+                      <button onClick={(e) => { e.stopPropagation(); handleGenerateInvoice(t); }} className="p-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 rounded hover:bg-emerald-100" title="فاتورة">
                         <Receipt size={14}/>
                       </button>
                       <button onClick={(e) => { e.stopPropagation(); openEditModal(t); }} className="p-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 rounded hover:bg-emerald-100" title="تعديل">
@@ -9562,7 +9627,6 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     </div>
   );
 }
-
 
 // ==========================================================================
 // 👥 إدارة المستخدمين المحسنة (مع صلاحيات تفصيلية وتحكم كامل)
