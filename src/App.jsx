@@ -12481,132 +12481,134 @@ function ReturnsManager({ appUser, systemSettings, notify, setGlobalLoading, war
   };
 
   // ========== الموافقة على المرتجع ==========
-  const handleApproveReturn = async (returnId) => {
-    if (!approveData.toWarehouse) {
-      showError("يرجى اختيار المخزن المستهدف");
-      return;
-    }
+  // ========== الموافقة على المرتجع ==========
+const handleApproveReturn = async (returnId) => {
+  if (!approveData.toWarehouse) {
+    showError("يرجى اختيار المخزن المستهدف");
+    return;
+  }
 
-    setGlobalLoading(true);
-    try {
-      const returnRef = doc(db, 'returns', returnId);
-      const returnSnap = await getDoc(returnRef);
-      
-      if (!returnSnap.exists()) {
-        throw new Error("المرتجع غير موجود");
-      }
-      
-      const returnData = returnSnap.data();
-      
-      // ✅ معالجة حسب نوع المرتجع
-      const reason = returnData.reason;
-      const serialNumber = returnData.serialNumber;
-      const quantity = returnData.quantity || 1;
-      const productName = returnData.productName;
-      const price = returnData.price || 0;
-      
-      // ✅ 1. مرتجع جديد - قطع غيار (يضاف للمخزن المستهدف)
-      if (reason === 'new_spare_parts') {
-        // البحث عن المنتج في المخزن المستهدف
-        const targetQ = query(
-          collection(db, 'inventory'),
-          where('serialNumber', '==', serialNumber),
-          where('warehouseId', '==', approveData.toWarehouse),
-          where('isDeleted', '==', false)
-        );
-        const targetSnap = await getDocs(targetQ);
-        
-        if (!targetSnap.empty()) {
-          // ✅ إضافة الكمية للمنتج الموجود
-          const targetItem = targetSnap.docs[0];
-          const currentQty = targetItem.data().quantity || 0;
-          await updateDoc(targetItem.ref, {
-            quantity: currentQty + quantity,
-            updatedAt: serverTimestamp()
-          });
-        } else {
-          // ✅ إنشاء منتج جديد في المخزن المستهدف
-          await addDoc(collection(db, 'inventory'), {
-            serialNumber: serialNumber,
-            name: productName,
-            price: price,
-            quantity: quantity,
-            minStock: 2,
-            category: 'مرتجع',
-            location: 'مخزن المرتجعات',
-            tags: ['مرتجع', 'مستعمل'],
-            notes: `مرتجع من ${returnData.fromWarehouse}`,
-            warehouseId: approveData.toWarehouse,
-            searchKey: normalizeSearch(`${productName} ${serialNumber}`),
-            createdAt: serverTimestamp(),
-            isDeleted: false
-          });
-        }
-      }
-      
-      // ✅ 2. مرتجع تالف بالضمان (يضاف لمخزن المرتجعات فقط)
-      else if (reason === 'defective_warranty') {
-        // ✅ إضافة المنتج لمخزن المرتجعات فقط (لا يضاف لأي مخزن آخر)
-        await addDoc(collection(db, 'returnsWarehouse'), {
-          serialNumber: serialNumber,
-          name: productName,
-          originalInvoice: returnData.originalInvoice || '',
-          reason: 'تالف بالضمان',
-          condition: 'defective',
-          customerName: returnData.customerName || '',
-          customerPhone: returnData.customerPhone || '',
-          returnDate: new Date().toISOString().split('T')[0],
-          warehouseId: 'returns',
-          price: price,
-          quantity: quantity,
-          fromReturnId: returnId,
-          createdAt: serverTimestamp(),
-          createdBy: appUser.name
-        });
-      }
-      
-      // ✅ 3. مرتجع جديد تالف - قطع غيار (يضاف لمخزن المرتجعات فقط)
-      else if (reason === 'new_defective_spare_parts') {
-        // ✅ إضافة المنتج لمخزن المرتجعات فقط
-        await addDoc(collection(db, 'returnsWarehouse'), {
-          serialNumber: serialNumber,
-          name: productName,
-          originalInvoice: returnData.originalInvoice || '',
-          reason: 'جديد تالف - قطع غيار',
-          condition: 'defective',
-          customerName: returnData.customerName || '',
-          customerPhone: returnData.customerPhone || '',
-          returnDate: new Date().toISOString().split('T')[0],
-          warehouseId: 'returns',
-          price: price,
-          quantity: quantity,
-          fromReturnId: returnId,
-          createdAt: serverTimestamp(),
-          createdBy: appUser.name
-        });
-      }
-      
-      // ✅ تحديث حالة المرتجع
-      await updateDoc(returnRef, {
-        status: 'approved',
-        approvedBy: appUser.name,
-        approvedAt: serverTimestamp(),
-        toWarehouse: approveData.toWarehouse,
-        notes: approveData.notes || returnData.notes
-      });
-      
-      await logUserActivity(appUser, 'موافقة على مرتجع', `تمت الموافقة على مرتجع ${productName} (${serialNumber}) - ${returnData.reasonLabel}`);
-      
-      showSuccess("✅ تمت الموافقة على المرتجع");
-      setShowApproveModal(false);
-      setApproveData({ toWarehouse: '', notes: '' });
-      loadReturns();
-    } catch (error) {
-      console.error("Error approving return:", error);
-      showError("فشل الموافقة على المرتجع: " + error.message);
+  setGlobalLoading(true);
+  try {
+    const returnRef = doc(db, 'returns', returnId);
+    const returnSnap = await getDoc(returnRef);
+    
+    if (!returnSnap.exists()) {
+      throw new Error("المرتجع غير موجود");
     }
-    setGlobalLoading(false);
-  };
+    
+    const returnData = returnSnap.data();
+    
+    // ✅ معالجة حسب نوع المرتجع
+    const reason = returnData.reason;
+    const serialNumber = returnData.serialNumber;
+    const quantity = returnData.quantity || 1;
+    const productName = returnData.productName;
+    const price = returnData.price || 0;
+    
+    // ✅ 1. مرتجع جديد - قطع غيار (يضاف للمخزن المستهدف)
+    if (reason === 'new_spare_parts') {
+      // البحث عن المنتج في المخزن المستهدف
+      const targetQ = query(
+        collection(db, 'inventory'),
+        where('serialNumber', '==', serialNumber),
+        where('warehouseId', '==', approveData.toWarehouse),
+        where('isDeleted', '==', false)
+      );
+      const targetSnap = await getDocs(targetQ);
+      
+      // ✅ التصحيح: استخدام size بدلاً من empty
+      if (targetSnap.size > 0) {
+        // ✅ إضافة الكمية للمنتج الموجود
+        const targetItem = targetSnap.docs[0];
+        const currentQty = targetItem.data().quantity || 0;
+        await updateDoc(targetItem.ref, {
+          quantity: currentQty + quantity,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        // ✅ إنشاء منتج جديد في المخزن المستهدف
+        await addDoc(collection(db, 'inventory'), {
+          serialNumber: serialNumber,
+          name: productName,
+          price: price,
+          quantity: quantity,
+          minStock: 2,
+          category: 'مرتجع',
+          location: approveData.toWarehouse === 'main' ? 'المخزن الرئيسي' : approveData.toWarehouse,
+          tags: ['مرتجع', 'مستعمل'],
+          notes: `مرتجع من ${returnData.fromWarehouse}`,
+          warehouseId: approveData.toWarehouse,
+          searchKey: normalizeSearch(`${productName} ${serialNumber}`),
+          createdAt: serverTimestamp(),
+          isDeleted: false
+        });
+      }
+    }
+    
+    // ✅ 2. مرتجع تالف بالضمان (يضاف لمخزن المرتجعات فقط)
+    else if (reason === 'defective_warranty') {
+      // ✅ إضافة المنتج لمخزن المرتجعات فقط (لا يضاف لأي مخزن آخر)
+      await addDoc(collection(db, 'returnsWarehouse'), {
+        serialNumber: serialNumber,
+        name: productName,
+        originalInvoice: returnData.originalInvoice || '',
+        reason: 'تالف بالضمان',
+        condition: 'defective',
+        customerName: returnData.customerName || '',
+        customerPhone: returnData.customerPhone || '',
+        returnDate: new Date().toISOString().split('T')[0],
+        warehouseId: 'returns',
+        price: price,
+        quantity: quantity,
+        fromReturnId: returnId,
+        createdAt: serverTimestamp(),
+        createdBy: appUser.name
+      });
+    }
+    
+    // ✅ 3. مرتجع جديد تالف - قطع غيار (يضاف لمخزن المرتجعات فقط)
+    else if (reason === 'new_defective_spare_parts') {
+      // ✅ إضافة المنتج لمخزن المرتجعات فقط
+      await addDoc(collection(db, 'returnsWarehouse'), {
+        serialNumber: serialNumber,
+        name: productName,
+        originalInvoice: returnData.originalInvoice || '',
+        reason: 'جديد تالف - قطع غيار',
+        condition: 'defective',
+        customerName: returnData.customerName || '',
+        customerPhone: returnData.customerPhone || '',
+        returnDate: new Date().toISOString().split('T')[0],
+        warehouseId: 'returns',
+        price: price,
+        quantity: quantity,
+        fromReturnId: returnId,
+        createdAt: serverTimestamp(),
+        createdBy: appUser.name
+      });
+    }
+    
+    // ✅ تحديث حالة المرتجع
+    await updateDoc(returnRef, {
+      status: 'approved',
+      approvedBy: appUser.name,
+      approvedAt: serverTimestamp(),
+      toWarehouse: approveData.toWarehouse,
+      notes: approveData.notes || returnData.notes
+    });
+    
+    await logUserActivity(appUser, 'موافقة على مرتجع', `تمت الموافقة على مرتجع ${productName} (${serialNumber}) - ${returnData.reasonLabel}`);
+    
+    showSuccess("✅ تمت الموافقة على المرتجع");
+    setShowApproveModal(false);
+    setApproveData({ toWarehouse: '', notes: '' });
+    loadReturns();
+  } catch (error) {
+    console.error("Error approving return:", error);
+    showError("فشل الموافقة على المرتجع: " + error.message);
+  }
+  setGlobalLoading(false);
+};
 
   // ========== رفض المرتجع ==========
   const handleRejectReturn = async (returnId) => {
