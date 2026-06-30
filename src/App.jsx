@@ -11701,69 +11701,82 @@ const handleCheckout = async () => {
   if (cart.length === 0 && !foundItem) return showError("السلة فارغة");
   if (!invoice.customerName) return showError("يرجى إدخال اسم العميل");
   if (calculations.finalTotal < 0) return showError("الإجمالي لا يمكن أن يكون سالباً");
-  
+
   const confirmed = await showConfirm(
-    'تأكيد البيع',
+    "تأكيد البيع",
     `هل أنت متأكد من إتمام عملية البيع بقيمة ${calculations.finalTotal} ج؟`
   );
-  
+
   if (!confirmed) return;
-  
+
   setGlobalLoading(true);
-  const invId = 'INV-' + Date.now().toString().slice(-8);
-  
+  const invId = "INV-" + Date.now().toString().slice(-8);
+
   try {
     await runTransaction(db, async (t) => {
       const itemsToProcess = foundItem ? [foundItem] : cart;
-      
+
       // ============================================================
-      // ✅ الخطوة 1: قراءة جميع البيانات أولاً (بدون أي كتابة)
+      // ✅ قراءة كل البيانات أولاً
       // ============================================================
+
       const itemsData = [];
-      
+
       for (const item of itemsToProcess) {
-        // فقط للقطع (وليس الخدمات)
         if (!item.isService) {
-          const itemRef = doc(db, 'inventory', item.id);
+          const itemRef = doc(db, "inventory", item.id);
           const itemSnap = await t.get(itemRef);
-          
+
           if (!itemSnap.exists()) {
             throw new Error(`❌ المنتج ${item.name} غير موجود في المخزون!`);
           }
-          
+
           const currentQty = itemSnap.data().quantity || 0;
+
           if (currentQty < item.quantity) {
-            throw new Error(`❌ الكمية غير كافية للمنتج ${item.name}! المتاح: ${currentQty}, المطلوب: ${item.quantity}`);
+            throw new Error(
+              `❌ الكمية غير كافية للمنتج ${item.name}! المتاح: ${currentQty}, المطلوب: ${item.quantity}`
+            );
           }
-          
-          // ✅ تخزين البيانات للاستخدام في الكتابة
+
           itemsData.push({
             ref: itemRef,
-            currentQty: currentQty,
+            currentQty,
             quantityToDeduct: item.quantity,
-            item: item
           });
         }
       }
-      
+
       // ============================================================
-      // ✅ الخطوة 2: الآن نقوم بجميع عمليات الكتابة
+      // ✅ قراءة العميل قبل أي عملية كتابة
       // ============================================================
-      
-      // 2.1: تحديث كميات المخزون
-      for (const data of itemsData) {
-        t.update(data.ref, { 
-          quantity: data.currentQty - data.quantityToDeduct,
-          updatedAt: serverTimestamp()
-        });
+
+      let customerRef = null;
+
+      if (invoice.phone) {
+        const customerQuery = query(
+          collection(db, "customers"),
+          where("phone", "==", invoice.phone)
+        );
+
+        const customerSnap = await t.get(customerQuery);
+
+        if (!customerSnap.empty) {
+          customerRef = customerSnap.docs[0].ref;
+        }
       }
 
-      // 2.2: إنشاء الفاتورة
-      const joinedNames = itemsToProcess.map(i => i.name).join(' + ');
-      const joinedSerials = itemsToProcess.map(i => i.serialNumber).join(', ');
+      // ============================================================
+      // تجهيز بيانات الفاتورة
+      // ============================================================
 
-      const transactionData = { 
-        ...calculations, 
+      const joinedNames = itemsToProcess.map((i) => i.name).join(" + ");
+      const joinedSerials = itemsToProcess
+        .map((i) => i.serialNumber)
+        .join(", ");
+
+      const transactionData = {
+        ...calculations,
         customerName: invoice.customerName,
         phone: invoice.phone,
         email: invoice.email,
@@ -11773,76 +11786,96 @@ const handleCheckout = async () => {
         taxEnabled: invoice.taxEnabled,
         installationFeeId: invoice.installationFeeId || null,
         paymentMethod: invoice.paymentMethod,
-        paymentDetails: invoice.paymentMethod === 'card' ? { cardLastFour: invoice.cardLastFour } :
-                       invoice.paymentMethod === 'transfer' ? { bankTransferDetails: invoice.bankTransferDetails } : {},
+        paymentDetails:
+          invoice.paymentMethod === "card"
+            ? {
+                cardLastFour: invoice.cardLastFour,
+              }
+            : invoice.paymentMethod === "transfer"
+            ? {
+                bankTransferDetails: invoice.bankTransferDetails,
+              }
+            : {},
         notes: invoice.notes,
-        type: 'sell', 
-        items: itemsToProcess.map(item => ({
+        type: "sell",
+        items: itemsToProcess.map((item) => ({
           ...item,
           underWarranty: item.underWarranty || false,
-          isService: item.isService || false
+          isService: item.isService || false,
         })),
-        itemName: joinedNames, 
-        serialNumber: joinedSerials, 
-        warehouseId: appUser.assignedWarehouseId || 'main', 
-        operator: appUser.name || appUser.email || 'موظف', 
-        invoiceNumber: invId, 
-        timestamp: serverTimestamp() 
+        itemName: joinedNames,
+        serialNumber: joinedSerials,
+        warehouseId: appUser.assignedWarehouseId || "main",
+        operator: appUser.name || appUser.email || "موظف",
+        invoiceNumber: invId,
+        timestamp: serverTimestamp(),
       };
-      
-      const transRef = doc(collection(db, 'transactions'));
+
+      // ============================================================
+      // ✅ تبدأ الكتابة بعد انتهاء كل القراءات
+      // ============================================================
+
+      for (const data of itemsData) {
+        t.update(data.ref, {
+          quantity: data.currentQty - data.quantityToDeduct,
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      const transRef = doc(collection(db, "transactions"));
       t.set(transRef, transactionData);
-      
-      // 2.3: تحديث بيانات العميل (إذا وجد)
-      if (invoice.phone) {
-        const customerQuery = query(collection(db, 'customers'), where('phone', '==', invoice.phone));
-        const customerSnap = await t.get(customerQuery);
-        if (!customerSnap.empty) {
-          const customerRef = doc(db, 'customers', customerSnap.docs[0].id);
-          t.update(customerRef, {
-            totalPurchases: increment(1),
-            lastPurchase: serverTimestamp()
-          });
-        }
+
+      if (customerRef) {
+        t.update(customerRef, {
+          totalPurchases: increment(1),
+          lastPurchase: serverTimestamp(),
+        });
       }
     });
-    
-    // ============================================================
-    // ✅ بعد نجاح المعاملة
-    // ============================================================
-    await logUserActivity(appUser, 'إصدار فاتورة', `إصدار فاتورة #${invId} للعميل ${invoice.customerName} بقيمة ${calculations.finalTotal} ج`);
 
-    setInvoiceData({ 
+    // ============================================================
+    // بعد نجاح المعاملة
+    // ============================================================
+
+    await logUserActivity(
+      appUser,
+      "إصدار فاتورة",
+      `إصدار فاتورة #${invId} للعميل ${invoice.customerName} بقيمة ${calculations.finalTotal} ج`
+    );
+
+    setInvoiceData({
       items: foundItem ? [foundItem] : cart,
-      ...invoice, 
-      ...calculations, 
-      invoiceNumber: invId, 
+      ...invoice,
+      ...calculations,
+      invoiceNumber: invId,
       date: new Date().toISOString(),
-      operator: appUser.name || appUser.email
+      operator: appUser.name || appUser.email,
     });
-    
+
     handleClearCart();
-    setInvoice({ 
-      customerName: '', 
-      phone: '', 
-      email: '',
-      discount: 0, 
-      discountType: 'value', 
-      taxEnabled: true, 
-      installationFeeId: '', 
-      technicianName: '',
-      paymentMethod: 'cash',
-      notes: '',
-      bankTransferDetails: '',
-      cardLastFour: ''
+
+    setInvoice({
+      customerName: "",
+      phone: "",
+      email: "",
+      discount: 0,
+      discountType: "value",
+      taxEnabled: true,
+      installationFeeId: "",
+      technicianName: "",
+      paymentMethod: "cash",
+      notes: "",
+      bankTransferDetails: "",
+      cardLastFour: "",
     });
-    
+
     showSuccess("✅ تم البيع بنجاح");
     setPaymentModal(false);
-  } catch(e) { 
-    showError(e.message || "❌ فشلت عملية البيع"); 
+  } catch (e) {
     console.error(e);
+    showError(e.message || "❌ فشلت عملية البيع");
   }
+
   setGlobalLoading(false);
 };
 
