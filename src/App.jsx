@@ -11695,187 +11695,135 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
   // ✅ إتمام عملية البيع
   // ==========================================================================
   // ==========================================================================
-// 💳 إتمام عملية البيع - الحل النهائي
+// 💳 إتمام عملية البيع - باستخدام Batch (بديل)
 // ==========================================================================
 const handleCheckout = async () => {
   if (cart.length === 0 && !foundItem) return showError("السلة فارغة");
   if (!invoice.customerName) return showError("يرجى إدخال اسم العميل");
   if (calculations.finalTotal < 0) return showError("الإجمالي لا يمكن أن يكون سالباً");
-
+  
   const confirmed = await showConfirm(
-    "تأكيد البيع",
+    'تأكيد البيع',
     `هل أنت متأكد من إتمام عملية البيع بقيمة ${calculations.finalTotal} ج؟`
   );
-
+  
   if (!confirmed) return;
-
+  
   setGlobalLoading(true);
-  const invId = "INV-" + Date.now().toString().slice(-8);
-
+  const invId = 'INV-' + Date.now().toString().slice(-8);
+  
   try {
-    await runTransaction(db, async (t) => {
-      const itemsToProcess = foundItem ? [foundItem] : cart;
-
-      // ============================================================
-      // ✅ قراءة كل البيانات أولاً
-      // ============================================================
-
-      const itemsData = [];
-
-      for (const item of itemsToProcess) {
-        if (!item.isService) {
-          const itemRef = doc(db, "inventory", item.id);
-          const itemSnap = await t.get(itemRef);
-
-          if (!itemSnap.exists()) {
-            throw new Error(`❌ المنتج ${item.name} غير موجود في المخزون!`);
-          }
-
-          const currentQty = itemSnap.data().quantity || 0;
-
-          if (currentQty < item.quantity) {
-            throw new Error(
-              `❌ الكمية غير كافية للمنتج ${item.name}! المتاح: ${currentQty}, المطلوب: ${item.quantity}`
-            );
-          }
-
-          itemsData.push({
-            ref: itemRef,
-            currentQty,
-            quantityToDeduct: item.quantity,
-          });
+    // ✅ استخدام Batch بدلاً من Transaction
+    const batch = writeBatch(db);
+    const itemsToProcess = foundItem ? [foundItem] : cart;
+    
+    // ✅ التحقق من الكميات أولاً (خارج المعاملة)
+    for (const item of itemsToProcess) {
+      if (!item.isService) {
+        const itemRef = doc(db, 'inventory', item.id);
+        const itemSnap = await getDoc(itemRef);
+        
+        if (!itemSnap.exists()) {
+          throw new Error(`❌ المنتج ${item.name} غير موجود!`);
         }
-      }
-
-      // ============================================================
-      // ✅ قراءة العميل قبل أي عملية كتابة
-      // ============================================================
-
-      let customerRef = null;
-
-      if (invoice.phone) {
-        const customerQuery = query(
-          collection(db, "customers"),
-          where("phone", "==", invoice.phone)
-        );
-
-        const customerSnap = await t.get(customerQuery);
-
-        if (!customerSnap.empty) {
-          customerRef = customerSnap.docs[0].ref;
+        
+        const currentQty = itemSnap.data().quantity || 0;
+        if (currentQty < item.quantity) {
+          throw new Error(`❌ الكمية غير كافية للمنتج ${item.name}! المتاح: ${currentQty}, المطلوب: ${item.quantity}`);
         }
-      }
-
-      // ============================================================
-      // تجهيز بيانات الفاتورة
-      // ============================================================
-
-      const joinedNames = itemsToProcess.map((i) => i.name).join(" + ");
-      const joinedSerials = itemsToProcess
-        .map((i) => i.serialNumber)
-        .join(", ");
-
-      const transactionData = {
-        ...calculations,
-        customerName: invoice.customerName,
-        phone: invoice.phone,
-        email: invoice.email,
-        technicianName: invoice.technicianName,
-        discount: Number(invoice.discount) || 0,
-        discountType: invoice.discountType,
-        taxEnabled: invoice.taxEnabled,
-        installationFeeId: invoice.installationFeeId || null,
-        paymentMethod: invoice.paymentMethod,
-        paymentDetails:
-          invoice.paymentMethod === "card"
-            ? {
-                cardLastFour: invoice.cardLastFour,
-              }
-            : invoice.paymentMethod === "transfer"
-            ? {
-                bankTransferDetails: invoice.bankTransferDetails,
-              }
-            : {},
-        notes: invoice.notes,
-        type: "sell",
-        items: itemsToProcess.map((item) => ({
-          ...item,
-          underWarranty: item.underWarranty || false,
-          isService: item.isService || false,
-        })),
-        itemName: joinedNames,
-        serialNumber: joinedSerials,
-        warehouseId: appUser.assignedWarehouseId || "main",
-        operator: appUser.name || appUser.email || "موظف",
-        invoiceNumber: invId,
-        timestamp: serverTimestamp(),
-      };
-
-      // ============================================================
-      // ✅ تبدأ الكتابة بعد انتهاء كل القراءات
-      // ============================================================
-
-      for (const data of itemsData) {
-        t.update(data.ref, {
-          quantity: data.currentQty - data.quantityToDeduct,
-          updatedAt: serverTimestamp(),
+        
+        // ✅ إضافة تحديث الكمية إلى Batch
+        batch.update(itemRef, { 
+          quantity: currentQty - item.quantity,
+          updatedAt: serverTimestamp()
         });
       }
+    }
 
-      const transRef = doc(collection(db, "transactions"));
-      t.set(transRef, transactionData);
+    // ✅ إضافة الفاتورة إلى Batch
+    const joinedNames = itemsToProcess.map(i => i.name).join(' + ');
+    const joinedSerials = itemsToProcess.map(i => i.serialNumber).join(', ');
 
-      if (customerRef) {
-        t.update(customerRef, {
+    const transactionData = { 
+      ...calculations, 
+      customerName: invoice.customerName,
+      phone: invoice.phone,
+      email: invoice.email,
+      technicianName: invoice.technicianName,
+      discount: Number(invoice.discount) || 0,
+      discountType: invoice.discountType,
+      taxEnabled: invoice.taxEnabled,
+      installationFeeId: invoice.installationFeeId || null,
+      paymentMethod: invoice.paymentMethod,
+      paymentDetails: invoice.paymentMethod === 'card' ? { cardLastFour: invoice.cardLastFour } :
+                     invoice.paymentMethod === 'transfer' ? { bankTransferDetails: invoice.bankTransferDetails } : {},
+      notes: invoice.notes,
+      type: 'sell', 
+      items: itemsToProcess.map(item => ({
+        ...item,
+        underWarranty: item.underWarranty || false,
+        isService: item.isService || false
+      })),
+      itemName: joinedNames, 
+      serialNumber: joinedSerials, 
+      warehouseId: appUser.assignedWarehouseId || 'main', 
+      operator: appUser.name || appUser.email || 'موظف', 
+      invoiceNumber: invId, 
+      timestamp: serverTimestamp() 
+    };
+    
+    const transRef = doc(collection(db, 'transactions'));
+    batch.set(transRef, transactionData);
+    
+    // ✅ تحديث بيانات العميل
+    if (invoice.phone) {
+      const customerQuery = query(collection(db, 'customers'), where('phone', '==', invoice.phone));
+      const customerSnap = await getDocs(customerQuery);
+      if (!customerSnap.empty) {
+        const customerRef = doc(db, 'customers', customerSnap.docs[0].id);
+        batch.update(customerRef, {
           totalPurchases: increment(1),
-          lastPurchase: serverTimestamp(),
+          lastPurchase: serverTimestamp()
         });
       }
-    });
+    }
+    
+    // ✅ تنفيذ Batch
+    await batch.commit();
+    
+    await logUserActivity(appUser, 'إصدار فاتورة', `إصدار فاتورة #${invId} للعميل ${invoice.customerName} بقيمة ${calculations.finalTotal} ج`);
 
-    // ============================================================
-    // بعد نجاح المعاملة
-    // ============================================================
-
-    await logUserActivity(
-      appUser,
-      "إصدار فاتورة",
-      `إصدار فاتورة #${invId} للعميل ${invoice.customerName} بقيمة ${calculations.finalTotal} ج`
-    );
-
-    setInvoiceData({
+    setInvoiceData({ 
       items: foundItem ? [foundItem] : cart,
-      ...invoice,
-      ...calculations,
-      invoiceNumber: invId,
+      ...invoice, 
+      ...calculations, 
+      invoiceNumber: invId, 
       date: new Date().toISOString(),
-      operator: appUser.name || appUser.email,
+      operator: appUser.name || appUser.email
     });
-
+    
     handleClearCart();
-
-    setInvoice({
-      customerName: "",
-      phone: "",
-      email: "",
-      discount: 0,
-      discountType: "value",
-      taxEnabled: true,
-      installationFeeId: "",
-      technicianName: "",
-      paymentMethod: "cash",
-      notes: "",
-      bankTransferDetails: "",
-      cardLastFour: "",
+    setInvoice({ 
+      customerName: '', 
+      phone: '', 
+      email: '',
+      discount: 0, 
+      discountType: 'value', 
+      taxEnabled: true, 
+      installationFeeId: '', 
+      technicianName: '',
+      paymentMethod: 'cash',
+      notes: '',
+      bankTransferDetails: '',
+      cardLastFour: ''
     });
-
+    
     showSuccess("✅ تم البيع بنجاح");
     setPaymentModal(false);
-  } catch (e) {
+  } catch(e) { 
+    showError(e.message || "❌ فشلت عملية البيع"); 
     console.error(e);
-    showError(e.message || "❌ فشلت عملية البيع");
   }
-
   setGlobalLoading(false);
 };
 
