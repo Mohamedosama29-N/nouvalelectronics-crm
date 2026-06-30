@@ -11695,7 +11695,7 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
   // ✅ إتمام عملية البيع
   // ==========================================================================
   // ==========================================================================
-// 💳 إتمام عملية البيع - الإصدار النهائي
+// 💳 إتمام عملية البيع - الحل النهائي
 // ==========================================================================
 const handleCheckout = async () => {
   if (cart.length === 0 && !foundItem) return showError("السلة فارغة");
@@ -11717,11 +11717,12 @@ const handleCheckout = async () => {
       const itemsToProcess = foundItem ? [foundItem] : cart;
       
       // ============================================================
-      // ✅ المرحلة 1: قراءة جميع البيانات أولاً
+      // ✅ الخطوة 1: قراءة جميع البيانات أولاً (بدون أي كتابة)
       // ============================================================
-      const itemsToUpdate = [];
+      const itemsData = [];
       
       for (const item of itemsToProcess) {
+        // فقط للقطع (وليس الخدمات)
         if (!item.isService) {
           const itemRef = doc(db, 'inventory', item.id);
           const itemSnap = await t.get(itemRef);
@@ -11735,27 +11736,29 @@ const handleCheckout = async () => {
             throw new Error(`❌ الكمية غير كافية للمنتج ${item.name}! المتاح: ${currentQty}, المطلوب: ${item.quantity}`);
           }
           
-          itemsToUpdate.push({
+          // ✅ تخزين البيانات للاستخدام في الكتابة
+          itemsData.push({
             ref: itemRef,
             currentQty: currentQty,
+            quantityToDeduct: item.quantity,
             item: item
           });
         }
       }
       
       // ============================================================
-      // ✅ المرحلة 2: تحديث الكميات (الكتابة)
+      // ✅ الخطوة 2: الآن نقوم بجميع عمليات الكتابة
       // ============================================================
-      for (const { ref, currentQty, item } of itemsToUpdate) {
-        t.update(ref, { 
-          quantity: currentQty - item.quantity,
+      
+      // 2.1: تحديث كميات المخزون
+      for (const data of itemsData) {
+        t.update(data.ref, { 
+          quantity: data.currentQty - data.quantityToDeduct,
           updatedAt: serverTimestamp()
         });
       }
 
-      // ============================================================
-      // ✅ المرحلة 3: إنشاء الفاتورة
-      // ============================================================
+      // 2.2: إنشاء الفاتورة
       const joinedNames = itemsToProcess.map(i => i.name).join(' + ');
       const joinedSerials = itemsToProcess.map(i => i.serialNumber).join(', ');
 
@@ -11790,9 +11793,7 @@ const handleCheckout = async () => {
       const transRef = doc(collection(db, 'transactions'));
       t.set(transRef, transactionData);
       
-      // ============================================================
-      // ✅ المرحلة 4: تحديث بيانات العميل
-      // ============================================================
+      // 2.3: تحديث بيانات العميل (إذا وجد)
       if (invoice.phone) {
         const customerQuery = query(collection(db, 'customers'), where('phone', '==', invoice.phone));
         const customerSnap = await t.get(customerQuery);
