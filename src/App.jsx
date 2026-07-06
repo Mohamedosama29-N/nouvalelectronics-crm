@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import CryptoJS from 'crypto-js';
 import { openDB } from 'idb';
 import Swal from 'sweetalert2';
@@ -30,12 +31,12 @@ import {
   LayoutDashboard, Package, Users, Receipt, ArrowRightLeft, LogOut, 
   AlertTriangle, Download, Plus, Search, Settings, Edit, Store, 
   Trash2, User, Save, Printer, Contact, History, 
-  Lock, FileSpreadsheet, Calculator, AlertOctagon, MapPin, 
+  Lock, FileSpreadsheet, Calculator, AlertOctagon, MapPin, Bell,
   Phone, Loader2, Menu, UserCog, Wrench, Wallet, Mail, 
   CheckCircle2, Calendar, X, LogIn, Shield, Image as ImageIcon, Percent,
   ChevronDown, Database, UploadCloud, DownloadCloud, Check, Activity, Eye,
   Home, Map as MapIcon, Building, FileText, Printer as PrinterIcon, Copy, Grid,
-  Filter, RefreshCw, UsersRound, UserCheck, UserX, UserPlus, Briefcase,
+  Filter, RefreshCw, UsersRound, UserCheck, UserX, UserPlus, Briefcase, Edit2, CalendarDays, Tag, Link2 as LinkIcon,
   HardHat, Headphones, Settings as SettingsIcon, GitBranch, GitMerge,
   AlertCircle, CheckCircle, XCircle, Clock, ThumbsUp, ThumbsDown,
   MessageSquare, Flag, Star, Award, Crown, ShieldCheck, BarChart3,
@@ -82,14 +83,29 @@ const getDocRef = (collName, docId) => doc(db, collName, docId);
 // مراجع مجموعات المنتجات والموديلات وأكواد الأعطال
 const getProductsColl = () => collection(db, 'products');
 const getModelsColl = () => collection(db, 'models');
-const getFaultCodesColl = () => collection(db, 'faultCodes');
 
 
 
 // ==========================================================================
 // 🔐 ENCRYPTION SETUP
 // ==========================================================================
-const SECRET_KEY = import.meta.env.VITE_ENCRYPTION_KEY || 'nouval-secret-key-2024$$Nada202$$291';
+// 🛠️ FIX (نقطة #4): كان فيه قيمة افتراضية مكتوبة صراحةً في الكود لو
+// env variable مش موجودة، وبما إن الكود ده بيتبعت كامل للمتصفح، أي قيمة
+// افتراضية هنا تبقى معروفة لأي حد يفتح Developer Tools.
+// ملحوظة مهمة: معملناش المفتاح عشوائي لكل تحميل صفحة عمدًا، لأن ده كان
+// هيكسر ميزة "تذكرني" (فك تشفير الجلسة المحفوظة بعد Refresh هيفشل لو
+// المفتاح اتغيّر). التشفير في المتصفح أصلًا مش سرّي 100% مهما عملنا
+// (المفتاح النهائي لازم يوصل لكود يعمل في متصفح المستخدم)، فالحل الصح
+// الحقيقي هو ضبط VITE_ENCRYPTION_KEY فعليًا وقت الـ build على السيرفر،
+// مش الاعتماد على أي قيمة افتراضية. هنا بنكتفي بتنبيه واضح في الـ console
+// بدل ما نسيب قيمة افتراضية ثابتة تتكشف بالغلط في السورس كود المنشور.
+if (!import.meta.env.VITE_ENCRYPTION_KEY) {
+  console.warn(
+    '⚠️ VITE_ENCRYPTION_KEY غير مضبوط. تشفير بيانات الجلسة المحلية ضعيف حاليًا. ' +
+    'اضبط متغير البيئة ده في إعدادات الـ build قبل النشر على الإنتاج.'
+  );
+}
+const SECRET_KEY = import.meta.env.VITE_ENCRYPTION_KEY || 'nouval-local-storage-key-please-set-env-var';
 
 const encrypt = (data) => {
   return CryptoJS.AES.encrypt(JSON.stringify(data), SECRET_KEY).toString();
@@ -111,6 +127,38 @@ const saveSecurely = (key, data) => {
 const loadSecurely = (key) => {
   const encrypted = localStorage.getItem(key);
   return encrypted ? decrypt(encrypted) : null;
+};
+
+// ==========================================================================
+// 🔐 تشفير كلمات المرور (نقطة #1)
+// ==========================================================================
+// 🛠️ FIX: كلمات المرور كانت متخزنة ومقارنة نص عادي (plain text) في
+// مستندات الموظفين على Firestore، يعني أي حد عنده صلاحية عرض المستخدمين
+// (أو وصول لـ Firebase Console) يقدر يشوف باسورد أي موظف كتابةً واضحة.
+// دلوقتي بنستخدم SHA-256 + "pepper" ثابت قبل التخزين والمقارنة، فمفيش
+// أي مكان في النظام بيتعامل مع الباسورد الحقيقي كنص واضح بعد أول حفظ.
+// ملحوظة: التجزئة (hashing) في المتصفح مش بديل كامل عن Firebase
+// Authentication الحقيقي (تفتقد حماية زي rate-limiting على مستوى
+// السيرفر)، لكنها بتمنع فعليًا تسريب الباسوردات الحقيقية من قاعدة
+// البيانات نفسها، وهي تحسين جوهري بدون تغيير نظام الدخول بالكامل.
+const PASSWORD_PEPPER = 'nouval-erp-pw-v1::';
+const hashPassword = (plainPassword) => {
+  return CryptoJS.SHA256(PASSWORD_PEPPER + String(plainPassword)).toString();
+};
+// تجزئات SHA-256 دايمًا 64 حرف hex؛ بنستخدم الشكل ده للتفرقة بين
+// حساب قديم لسه متخزن نص عادي وحساب اتحوّل بالفعل للتجزئة
+const isHashedPassword = (value) => /^[a-f0-9]{64}$/i.test(String(value || ''));
+
+// يتحقق من تطابق الباسورد المُدخل مع القيمة المخزنة، مع دعم "ترحيل
+// تلقائي": لو الحساب لسه بباسورد قديم نص عادي ونجح تسجيل الدخول، بيرجع
+// upgraded:true عشان نقدر نحدّث القيمة المخزنة إلى نسخة مُجزّأة فورًا.
+const verifyPassword = (plainPassword, storedValue) => {
+  if (isHashedPassword(storedValue)) {
+    return { valid: hashPassword(plainPassword) === storedValue, upgraded: false };
+  }
+  // حساب قديم لسه بباسورد نص عادي (قبل هذا التحديث)
+  const valid = String(storedValue || '') === String(plainPassword);
+  return { valid, upgraded: valid };
 };
 
 // ==========================================================================
@@ -707,9 +755,18 @@ export const exportToPDF = async (data, title, headers) => {
 // ==========================================================================
 // 📧 EMAIL SERVICE
 // ==========================================================================
-export const sendEmail = async (to, subject, body, attachments = []) => {
+// ✨ FIX: كان الرابط هنا نص وهمي ثابت 'YOUR_EMAIL_API_ENDPOINT' لم يتم ضبطه
+// أبدًا، فكل محاولة إرسال بريد كانت تفشل بصمت (والواجهة كانت تعرض "تم
+// الإرسال بنجاح" دايمًا بغض النظر عن النتيجة الحقيقية). دلوقتي بيستخدم
+// رابط Webhook قابل للإعداد من الإعدادات (نفس أسلوب تنبيهات النواقص)
+// بدل رابط وهمي أبدًا لن يعمل.
+export const sendEmail = async (to, subject, body, attachments = [], webhookUrl = '') => {
+  if (!webhookUrl) {
+    console.warn('sendEmail: لم يتم ضبط رابط خدمة البريد (emailWebhookUrl) في الإعدادات');
+    return false;
+  }
   try {
-    const response = await fetch('YOUR_EMAIL_API_ENDPOINT', {
+    const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -725,6 +782,24 @@ export const sendEmail = async (to, subject, body, attachments = []) => {
     return response.ok;
   } catch (error) {
     console.error('Email send error:', error);
+    return false;
+  }
+};
+
+// ==========================================================================
+// 🔔 WEBHOOK NOTIFICATIONS (تنبيهات عامة عبر خدمات وسيطة مثل Zapier/Make/n8n)
+// ==========================================================================
+export const sendWebhookNotification = async (webhookUrl, payload) => {
+  if (!webhookUrl) return false;
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    return response.ok;
+  } catch (error) {
+    console.error('Webhook notification error:', error);
     return false;
   }
 };
@@ -856,7 +931,7 @@ const ALL_PERMISSIONS = [
   { key: 'viewTransactions', label: 'عرض المعاملات', category: 'مبيعات' },
   { key: 'printInvoice', label: 'طباعة الفاتورة', category: 'مبيعات' },
   { key: 'exportTransactions', label: 'تصدير المعاملات', category: 'مبيعات' },
-  { key: 'viewInvoices', label: 'عرض أرشيف الفواتير', category: 'المبيعات' },
+  { key: 'viewInvoices', label: 'عرض أرشيف الفواتير', category: 'مبيعات' },
   { key: 'viewAllInvoices', label: 'رؤية كل الفواتير (حتى فواتير الفروع الأخرى)', category: 'مبيعات' },
 
 
@@ -936,10 +1011,8 @@ const ALL_PERMISSIONS = [
   { key: 'manageBranchesList', label: 'إدارة قائمة الفروع', category: 'إعدادات' },
 
 
-  { key: 'viewAllWarehouses', label: 'رؤية كل الفروع والمخازن', category: 'فروع' },
   { key: 'viewReturnsWarehouse', label: 'عرض مخزن المرتجعات', category: 'مخزون' },
-  { key: 'manageReturnsWarehouse', label: 'إدارة مخزن المرتجعات', category: 'مخزون' },
-  { key: 'viewInvoices', label: 'عرض أرشيف الفواتير', category: 'مبيعات' }
+  { key: 'manageReturnsWarehouse', label: 'إدارة مخزن المرتجعات', category: 'مخزون' }
 
 ];
 
@@ -1214,6 +1287,40 @@ const TICKET_STATUSES = [
   { value: 'waiting_shipping_company', label: 'انتظار ارسال شركة الشحن', color: 'yellow' }
 ];
 
+// ✨ ميزة جديدة: تتبع SLA للتذاكر - الحالات دي بتعتبر "نهائية" (التذكرة
+// خلصت)، فمينفعش تتحسب عليها مهلة SLA زي التذاكر المفتوحة
+const TICKET_TERMINAL_STATUSES = [
+  'delivered_to_customer', 'closed', 'rejected_and_delivered',
+  'delivered_asc', 'damaged_disposed', 'rejected_by_customer'
+];
+
+// بيحسب حالة SLA لتذكرة معينة: هل هي متأخرة، قريبة من الموعد، في الموعد،
+// أو خلصت. بيرجع null لو مفيش تاريخ إنشاء أو أولوية غير معروفة.
+const getTicketSLAInfo = (ticket, slaConfig) => {
+  if (!ticket?.createdAt) return null;
+  const createdDate = ticket.createdAt?.toDate ? ticket.createdAt.toDate() : new Date(ticket.createdAt);
+  if (isNaN(createdDate.getTime())) return null;
+
+  const targetHours = (slaConfig || {})[ticket.priority || 'medium'] ?? 24;
+  const deadline = new Date(createdDate.getTime() + targetHours * 60 * 60 * 1000);
+  const isTerminal = TICKET_TERMINAL_STATUSES.includes(ticket.status);
+  const now = new Date();
+  const hoursRemaining = (deadline - now) / (1000 * 60 * 60);
+
+  let level;
+  if (isTerminal) {
+    level = 'completed';
+  } else if (hoursRemaining < 0) {
+    level = 'overdue';
+  } else if (hoursRemaining <= targetHours * 0.25) {
+    level = 'due_soon';
+  } else {
+    level = 'on_track';
+  }
+
+  return { deadline, hoursRemaining, level, targetHours };
+};
+
 
 const EGYPT_GOVERNORATES = [
   'القاهرة', 'الجيزة', 'الإسكندرية', 'الدقهلية', 'الشرقية', 'القليوبية',
@@ -1314,6 +1421,26 @@ const normalizeSearch = (str) => {
   return String(str).toLowerCase().trim().replace(/\s+/g, ' ');
 };
 
+// ==========================================================================
+// 🔎 FIX: بحث حقيقي بالكلمات (بدل مقارنة بادئة النص الكاملة اللي كانت
+// بتفشل مع أي بحث غير أول كلمة في searchKey، زي السريال أو التصنيف)
+// ==========================================================================
+// يحوّل نص إلى مصفوفة كلمات فريدة مطبَّعة، تُخزَّن في Firestore كحقل
+// searchTokens ويُستعلم عنها بـ array-contains-any بدل range query.
+const buildSearchTokens = (...parts) => {
+  const text = normalizeSearch(parts.filter(Boolean).join(' '));
+  if (!text) return [];
+  return [...new Set(text.split(' ').filter(Boolean))];
+};
+
+// يحوّل نص البحث اللي كاتبه المستخدم إلى مصفوفة كلمات (بحد أقصى 10 لأن
+// Firestore بيحدد array-contains-any بـ 10 قيم لكل استعلام).
+const buildQueryTokens = (searchText) => {
+  const text = normalizeSearch(searchText);
+  if (!text) return [];
+  return [...new Set(text.split(' ').filter(Boolean))].slice(0, 10);
+};
+
 //------------------------------------------//
 //دالة البحث  - serial//
 const normalizeSerial = (value) => {
@@ -1323,6 +1450,19 @@ const normalizeSerial = (value) => {
     .toLowerCase();
 };
 //--------------------------------------------//
+
+// ✨ ميزة جديدة: توحيد رقم الهاتف قبل أي حفظ أو مطابقة، عشان نفس الرقم
+// بصيغ مختلفة (مسافات، +20، 0020) ميتعاملش معاه كأنه أرقام مختلفة
+// ويتسبب في عملاء مكررين.
+const normalizePhone = (value) => {
+  if (!value) return '';
+  let digits = String(value).replace(/\D/g, ''); // إزالة أي حرف غير رقم
+  while (digits.startsWith('00')) digits = digits.slice(2); // إزالة بادئة الاتصال الدولي 00
+  if (digits.startsWith('20') && digits.length === 12) {
+    digits = '0' + digits.slice(2); // 201012345678 -> 01012345678
+  }
+  return digits;
+};
 
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -1359,6 +1499,21 @@ const exportToCSV = (data, filename) => {
     return true;
   } catch (error) {
     console.error("Export error:", error);
+    return false;
+  }
+};
+
+// ✨ ميزة جديدة: تصدير Excel حقيقي (.xlsx) بدل CSV بس، باستخدام SheetJS
+const exportToExcel = (data, filename, sheetName = 'Sheet1') => {
+  if (!data || !data.length) return false;
+  try {
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    XLSX.writeFile(workbook, `${filename}.xlsx`);
+    return true;
+  } catch (error) {
+    console.error("Excel export error:", error);
     return false;
   }
 };
@@ -1409,6 +1564,22 @@ const getRoleColor = (roleKey) => {
   const role = USER_ROLES.find(r => r.key === roleKey);
   return role?.color || 'slate';
 };
+
+// 🛠️ FIX: نفس مشكلة الـ badges في التذاكر - بناء `bg-${roleColor}-100` ديناميكيًا
+// بيخلي Tailwind يشيل الكلاس ده من نسخة الإنتاج لأنه مش نص حرفي كامل وقت
+// البناء. النتيجة: شارة دور الموظف (خصوصًا "كول سنتر" اللي لونه cyan)
+// كانت بتظهر من غير أي لون خالص في الإنتاج.
+const ROLE_COLOR_CLASSES = {
+  purple: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
+  indigo: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300',
+  blue: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+  emerald: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
+  orange: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300',
+  amber: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
+  cyan: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300',
+  slate: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+};
+const getRoleColorClasses = (roleKey) => ROLE_COLOR_CLASSES[getRoleColor(roleKey)] || ROLE_COLOR_CLASSES.slate;
 
 // ==========================================================================
 // 🧾 دوال مساعدة لتحليل CSV (محسنة للأداء)
@@ -1615,29 +1786,8 @@ const syncManager = {
   }
 };
 
-// ==========================================================================
-// 🔍 SEARCH CACHE (للبحث السريع)
-// ==========================================================================
-const searchCache = {
-  async get(term, type) {
-    return offlineDB.getSearchCache(`${type}:${term}`);
-  },
-
-  async set(term, type, results) {
-    return offlineDB.saveSearchCache(`${type}:${term}`, results);
-  },
-
-  async search(term, type, searchFn) {
-    const cached = await this.get(term, type);
-    if (cached) {
-      return cached;
-    }
-
-    const results = await searchFn(term);
-    await this.set(term, type, results);
-    return results;
-  }
-};
+// ملحوظة تنظيف: تم حذف searchCache من هنا - كان معرّف لكنه مش
+// مستخدم في أي مكان في التطبيق.
 
 // ==========================================================================
 // 📊 VIRTUAL TABLE COMPONENT (للجداول الكبيرة)
@@ -1775,7 +1925,7 @@ function EmployeeProfileView({ userToView, warehouseMap }) {
                  <span className="text-slate-500 dark:text-slate-400 font-mono" dir="ltr">{userToView.email}</span>
                  {userToView.phone && <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-lg">{userToView.phone}</span>}
                  <span className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg">الفرع: {warehouseMap[userToView.assignedWarehouseId] || 'الرئيسي'}</span>
-                 <span className={`px-3 py-1 rounded-lg bg-${roleColor}-100 dark:bg-${roleColor}-900/30 text-${roleColor}-700 dark:text-${roleColor}-300 flex items-center gap-1`}>
+                 <span className={`px-3 py-1 rounded-lg ${getRoleColorClasses(userToView.role)} flex items-center gap-1`}>
                    <RoleIcon size={14}/> {USER_ROLES.find(r => r.key === userToView.role)?.label || userToView.role}
                  </span>
               </div>
@@ -1856,7 +2006,65 @@ function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry,
   const [rememberMe, setRememberMe] = useState(true);
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
-  const [lockTimer, setLockTimer] = useState(null);
+  const [lockRemainingMs, setLockRemainingMs] = useState(0);
+
+  // 🛠️ FIX (نقطة #2): القفل بعد 5 محاولات كان متخزّن في React state بس،
+  // فأي Refresh للصفحة كان بيصفّر العداد فورًا ويلغي القفل بالكامل - يعني
+  // حماية وهمية بالكامل. دلوقتي بنخزّن القفل في localStorage لكل بريد
+  // إلكتروني على حدة، فيفضل يشتغل حتى بعد إعادة تحميل الصفحة.
+  // (ملحوظة: ده تحسين حقيقي لكنه لسه من جانب المتصفح فقط - حماية كاملة
+  // 100% من هجمات التخمين تحتاج فرض القيد من جانب السيرفر، مثلاً عبر
+  // Firestore Security Rules أو Cloud Function، وهو ما لا يمكن عمله من
+  // كود العميل وحده.)
+  const getLockKey = (em) => `loginLockout:${(em || '').trim().toLowerCase()}`;
+
+  const readLockState = (em) => {
+    try {
+      const raw = localStorage.getItem(getLockKey(em));
+      return raw ? JSON.parse(raw) : { attempts: 0, lockedUntil: 0 };
+    } catch {
+      return { attempts: 0, lockedUntil: 0 };
+    }
+  };
+
+  const writeLockState = (em, state) => {
+    try {
+      localStorage.setItem(getLockKey(em), JSON.stringify(state));
+    } catch { /* localStorage غير متاح */ }
+  };
+
+  // تحديث حالة القفل بناءً على البريد الحالي (يعمل عند تحميل الشاشة وعند تغيير البريد)
+  useEffect(() => {
+    const state = readLockState(email);
+    const remaining = (state.lockedUntil || 0) - Date.now();
+    if (remaining > 0) {
+      setIsLocked(true);
+      setLockRemainingMs(remaining);
+      setLoginAttempts(state.attempts || 5);
+    } else {
+      setIsLocked(false);
+      setLockRemainingMs(0);
+      setLoginAttempts(state.attempts || 0);
+    }
+  }, [email]);
+
+  // عدّاد تنازلي حي لفك القفل تلقائيًا لما الوقت يخلص
+  useEffect(() => {
+    if (!isLocked) return;
+    const interval = setInterval(() => {
+      const state = readLockState(email);
+      const remaining = (state.lockedUntil || 0) - Date.now();
+      if (remaining <= 0) {
+        setIsLocked(false);
+        setLockRemainingMs(0);
+        setLoginAttempts(0);
+        writeLockState(email, { attempts: 0, lockedUntil: 0 });
+      } else {
+        setLockRemainingMs(remaining);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isLocked, email]);
 
   // تحميل البريد الإلكتروني المحفوظ
   useEffect(() => {
@@ -1866,26 +2074,31 @@ function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry,
     }
   }, []);
 
-  // التحقق من Rate Limiting
-  useEffect(() => {
-    if (loginAttempts >= 5) {
+  const registerFailedAttempt = (em) => {
+    const state = readLockState(em);
+    const attempts = (state.attempts || 0) + 1;
+    const lockedUntil = attempts >= 5 ? Date.now() + 5 * 60 * 1000 : 0;
+    writeLockState(em, { attempts, lockedUntil });
+    setLoginAttempts(attempts);
+    if (lockedUntil > 0) {
       setIsLocked(true);
-      const timer = setTimeout(() => {
-        setIsLocked(false);
-        setLoginAttempts(0);
-      }, 5 * 60 * 1000); // 5 دقائق
-      setLockTimer(timer);
+      setLockRemainingMs(lockedUntil - Date.now());
     }
-    return () => {
-      if (lockTimer) clearTimeout(lockTimer);
-    };
-  }, [loginAttempts]);
+  };
+
+  const clearLockState = (em) => {
+    writeLockState(em, { attempts: 0, lockedUntil: 0 });
+    setLoginAttempts(0);
+    setIsLocked(false);
+    setLockRemainingMs(0);
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     
     if (isLocked) {
-      setError("تم قفل الحساب مؤقتاً بسبب كثرة المحاولات. حاول بعد 5 دقائق");
+      const mins = Math.ceil(lockRemainingMs / 60000);
+      setError(`تم قفل هذا الحساب مؤقتاً بسبب كثرة المحاولات. حاول بعد ${mins} دقيقة تقريباً`);
       return;
     }
 
@@ -1915,7 +2128,7 @@ function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry,
         if (allUsers.empty) {
           const newAdmin = {
             email: email.trim().toLowerCase(),
-            pass: pass,
+            pass: hashPassword(pass),
             name: 'مدير النظام',
             role: 'admin',
             assignedWarehouseId: 'main',
@@ -1937,7 +2150,7 @@ function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry,
           onLoginSuccess(userData);
           showSuccess("مرحباً! تم تفعيل حسابك كمدير للنظام بنجاح.");
         } else {
-          setLoginAttempts(prev => prev + 1);
+          registerFailedAttempt(email);
           setError("هذا البريد الإلكتروني غير مسجل في النظام.");
           showError("هذا البريد الإلكتروني غير مسجل في النظام.");
         }
@@ -1947,10 +2160,18 @@ function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry,
         if (userData.isDisabled) {
            setError("عذراً، هذا الحساب موقوف من قبل الإدارة.");
            showError("عذراً، هذا الحساب موقوف من قبل الإدارة.");
-        } else if (userData.pass === pass) {
-           await updateDoc(doc(db, 'employees', userDoc.id), {
-             lastLogin: serverTimestamp()
-           });
+        } else if (verifyPassword(pass, userData.pass).valid) {
+           const { upgraded } = verifyPassword(pass, userData.pass);
+           const updates = { lastLogin: serverTimestamp() };
+           // 🛠️ FIX (نقطة #1): ترحيل تلقائي هادئ - أول ما حساب قديم بباسورد
+           // نص عادي يسجل دخول بنجاح، بنحوّل الباسورد المخزّن لتجزئة SHA-256
+           // فورًا، فمع الوقت كل الحسابات النشطة بتتحول تلقائيًا من غير ما
+           // نحتاج نطلب من حد يغيّر باسورده يدويًا.
+           if (upgraded) {
+             updates.pass = hashPassword(pass);
+           }
+           await updateDoc(doc(db, 'employees', userDoc.id), updates);
+           clearLockState(email);
            
            if (rememberMe) {
              localStorage.setItem('last_email', email);
@@ -1965,7 +2186,7 @@ function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry,
            showSuccess(`أهلاً بك مجدداً يا ${userData.name}`);
            await logUserActivity(userWithId, 'تسجيل دخول', 'قام بتسجيل الدخول إلى النظام');
         } else {
-           setLoginAttempts(prev => prev + 1);
+           registerFailedAttempt(email);
            setError("كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى.");
            showError("كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى.");
         }
@@ -2109,7 +2330,7 @@ function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry,
           
           {isLocked && (
             <p className="text-xs text-rose-600 text-center mt-2">
-              تم القفل مؤقتاً. حاول بعد 5 دقائق
+              تم قفل هذا الحساب مؤقتاً. حاول بعد {Math.ceil(lockRemainingMs / 60000)} دقيقة تقريباً
             </p>
           )}
         </form>
@@ -2217,8 +2438,13 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
   const handleSendEmail = async () => {
     if (data.email) {
       const html = generateInvoiceHTML(data, systemSettings);
-      await sendEmail(data.email, `فاتورة رقم ${data.invoiceNumber}`, html);
-      showSuccess("تم إرسال الفاتورة إلى البريد الإلكتروني");
+      const webhookUrl = systemSettings.emailWebhookUrl || '';
+      const sent = await sendEmail(data.email, `فاتورة رقم ${data.invoiceNumber}`, html, [], webhookUrl);
+      if (sent) {
+        showSuccess("تم إرسال الفاتورة إلى البريد الإلكتروني");
+      } else {
+        showError("فشل إرسال البريد الإلكتروني. تأكد من ضبط رابط خدمة البريد في الإعدادات");
+      }
     }
   };
 
@@ -2350,6 +2576,16 @@ function InvoiceTemplateManager({ systemSettings, setSettings, notify }) {
     fontSize: 'normal',
     paperSize: '80mm'
   });
+
+  // 🛠️ FIX: نفس مشكلة SettingsManager - template المحلي كان بياخد نسخة
+  // وقت أول رندر بس وميتزامنش مع أي تحديث لاحق في systemSettings.
+  const lastSyncedRef = useRef(systemSettings.invoiceTemplate);
+  useEffect(() => {
+    if (JSON.stringify(template) === JSON.stringify(lastSyncedRef.current)) {
+      setTemplate(systemSettings.invoiceTemplate || template);
+    }
+    lastSyncedRef.current = systemSettings.invoiceTemplate;
+  }, [systemSettings.invoiceTemplate]);
 
   const handleSave = async () => {
     try {
@@ -2484,7 +2720,7 @@ function InvoiceTemplateManager({ systemSettings, setSettings, notify }) {
 // ==========================================================================
 // 📊 لوحة التحكم المحسنة مع إحصائيات متقدمة
 // ==========================================================================
-function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
+function DashboardView({ appUser, warehouses, onNavigateToInventory, notify, systemSettings }) {
   const [stats, setStats] = useState({ 
     totalItems: 0, 
     totalValue: 0, 
@@ -2513,6 +2749,7 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
     closed: 0, 
     waitingApproval: 0,
     highPriority: 0,
+    overdueSLA: 0,
     byStatus: [],
     byPriority: []
   });
@@ -2562,7 +2799,7 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
            invSnap.docs.forEach(doc => {
              const data = doc.data();
              if (!data.isDeleted) {
-                if (appUser.permissions?.viewAllWarehouses || data.warehouseId === (appUser.assignedWarehouseId || 'main')) {
+                if (appUser.role === 'admin' || appUser.permissions?.viewAllWarehouses || data.warehouseId === (appUser.assignedWarehouseId || 'main')) {
                    const qty = Number(data.quantity ?? 0);
                    const price = Number(data.price ?? 0);
                    const minStock = Number(data.minStock ?? 0);
@@ -2637,7 +2874,7 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
              
              salesSnap.docs.forEach(doc => {
                 const data = doc.data();
-                if (appUser.permissions?.viewAllWarehouses || data.warehouseId === (appUser.assignedWarehouseId || 'main')) {
+                if (appUser.role === 'admin' || appUser.permissions?.viewAllWarehouses || data.warehouseId === (appUser.assignedWarehouseId || 'main')) {
                    const amount = Number(data.finalTotal || data.total || 0);
                    const date = data.timestamp?.toDate?.() || new Date(data.timestamp);
                    const dateStr = date.toISOString().split('T')[0];
@@ -2677,7 +2914,7 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
              .map(([name, value]) => ({ name, value }));
 
            let todayTickets = 0, weekTickets = 0, monthTickets = 0, closedTickets = 0, 
-               waitingApprovalTickets = 0, highPriorityTickets = 0;
+               waitingApprovalTickets = 0, highPriorityTickets = 0, overdueSLATickets = 0;
            let statusCount = {};
            let priorityCount = { high: 0, medium: 0, low: 0 };
            
@@ -2704,6 +2941,11 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
                 
                 if (data.status === 'delivered_to_customer' || data.status === 'closed') closedTickets++;
                 if (data.status === 'waiting_customer_approval_cost') waitingApprovalTickets++;
+
+                // ✨ ميزة جديدة: تتبع SLA - عدد التذاكر المتأخرة
+                if (getTicketSLAInfo({ ...data, id: doc.id }, systemSettings?.ticketSLA)?.level === 'overdue') {
+                  overdueSLATickets++;
+                }
                 
                 if (data.priority === 'high') {
                   highPriorityTickets++;
@@ -2769,6 +3011,7 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
                  closed: closedTickets,
                  waitingApproval: waitingApprovalTickets,
                  highPriority: highPriorityTickets,
+                 overdueSLA: overdueSLATickets,
                  byStatus: ticketsByStatus,
                  byPriority: ticketsByPriority
                });
@@ -2969,7 +3212,7 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
       </div>
 
       {appUser.permissions?.manageTickets && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mt-4">
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
             <p className="text-xs font-bold text-blue-800 dark:text-blue-300 mb-1">تذاكر اليوم</p>
             <p className="text-2xl font-black text-blue-600 dark:text-blue-400">{ticketStats.today}</p>
@@ -2989,6 +3232,11 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify }) {
           <div className="bg-gradient-to-br from-rose-50 to-red-50 dark:from-rose-900/30 dark:to-red-900/30 p-4 rounded-xl border border-rose-100 dark:border-rose-800">
             <p className="text-xs font-bold text-rose-800 dark:text-rose-300 mb-1">عالية الأولوية</p>
             <p className="text-2xl font-black text-rose-600 dark:text-rose-400">{ticketStats.highPriority}</p>
+          </div>
+          {/* ✨ ميزة جديدة: تتبع SLA - تذاكر متأخرة عن الموعد المستهدف */}
+          <div className="bg-gradient-to-br from-red-50 to-rose-100 dark:from-red-900/40 dark:to-rose-900/40 p-4 rounded-xl border border-red-200 dark:border-red-800">
+            <p className="text-xs font-bold text-red-800 dark:text-red-300 mb-1">⏰ متأخرة عن SLA</p>
+            <p className="text-2xl font-black text-red-600 dark:text-red-400">{ticketStats.overdueSLA}</p>
           </div>
         </div>
       )}
@@ -3170,37 +3418,59 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
 const fixSearchKeys = async () => {
   setGlobalLoading(true);
   try {
-    const snap = await getDocs(collection(db, 'inventory'));
-    const batch = writeBatch(db);
     let count = 0;
-    
-    snap.docs.forEach(doc => {
-      const data = doc.data();
-      // إضافة السيريال لـ searchKey
-      const newSearchKey = normalizeSearch(`${data.name || ''} ${data.serialNumber || ''} ${data.category || ''}`);
-      
-      batch.update(doc.ref, { searchKey: newSearchKey });
-      count++;
-    });
-    
-    await batch.commit();
-    showSuccess(`✅ تم تحديث ${count} صنف`);
-    loadItems(false); // إعادة تحميل البيانات
+
+    // مصفوفة الكوليكشنز اللي محتاجة ترقية searchTokens، وكل واحدة
+    // وطريقة بناء التوكنز الخاصة بيها من حقولها
+    const jobs = [
+      {
+        name: 'inventory',
+        tokensOf: (data) => buildSearchTokens(data.name, data.serialNumber, data.category, ...(data.tags || [])),
+        extraFieldsOf: () => ({})
+      },
+      {
+        name: 'customers',
+        // ✨ FIX: توحيد رقم الهاتف للعملاء القدام كمان (إزالة مسافات/بادئات دولية مختلفة)
+        tokensOf: (data) => buildSearchTokens(data.name, normalizePhone(data.phone), data.email, ...(data.tags || [])),
+        extraFieldsOf: (data) => ({ phone: normalizePhone(data.phone) })
+      },
+      {
+        name: 'tickets',
+        tokensOf: (data) => buildSearchTokens(
+          data.customerName, data.customerPhone, data.ticketNumber,
+          data.assignedTechnician, data.assignedMaintenanceCenter, data.device, data.deviceSerial
+        ),
+        extraFieldsOf: () => ({})
+      }
+    ];
+
+    for (const job of jobs) {
+      const snap = await getDocs(collection(db, job.name));
+      // ⚠️ FIX: Firestore بيحدد الـ batch الواحد بـ 500 عملية كحد أقصى.
+      // مجموعة فيها أكتر من 500 مستند كانت هتخلي batch.commit() يفشل بالكامل.
+      // هنا بنقسّم العملية لدفعات من 450.
+      const docs = snap.docs;
+      const chunkSize = 450;
+      for (let i = 0; i < docs.length; i += chunkSize) {
+        const batch = writeBatch(db);
+        const chunk = docs.slice(i, i + chunkSize);
+        chunk.forEach(docSnap => {
+          const data = docSnap.data();
+          batch.update(docSnap.ref, { searchTokens: job.tokensOf(data), ...job.extraFieldsOf(data) });
+          count++;
+        });
+        await batch.commit();
+      }
+    }
+
+    showSuccess(`✅ تم تحديث فهارس البحث لـ ${count} مستند (مخزون + عملاء + تذاكر)`);
+    loadItems(false); // إعادة تحميل بيانات المخزون
   } catch (error) {
     console.error('Error:', error);
     showError('❌ فشل التحديث');
   }
   setGlobalLoading(false);
 };
-
-
-{/* في جزء الأزرار */}
-<button
-  onClick={fixSearchKeys}
-  className="bg-purple-600 text-white px-4 py-2 rounded-lg text-xs font-bold"
->
-  <RefreshCw size={14} /> تحديث مفاتيح البحث
-</button>
 
 
   // تحميل الوسوم
@@ -3232,13 +3502,11 @@ const loadItems = useCallback(async (isNextPage = false) => {
     // 2️⃣ استبعاد الأصناف المحذوفة
     constraints.push(where('isDeleted', '==', false));
     
-    // 3️⃣ البحث المتقدم (باستخدام searchKey المحسوب)
-    const term = normalizeSearch(debouncedSearch);
-    if (term) {
-      // استخدام searchKey للبحث السريع (مفهرس في Firebase)
-      constraints.push(where('searchKey', '>=', term));
-      constraints.push(where('searchKey', '<=', term + '\uf8ff'));
-      constraints.push(orderBy('searchKey'));
+    // 3️⃣ البحث المتقدم (باستخدام searchTokens - يدعم البحث بالاسم أو
+    // السريال أو التصنيف أو أي تاج، مش بس أول كلمة في النص)
+    const queryTokens = buildQueryTokens(debouncedSearch);
+    if (queryTokens.length > 0) {
+      constraints.push(where('searchTokens', 'array-contains-any', queryTokens));
     } else {
       // ترتيب حسب الاسم إذا لم يكن هناك بحث
       constraints.push(orderBy('name'));
@@ -3259,7 +3527,20 @@ const loadItems = useCallback(async (isNextPage = false) => {
       ...d.data()
     }));
 
-    // 6️⃣ فلاتر محلية إضافية (لأنها لا تدعمها Firebase مباشرة)
+    // 6️⃣ تنقية محلية إضافية بعد جلب Firestore:
+    // array-contains-any بيرجع أي صنف فيه "ولو كلمة واحدة" من كلمات البحث (OR)،
+    // فهنا بنتأكد إن كل كلمات البحث فعلاً موجودة في الصنف (AND) لدقة أعلى،
+    // مع دعم الأصناف القديمة اللي لسه معندهاش searchTokens (باستخدام searchKey القديم).
+    if (queryTokens.length > 0) {
+      fetched = fetched.filter(i => {
+        const haystack = (i.searchTokens && i.searchTokens.length > 0)
+          ? i.searchTokens.join(' ')
+          : normalizeSearch(i.searchKey || `${i.name || ''} ${i.serialNumber || ''} ${i.category || ''}`);
+        return queryTokens.every(tok => haystack.includes(tok));
+      });
+    }
+
+    // 7️⃣ فلاتر محلية إضافية (لأنها لا تدعمها Firebase مباشرة)
     if (searchFilters.warehouse) {
       fetched = fetched.filter(i => i.warehouseId === searchFilters.warehouse);
     }
@@ -3475,6 +3756,7 @@ for (let i = 0; i < importData.length; i += BATCH_SIZE) {
               firestoreBatch.set(newRef, {
                 ...item,
                 searchKey: normalizeSearch(`${item.name} ${item.serialNumber} ${item.category} ${(item.tags || []).join(' ')}`),
+                searchTokens: buildSearchTokens(item.name, item.serialNumber, item.category, ...(item.tags || [])),
                 createdAt: serverTimestamp(),
                 isDeleted: false,
                 importedBy: appUser.name,
@@ -3713,6 +3995,7 @@ for (let i = 0; i < importData.length; i += BATCH_SIZE) {
       notes: newItem.notes || '',
       warehouseId: warehouseToUse,
       searchKey: normalizeSearch(`${newItem.name} ${serialNormalized} ${newItem.category} ${(newItem.tags || []).join(' ')}`),
+      searchTokens: buildSearchTokens(newItem.name, serialNormalized, newItem.category, ...(newItem.tags || [])),
       createdAt: serverTimestamp(),
       isDeleted: false
     };
@@ -3763,6 +4046,10 @@ for (let i = 0; i < importData.length; i += BATCH_SIZE) {
 
     try {
       const { id, ...dataToUpdate } = editingItem;
+      // ✨ ميزة جديدة: تتبع تغييرات السعر بشكل صريح (سجل تعديلات الأسعار)
+      const originalItem = items.find(i => i.id === id);
+      const priceChanged = originalItem && Number(originalItem.price) !== priceNum;
+
       await updateDoc(doc(db, 'inventory', id), { 
         name: dataToUpdate.name, 
         quantity: qtyNum, 
@@ -3773,10 +4060,20 @@ for (let i = 0; i < importData.length; i += BATCH_SIZE) {
         notes: dataToUpdate.notes,
         minStock: Number(dataToUpdate.minStock),
         searchKey: normalizeSearch(`${dataToUpdate.name} ${dataToUpdate.serialNumber} ${dataToUpdate.category} ${(dataToUpdate.tags || []).join(' ')}`),
+        searchTokens: buildSearchTokens(dataToUpdate.name, dataToUpdate.serialNumber, dataToUpdate.category, ...(dataToUpdate.tags || [])),
         updatedAt: serverTimestamp()
       });
       
       await logUserActivity(appUser, 'تعديل صنف', `تعديل بيانات ${dataToUpdate.name} (S/N: ${dataToUpdate.serialNumber})`);
+
+      if (priceChanged) {
+        await logUserActivity(
+          appUser,
+          'تعديل سعر',
+          `تغيير سعر ${dataToUpdate.name} (S/N: ${dataToUpdate.serialNumber}) من ${originalItem.price} إلى ${priceNum}`
+        );
+      }
+
       setEditingItem(null);
       setItems(prev => prev.map(i => 
         i.id === id ? {
@@ -4329,6 +4626,15 @@ for (let i = 0; i < importData.length; i += BATCH_SIZE) {
              </div>
              
              <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                {appUser.role === 'admin' && (
+                  <button
+                    onClick={fixSearchKeys}
+                    title="يشغّل مرة واحدة لتحديث فهارس البحث لكل الأصناف والعملاء والتذاكر القديمة"
+                    className="bg-purple-600 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-purple-700"
+                  >
+                    <RefreshCw size={14} /> تحديث فهارس البحث (شامل)
+                  </button>
+                )}
                 {selectedItems.size > 0 && appUser.permissions?.bulkDeleteInventory && (
                   <button 
                     onClick={() => setShowBulkDeleteModal(true)} 
@@ -4372,7 +4678,14 @@ for (let i = 0; i < importData.length; i += BATCH_SIZE) {
                   onClick={()=>exportToCSV(items, 'Inventory_Data')} 
                   className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 flex items-center justify-center gap-2"
                 >
-                  <Download size={14}/> تصدير
+                  <Download size={14}/> تصدير CSV
+                </button>
+
+                <button 
+                  onClick={()=>exportToExcel(items, 'Inventory_Data', 'المخزون')} 
+                  className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700 flex items-center justify-center gap-2"
+                >
+                  <Download size={14}/> تصدير Excel
                 </button>
              </div>
           </div>
@@ -4572,7 +4885,7 @@ for (let i = 0; i < importData.length; i += BATCH_SIZE) {
 // ==========================================================================
 // 📦 عرض النواقص المحسن
 // ==========================================================================
-function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
+function LowStockView({ lowStockItems = [], appUser, warehouseMap, systemSettings = {} }) {
 
   const [items,setItems] = useState(lowStockItems);
   const [selectedWarehouse,setSelectedWarehouse] = useState('all');
@@ -4608,6 +4921,7 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
         if(data.isDeleted) return;
 
         if(
+          appUser.role !== 'admin' &&
           !appUser.permissions?.viewAllWarehouses &&
           data.warehouseId !== (appUser.assignedWarehouseId || 'main')
         ){
@@ -4654,10 +4968,6 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
     fetchLowStock();
 
   },[lowStockItems,appUser]);
-
- console.log("SEARCH VALUE:", search);
- console.log("ITEMS:", items);
-
   const filteredItems = (items || []).filter(item => {
 
   const term = (search || "").toString().trim().toLowerCase();
@@ -4717,7 +5027,50 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
 
   };
 
+  // ✨ ميزة جديدة: إرسال تنبيه النواقص لرابط Webhook (بريد/واتساب عبر خدمة وسيطة)
+  const [sendingAlert, setSendingAlert] = useState(false);
+  const alertConfig = systemSettings.lowStockAlerts || {};
 
+  const sendLowStockAlert = useCallback(async (isAuto = false) => {
+    if (!alertConfig.webhookUrl || items.length === 0) return;
+    setSendingAlert(true);
+    try {
+      await fetch(alertConfig.webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'low_stock_alert',
+          triggeredAt: new Date().toISOString(),
+          count: items.length,
+          items: items.map(i => ({
+            name: i.name,
+            serialNumber: i.serialNumber,
+            quantity: i.quantity,
+            minStock: i.minStock,
+            warehouse: warehouseMap[i.warehouseId] || i.warehouseId
+          }))
+        })
+      });
+      localStorage.setItem('lastLowStockAlertSentAt', Date.now().toString());
+      if (!isAuto) showSuccess("تم إرسال تنبيه النواقص بنجاح");
+    } catch (error) {
+      console.error("Low stock alert error:", error);
+      if (!isAuto) showError("فشل إرسال التنبيه، تأكد من صحة رابط الـ Webhook");
+    }
+    setSendingAlert(false);
+  }, [alertConfig.webhookUrl, items, warehouseMap]);
+
+  // محاولة إرسال تلقائي لما الشاشة تفتح، بس لو عدّى الوقت المحدد من آخر إرسال
+  // (بما إن التطبيق يعمل من المتصفح، ده مش بديل لسيرفر شغال 24 ساعة)
+  useEffect(() => {
+    if (!alertConfig.enabled || !alertConfig.webhookUrl || items.length === 0) return;
+    const lastSent = Number(localStorage.getItem('lastLowStockAlertSentAt') || 0);
+    const hoursSince = (Date.now() - lastSent) / (1000 * 60 * 60);
+    if (hoursSince >= (alertConfig.frequencyHours || 24)) {
+      sendLowStockAlert(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alertConfig.enabled, items.length]);
 
   if(loading){
 
@@ -4777,6 +5130,17 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
             >
               <Download size={14}/> تصدير
             </button>
+
+            {alertConfig.webhookUrl && (
+              <button
+                onClick={() => sendLowStockAlert(false)}
+                disabled={sendingAlert || items.length === 0}
+                title="إرسال قائمة النواقص الحالية للـ Webhook المحدد في الإعدادات"
+                className="bg-amber-50 text-amber-700 px-4 py-2 rounded-lg text-xs font-bold hover:bg-amber-100 flex items-center gap-2 disabled:opacity-50"
+              >
+                <Bell size={14}/> {sendingAlert ? 'جاري الإرسال...' : 'إرسال تنبيه الآن'}
+              </button>
+            )}
 
           </div>
 
@@ -4870,6 +5234,7 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap }) {
 // ==========================================================================
 function ReportsManager({ notify }) {
   const [transactions, setTransactions] = useState([]);
+  const transactionsRef = useRef([]);
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -4924,15 +5289,21 @@ function ReportsManager({ notify }) {
         const snap = await getDocs(q);
         const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
+        // 🛠️ FIX: الإجمالي/المتوسط/الأعلى/الأقل والرسم البياني كانوا بيتحسبوا
+        // بس من الصفحة اللي اتحمّلت حديثًا (50 عنصر)، فلو المستخدم دوس
+        // "تحميل المزيد"، الأرقام كانت بتتصفّر وتتحسب من الصفحة الجديدة
+        // بس بدل كل البيانات الظاهرة فعليًا في الجدول. دلوقتي بنجمعهم على
+        // كل البيانات المتراكمة (القديمة + الجديدة).
+        let allForStats = fetched;
         if (isNextPage) {
-           setTransactions(prev => [...prev, ...fetched]);
-        } else {
-           setTransactions(fetched);
+           allForStats = [...transactionsRef.current, ...fetched];
         }
+        transactionsRef.current = allForStats;
+        setTransactions(allForStats);
         
         let total = 0;
         let values = [];
-        fetched.forEach(t => {
+        allForStats.forEach(t => {
           const val = Number(t.finalTotal || t.total || 0);
           total += val;
           values.push(val);
@@ -4940,14 +5311,14 @@ function ReportsManager({ notify }) {
         
         setSummary({
           total: total,
-          count: fetched.length,
-          avg: fetched.length > 0 ? total / fetched.length : 0,
+          count: allForStats.length,
+          avg: allForStats.length > 0 ? total / allForStats.length : 0,
           min: values.length > 0 ? Math.min(...values) : 0,
           max: values.length > 0 ? Math.max(...values) : 0
         });
 
         const dailyTotals = {};
-        fetched.forEach(t => {
+        allForStats.forEach(t => {
           const date = formatDate(t.timestamp).split(' ')[0];
           dailyTotals[date] = (dailyTotals[date] || 0) + Number(t.finalTotal || t.total || 0);
         });
@@ -5001,6 +5372,9 @@ function ReportsManager({ notify }) {
       if (exportFormat === 'csv') {
         exportToCSV(exportData, `Sales_Report_${new Date().toISOString().split('T')[0]}`);
         showSuccess("تم تصدير الملف بنجاح");
+      } else if (exportFormat === 'xlsx') {
+        exportToExcel(exportData, `Sales_Report_${new Date().toISOString().split('T')[0]}`, 'المبيعات');
+        showSuccess("تم تصدير ملف Excel بنجاح");
       } else if (exportFormat === 'pdf') {
         await exportToPDF(
           exportData,
@@ -5078,6 +5452,7 @@ function ReportsManager({ notify }) {
                onChange={e => setExportFormat(e.target.value)}
              >
                <option value="csv">CSV</option>
+               <option value="xlsx">Excel (xlsx)</option>
                <option value="pdf">PDF</option>
              </select>
              
@@ -5416,6 +5791,7 @@ function EnhancedTransferManager({ appUser, warehouseMap, notify, setGlobalLoadi
             notes: sourceData.notes || '',
             warehouseId: req.toWarehouseId,
             searchKey: normalizeSearch(`${sourceData.name} ${sourceData.serialNumber} ${sourceData.category || ''}`),
+            searchTokens: buildSearchTokens(sourceData.name, sourceData.serialNumber, sourceData.category),
             createdAt: serverTimestamp(),
             isDeleted: false,
             transferredFrom: req.fromWarehouseId,
@@ -5944,11 +6320,9 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
       constraints.push(where('warehouseId', '==', appUser.assignedWarehouseId || 'main'));
     }
     
-    const term = normalizeSearch(debouncedSearch);
-    if (term) {
-      constraints.push(where('searchKey', '>=', term));
-      constraints.push(where('searchKey', '<=', term + '\uf8ff'));
-      constraints.push(orderBy('searchKey'));
+    const custQueryTokens = buildQueryTokens(debouncedSearch);
+    if (custQueryTokens.length > 0) {
+      constraints.push(where('searchTokens', 'array-contains-any', custQueryTokens));
     } else {
       constraints.push(orderBy("name"));
     }
@@ -5961,6 +6335,18 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
     q = query(q, ...constraints);
     const snap = await getDocs(q);
     let fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // تدقيق محلي: array-contains-any بيرجع تطابق "أي" كلمة (OR)، فهنا بنتأكد
+    // إن كل كلمات البحث موجودة فعلاً (AND)، ومع دعم العملاء القدام اللي
+    // معندهمش searchTokens لسه (رجوع لـ searchKey القديم كحل احتياطي)
+    if (custQueryTokens.length > 0) {
+      fetched = fetched.filter(c => {
+        const haystack = (c.searchTokens && c.searchTokens.length > 0)
+          ? c.searchTokens.join(' ')
+          : normalizeSearch(c.searchKey || `${c.name || ''} ${c.phone || ''} ${c.email || ''}`);
+        return custQueryTokens.every(tok => haystack.includes(tok));
+      });
+    }
 
     // الفلاتر المحلية
     if (filterGovernorate) {
@@ -6085,6 +6471,16 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
      
      setGlobalLoading(true);
      try {
+        // ✨ FIX: توحيد رقم الهاتف قبل التخزين، ومنع إنشاء عميل مكرر
+        // بنفس الرقم بصيغة مختلفة (مسافات، +20، 0020...)
+        const normalizedPhone = normalizePhone(newCust.phone);
+        const dupCheck = await getDocs(query(collection(db, 'customers'), where('phone', '==', normalizedPhone)));
+        if (!dupCheck.empty) {
+          showError(`يوجد عميل مسجّل بالفعل بنفس رقم الهاتف: ${dupCheck.docs[0].data().name}`);
+          setGlobalLoading(false);
+          return;
+        }
+
         if (newCust.tags && newCust.tags.length > 0) {
           for (const tag of newCust.tags) {
             await tagManager.incrementUsage(tag);
@@ -6093,10 +6489,12 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
         
         const customerData = {
            ...newCust,
+           phone: normalizedPhone,
            createdAt: serverTimestamp(),
            createdBy: appUser.id,
            createdByName: appUser.name,
-           searchKey: normalizeSearch(`${newCust.name} ${newCust.phone} ${newCust.email || ''} ${(newCust.tags || []).join(' ')}`),
+           searchKey: normalizeSearch(`${newCust.name} ${normalizedPhone} ${newCust.email || ''} ${(newCust.tags || []).join(' ')}`),
+           searchTokens: buildSearchTokens(newCust.name, normalizedPhone, newCust.email, ...(newCust.tags || [])),
            addressFull: newCust.governorate && newCust.city && newCust.address 
              ? `${newCust.governorate} - ${newCust.city} - ${newCust.address}`
              : '',
@@ -6181,7 +6579,8 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
                 createdAt: serverTimestamp(),
                 createdBy: appUser.id,
                 createdByName: appUser.name,
-                searchKey: normalizeSearch(`${row.name} ${row.phone} ${tags.join(' ')}`)
+                searchKey: normalizeSearch(`${row.name} ${row.phone} ${tags.join(' ')}`),
+                searchTokens: buildSearchTokens(row.name, row.phone, ...tags)
               };
 
               const newRef = doc(collection(db, 'customers'));
@@ -6804,7 +7203,7 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
                 const tq = query(
                   collection(db, 'tickets'),
                   where('customerPhone', '==', customer.phone),
-                  orderBy("name"),
+                  orderBy("createdAt", "desc"),
                   limit(50)
                 );
                 const tSnap = await getDocs(tq);
@@ -6968,12 +7367,14 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
              }
 
              itemSnaps.forEach((snap, idx) => {
-                 if (!snap.exists() || snap.data().quantity < 1) throw new Error(`المنتج ${cart[idx].name} غير متوفر بالكمية المطلوبة!`);
+                 const requestedQty = cart[idx].quantity || 1;
+                 if (!snap.exists() || snap.data().quantity < requestedQty) throw new Error(`المنتج ${cart[idx].name} غير متوفر بالكمية المطلوبة!`);
              });
 
              itemRefs.forEach((ref, idx) => {
                  const currentQty = itemSnaps[idx].data().quantity;
-                 const newQty = currentQty - 1;
+                 const requestedQty = cart[idx].quantity || 1;
+                 const newQty = currentQty - requestedQty;
                  t.update(ref, { quantity: newQty });
              });
 
@@ -7361,6 +7762,7 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
                                 value={invoice.discount} 
                                 onChange={e=>setInvoice({...invoice, discount: e.target.value})} 
                                 min="0" 
+                                max={invoice.discountType === 'percent' ? 100 : undefined}
                               />
                               <select 
                                 className="bg-slate-50 dark:bg-slate-800 px-3 font-bold text-xs border-r border-slate-100 dark:border-slate-700 outline-none" 
@@ -7488,6 +7890,7 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
                         <TicketCard
                           key={ticket.id}
                           ticket={ticket}
+                          systemSettings={systemSettings}
                           onStatusChange={() => {}}
                           onView={() => {}}
                           onEdit={(t)=>setEditingTicket(t)}
@@ -7535,6 +7938,24 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
 // ==========================================================================
 function TicketCard({ ticket, onStatusChange, onView, onEdit }) {
   const statusInfo = TICKET_STATUSES.find(s => s.value === ticket.status) || { label: ticket.status, color: 'gray' };
+
+  // 🛠️ FIX: بناء اسم الكلاس ديناميكيًا زي `bg-${color}-100` مبيشتغلش صح في
+  // الإنتاج، لأن Tailwind بيفحص الكود وقت البناء (build) بحثًا عن نصوص
+  // كلاسات كاملة وحرفية بس، ومش بيقدر يفهم template literals متغيّرة،
+  // فبيشيل (purge) الكلاسات دي من ملف الـ CSS النهائي. النتيجة: شارة حالة
+  // التذكرة كانت بتظهر من غير أي لون خالص في نسخة الإنتاج، خصوصًا الألوان
+  // اللي مالهاش استخدام حرفي تاني في الكود (yellow و red بالذات).
+  const STATUS_COLOR_CLASSES = {
+    gray: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+    blue: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
+    yellow: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800',
+    orange: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800',
+    green: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800',
+    red: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800',
+    purple: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800',
+    indigo: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+  };
+  const statusColorClasses = STATUS_COLOR_CLASSES[statusInfo.color] || STATUS_COLOR_CLASSES.gray;
   
   const getPriorityColor = (priority) => {
     switch(priority) {
@@ -7557,7 +7978,7 @@ function TicketCard({ ticket, onStatusChange, onView, onEdit }) {
           </div>
           <h4 className="font-bold text-slate-800 dark:text-white">{ticket.customerName}</h4>
         </div>
-        <span className={`px-2 py-1 rounded-full text-[9px] font-bold bg-${statusInfo.color}-100 dark:bg-${statusInfo.color}-900/30 text-${statusInfo.color}-700 dark:text-${statusInfo.color}-300 border border-${statusInfo.color}-200 dark:border-${statusInfo.color}-800`}>
+        <span className={`px-2 py-1 rounded-full text-[9px] font-bold border ${statusColorClasses}`}>
           {statusInfo.label}
         </span>
       </div>
@@ -7738,6 +8159,17 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const [loadingData, setLoadingData] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
+  const [showOverdueOnly, setShowOverdueOnly] = useState(false);
+
+  // ✨ ميزة جديدة: فلترة التذاكر المتأخرة عن SLA فقط
+  const displayedTickets = useMemo(() => {
+    if (!showOverdueOnly) return tickets;
+    return tickets.filter(t => getTicketSLAInfo(t, systemSettings?.ticketSLA)?.level === 'overdue');
+  }, [tickets, showOverdueOnly, systemSettings?.ticketSLA]);
+  // قائمة دايمًا بالتذاكر المتأخرة (مش متأثرة بفلتر العرض) - لاستخدامها في زرار إرسال التنبيه
+  const overdueTickets = useMemo(() => {
+    return tickets.filter(t => getTicketSLAInfo(t, systemSettings?.ticketSLA)?.level === 'overdue');
+  }, [tickets, systemSettings?.ticketSLA]);
   const [filterTechnician, setFilterTechnician] = useState('all');
   const [filterTag, setFilterTag] = useState('all');
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
@@ -7930,12 +8362,33 @@ const loadTickets = useCallback(async (isNextPage = false) => {
     // الفلاتر المحددة من قبل المستخدم
     if (filterStatus !== 'all') constraints.push(where('status', '==', filterStatus));
     if (filterPriority !== 'all') constraints.push(where('priority', '==', filterPriority));
+
+    // 🛠️ FIX: البحث كان بيتفلتر محليًا بعد تحميل 30 تذكرة بس (آخر صفحة)،
+    // فأي تذكرة أقدم مش موجودة في الـ 30 دول كانت تختفي من نتائج البحث
+    // حتى لو مطابقة تمامًا. دلوقتي البحث بيستخدم searchTokens على مستوى
+    // Firestore نفسه، فبيشمل كل التذاكر مش بس الصفحة المحمّلة حاليًا.
+    const ticketQueryTokens = buildQueryTokens(debouncedSearch);
+    if (ticketQueryTokens.length > 0) {
+      constraints.push(where('searchTokens', 'array-contains-any', ticketQueryTokens));
+    }
+
     if (isNextPage && lastDoc) constraints.push(startAfter(lastDoc));
     constraints.push(limit(30));
 
     let q = query(collection(db, 'tickets'), ...constraints);
     const snap = await getDocs(q);
     let fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // تدقيق AND محلي (array-contains-any بيرجّع تطابق أي كلمة OR)، ودعم
+    // التذاكر القديمة اللي معندهاش searchTokens لسه (fallback للحقول الأصلية)
+    if (ticketQueryTokens.length > 0) {
+      fetched = fetched.filter(t => {
+        const haystack = (t.searchTokens && t.searchTokens.length > 0)
+          ? t.searchTokens.join(' ')
+          : normalizeSearch(`${t.customerName || ''} ${t.customerPhone || ''} ${t.ticketNumber || ''} ${t.assignedTechnician || ''} ${t.assignedMaintenanceCenter || ''} ${t.device || ''} ${t.deviceSerial || ''}`);
+        return ticketQueryTokens.every(tok => haystack.includes(tok));
+      });
+    }
 
     // الفلاتر المحلية
     if (filterWarranty !== 'all') {
@@ -7959,20 +8412,6 @@ const loadTickets = useCallback(async (isNextPage = false) => {
       fetched = fetched.filter(t => t.assignedMaintenanceCenter === filterMaintenanceCenter);
     }
     
-    // ✅ البحث الشامل (يشمل الفني ومركز الصيانة)
-    const term = normalizeSearch(debouncedSearch);
-    if (term) {
-      fetched = fetched.filter(t =>
-        normalizeSearch(t.customerName || '').includes(term) ||
-        normalizeSearch(t.customerPhone || '').includes(term) ||
-        normalizeSearch(t.ticketNumber || '').includes(term) ||
-        normalizeSearch(t.assignedTechnician || '').includes(term) ||
-        normalizeSearch(t.assignedMaintenanceCenter || '').includes(term) ||
-        normalizeSearch(t.device || '').includes(term) ||
-        normalizeSearch(t.deviceSerial || '').includes(term)
-      );
-    }
-
     // فلترة التاريخ
     if (dateRange.from) {
       const fromDate = new Date(dateRange.from);
@@ -8136,9 +8575,10 @@ const loadTickets = useCallback(async (isNextPage = false) => {
     
     try {
       let customerId = newTicket.customerId;
+      const normalizedTicketPhone = normalizePhone(newTicket.customerPhone);
       
-      if (!customerId && newTicket.customerPhone) {
-        const q = query(collection(db, "customers"), where("phone", "==", newTicket.customerPhone));
+      if (!customerId && normalizedTicketPhone) {
+        const q = query(collection(db, "customers"), where("phone", "==", normalizedTicketPhone));
         const snap = await getDocs(q);
         
         if (!snap.empty) {
@@ -8146,15 +8586,16 @@ const loadTickets = useCallback(async (isNextPage = false) => {
         } else {
           const newCustomerRef = await addDoc(collection(db, "customers"), {
             name: newTicket.customerName,
-            phone: newTicket.customerPhone,
-            secondPhone: newTicket.secondPhone || '',
+            phone: normalizedTicketPhone,
+            secondPhone: normalizePhone(newTicket.secondPhone) || '',
             landline: newTicket.landline || '',
             email: newTicket.customerEmail || "",
             address: newTicket.customerAddress || '',
             governorate: newTicket.governorate || '',
             city: newTicket.city || '',
             createdAt: serverTimestamp(),
-            searchKey: normalizeSearch(`${newTicket.customerName} ${newTicket.customerPhone}`),
+            searchKey: normalizeSearch(`${newTicket.customerName} ${normalizedTicketPhone}`),
+            searchTokens: buildSearchTokens(newTicket.customerName, normalizedTicketPhone),
             ticketsCount: 0
           });
           customerId = newCustomerRef.id;
@@ -8164,11 +8605,18 @@ const loadTickets = useCallback(async (isNextPage = false) => {
       const fullIssue = newTicket.issue || 
         (newTicket.subFaultCode ? `${newTicket.subFaultCode} - ${newTicket.subFaultDescription}` : '');
 
+      const generatedTicketNumber = 'TKT-' + Date.now().toString().slice(-8);
+
       const ticketData = {
         ...newTicket,
         customerId,
         issue: fullIssue,
-        ticketNumber: 'TKT-' + Date.now().toString().slice(-8),
+        ticketNumber: generatedTicketNumber,
+        searchTokens: buildSearchTokens(
+          newTicket.customerName, newTicket.customerPhone, generatedTicketNumber,
+          newTicket.assignedTechnician, newTicket.assignedMaintenanceCenter,
+          newTicket.device, newTicket.deviceSerial
+        ),
         assignedCenter: appUser?.assignedWarehouseId || "main",
         spareParts: [],
         totalCost: 0,
@@ -8269,6 +8717,22 @@ const loadTickets = useCallback(async (isNextPage = false) => {
       });
       
       showSuccess("تم تحديث حالة التذكرة");
+
+      // ✨ ميزة جديدة: إشعار تلقائي للعميل عند تغيير حالة تذكرته (عبر Webhook
+      // مربوط بخدمة زي Zapier/Make بتحوّل الإشعار لرسالة SMS أو واتساب)
+      const notifConfig = systemSettings?.ticketNotifications;
+      if (notifConfig?.enabled && notifConfig?.webhookUrl && current.customerPhone) {
+        sendWebhookNotification(notifConfig.webhookUrl, {
+          type: 'ticket_status_changed',
+          ticketNumber: current.ticketNumber,
+          customerName: current.customerName,
+          customerPhone: current.customerPhone,
+          oldStatus: TICKET_STATUSES.find(s => s.value === current.status)?.label || current.status,
+          newStatus: TICKET_STATUSES.find(s => s.value === newStatus)?.label || newStatus,
+          device: current.device || '',
+          timestamp: new Date().toISOString()
+        });
+      }
 
       if (fullTicketView?.id === ticketId) {
         setFullTicketView({ ...fullTicketView, status: newStatus, statusHistory, history });
@@ -8430,6 +8894,8 @@ const loadTickets = useCallback(async (isNextPage = false) => {
     if (onGenerateInvoice) {
       onGenerateInvoice({
         ...ticket,
+        ticketId: ticket.id,
+        ticketNumber: ticket.ticketNumber,
         customerName: ticket.customerName,
         customerPhone: ticket.customerPhone,
         items: ticket.spareParts?.map(p => ({ name: p.name, price: p.price, quantity: p.quantity })) || [],
@@ -9494,6 +9960,16 @@ const StatusSelectComp = ({ value, onChange, ticketId }) => {
     </div>
   </div>
 
+  {/* ✨ ميزة جديدة: عرض الفاتورة المرتبطة بالتذكرة (لو موجودة) */}
+  {fullTicketView.linkedInvoiceNumber && (
+    <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 flex items-center gap-2">
+      <LinkIcon size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0"/>
+      <span className="text-emerald-700 dark:text-emerald-300 text-sm font-bold">
+        مرتبطة بالفاتورة #{fullTicketView.linkedInvoiceNumber}
+      </span>
+    </div>
+  )}
+
   {/* أزرار الإجراءات */}
   <div className="flex flex-wrap gap-2 pt-4 border-t">
     <button onClick={() => { setSelectedTicket(fullTicketView); setShowAssignModal(true); }} className="px-4 py-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg text-sm font-bold">
@@ -9503,7 +9979,7 @@ const StatusSelectComp = ({ value, onChange, ticketId }) => {
       <Edit size={14} className="inline ml-1"/> تعديل التذكرة
     </button>
     <button onClick={() => handleGenerateInvoice(fullTicketView)} className="px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-sm font-bold">
-      <Receipt size={14} className="inline ml-1"/> إنشاء فاتورة
+      <Receipt size={14} className="inline ml-1"/> {fullTicketView.linkedInvoiceNumber ? 'إنشاء فاتورة أخرى' : 'إنشاء فاتورة'}
     </button>
     <button onClick={() => window.print()} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold">
       <Printer size={14} className="inline ml-1"/> طباعة
@@ -9677,378 +10153,457 @@ const StatusSelectComp = ({ value, onChange, ticketId }) => {
 
       {/* ===== مودال تعديل التذكرة ===== */}
       {editingTicket && (appUser.permissions?.editTicket || appUser.role === 'admin') && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-4xl shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4 border-b pb-3">
-              <h3 className="font-black text-xl text-slate-800 dark:text-white">تعديل التذكرة #{editingTicket.ticketNumber}</h3>
-              <button onClick={() => setEditingTicket(null)} className="text-slate-400 hover:text-rose-600"><X size={24}/></button>
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.75rem] w-full max-w-4xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
+
+            {/* ===== ✨ رأس احترافي بتدرج لوني ===== */}
+            <div className="relative bg-gradient-to-l from-indigo-600 via-indigo-600 to-purple-600 px-6 py-5 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-3 text-white">
+                <div className="bg-white/15 p-2.5 rounded-xl">
+                  <Edit2 size={22} />
+                </div>
+                <div>
+                  <h3 className="font-black text-lg leading-tight">تعديل التذكرة</h3>
+                  <p className="text-indigo-100 text-xs font-mono mt-0.5" dir="ltr">#{editingTicket.ticketNumber}</p>
+                </div>
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full bg-white/15 text-white`}>
+                  {TICKET_STATUSES.find(s => s.value === editFormData.status)?.label || editFormData.status}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingTicket(null)}
+                className="bg-white/10 hover:bg-white/25 text-white p-2 rounded-xl transition-colors"
+              >
+                <X size={20}/>
+              </button>
             </div>
-            <form onSubmit={handleUpdateTicket} className="space-y-4">
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-    <div>
-      <label className="block text-xs font-bold mb-1">اسم العميل *</label>
-      <input required className="w-full border p-3 rounded-xl text-sm" value={editFormData.customerName} onChange={e => setEditFormData({ ...editFormData, customerName: e.target.value })} />
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">رقم الهاتف *</label>
-      <input required className="w-full border p-3 rounded-xl text-sm font-mono" value={editFormData.customerPhone} onChange={e => setEditFormData({ ...editFormData, customerPhone: e.target.value })} dir="ltr" />
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">رقم ثاني</label>
-      <input className="w-full border p-3 rounded-xl text-sm font-mono" value={editFormData.secondPhone} onChange={e => setEditFormData({ ...editFormData, secondPhone: e.target.value })} dir="ltr" />
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">تليفون أرضي</label>
-      <input className="w-full border p-3 rounded-xl text-sm font-mono" value={editFormData.landline} onChange={e => setEditFormData({ ...editFormData, landline: e.target.value })} dir="ltr" />
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">البريد الإلكتروني</label>
-      <input type="email" className="w-full border p-3 rounded-xl text-sm" value={editFormData.customerEmail} onChange={e => setEditFormData({ ...editFormData, customerEmail: e.target.value })} />
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">العنوان</label>
-      <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.customerAddress} onChange={e => setEditFormData({ ...editFormData, customerAddress: e.target.value })} />
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">المحافظة</label>
-      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.governorate} onChange={e => setEditFormData({ ...editFormData, governorate: e.target.value })}>
-        <option value="">-- اختر --</option>
-        {EGYPT_GOVERNORATES.map(g => <option key={g} value={g}>{g}</option>)}
-      </select>
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">المدينة</label>
-      <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.city} onChange={e => setEditFormData({ ...editFormData, city: e.target.value })} />
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">الجهاز</label>
-      <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.device} onChange={e => setEditFormData({ ...editFormData, device: e.target.value })} />
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">الموديل</label>
-      <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.deviceModel} onChange={e => setEditFormData({ ...editFormData, deviceModel: e.target.value })} />
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">السيريال</label>
-      <input className="w-full border p-3 rounded-xl text-sm font-mono" value={editFormData.deviceSerial} onChange={e => setEditFormData({ ...editFormData, deviceSerial: e.target.value })} />
-    </div>
-    <div className="md:col-span-3">
-      <label className="block text-xs font-bold mb-1">المشكلة</label>
-      <textarea rows="2" className="w-full border p-3 rounded-xl text-sm" value={editFormData.issue} onChange={e => setEditFormData({ ...editFormData, issue: e.target.value })} />
-    </div>
-  </div>
 
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div>
-      <label className="block text-xs font-bold mb-1">🛠️ قطع غيار بتكلفة</label>
-      <textarea rows="3" className="w-full border p-3 rounded-xl text-sm resize-none" value={editFormData.sparePartsWithCost} onChange={e => setEditFormData({...editFormData, sparePartsWithCost: e.target.value})} />
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">🔧 قطع غيار بدون تكلفة</label>
-      <textarea rows="3" className="w-full border p-3 rounded-xl text-sm resize-none" value={editFormData.sparePartsWithoutCost} onChange={e => setEditFormData({...editFormData, sparePartsWithoutCost: e.target.value})} />
-    </div>
-  </div>
+            <form onSubmit={handleUpdateTicket} className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto custom-scrollbar px-6 py-6 space-y-5 bg-slate-50 dark:bg-slate-900/40">
 
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-    <div>
-      <label className="block text-xs font-bold mb-1">📅 تاريخ الفاتورة</label>
-      <input type="date" className="w-full border p-3 rounded-xl text-sm" value={editFormData.invoiceDate} onChange={e => setEditFormData({...editFormData, invoiceDate: e.target.value})} />
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">⏰ تاريخ انتهاء الصيانة</label>
-      <input type="date" className="w-full border p-3 rounded-xl text-sm" value={editFormData.maintenanceEndDate} onChange={e => setEditFormData({...editFormData, maintenanceEndDate: e.target.value})} />
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">📦 تاريخ تسليم العميل</label>
-      <input type="date" className="w-full border p-3 rounded-xl text-sm" value={editFormData.deliveryDate} onChange={e => setEditFormData({...editFormData, deliveryDate: e.target.value})} />
-    </div>
-  </div>
+              {/* ===== قسم: بيانات العميل ===== */}
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+                <div className="flex items-center gap-2 px-5 py-3 bg-indigo-50/60 dark:bg-indigo-900/20 border-b border-slate-100 dark:border-slate-700">
+                  <User size={16} className="text-indigo-600 dark:text-indigo-400" />
+                  <h4 className="font-black text-sm text-indigo-700 dark:text-indigo-300">بيانات العميل</h4>
+                </div>
+                <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">اسم العميل *</label>
+                    <input required className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.customerName} onChange={e => setEditFormData({ ...editFormData, customerName: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">رقم الهاتف *</label>
+                    <input required className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold font-mono outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.customerPhone} onChange={e => setEditFormData({ ...editFormData, customerPhone: e.target.value })} dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">رقم ثاني</label>
+                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold font-mono outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.secondPhone} onChange={e => setEditFormData({ ...editFormData, secondPhone: e.target.value })} dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">تليفون أرضي</label>
+                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold font-mono outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.landline} onChange={e => setEditFormData({ ...editFormData, landline: e.target.value })} dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">البريد الإلكتروني</label>
+                    <input type="email" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.customerEmail} onChange={e => setEditFormData({ ...editFormData, customerEmail: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">العنوان</label>
+                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.customerAddress} onChange={e => setEditFormData({ ...editFormData, customerAddress: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">المحافظة</label>
+                    <select className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.governorate} onChange={e => setEditFormData({ ...editFormData, governorate: e.target.value })}>
+                      <option value="">-- اختر --</option>
+                      {EGYPT_GOVERNORATES.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">المدينة</label>
+                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.city} onChange={e => setEditFormData({ ...editFormData, city: e.target.value })} />
+                  </div>
+                </div>
+              </div>
 
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-    <div>
-      <label className="block text-xs font-bold mb-1">الحالة</label>
-      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.status} onChange={e => setEditFormData({ ...editFormData, status: e.target.value })}>
-        {TICKET_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-      </select>
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">الأولوية</label>
-      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.priority} onChange={e => setEditFormData({ ...editFormData, priority: e.target.value })}>
-        <option value="low">منخفضة</option>
-        <option value="medium">متوسطة</option>
-        <option value="high">عالية</option>
-      </select>
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">التكلفة التقديرية</label>
-      <input type="number" className="w-full border p-3 rounded-xl text-sm" value={editFormData.estimatedCost} onChange={e => setEditFormData({ ...editFormData, estimatedCost: Number(e.target.value) })} />
-    </div>
-  </div>
+              {/* ===== قسم: بيانات الجهاز والعطل ===== */}
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+                <div className="flex items-center gap-2 px-5 py-3 bg-amber-50/60 dark:bg-amber-900/20 border-b border-slate-100 dark:border-slate-700">
+                  <WrenchIcon size={16} className="text-amber-600 dark:text-amber-400" />
+                  <h4 className="font-black text-sm text-amber-700 dark:text-amber-300">بيانات الجهاز والعطل</h4>
+                </div>
+                <div className="p-5 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">الجهاز</label>
+                      <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-amber-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.device} onChange={e => setEditFormData({ ...editFormData, device: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">الموديل</label>
+                      <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-amber-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.deviceModel} onChange={e => setEditFormData({ ...editFormData, deviceModel: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">السيريال</label>
+                      <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold font-mono outline-none focus:border-amber-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.deviceSerial} onChange={e => setEditFormData({ ...editFormData, deviceSerial: e.target.value })} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">المشكلة</label>
+                    <textarea rows="2" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-amber-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 resize-none" value={editFormData.issue} onChange={e => setEditFormData({ ...editFormData, issue: e.target.value })} />
+                  </div>
+                </div>
+              </div>
 
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-    <div>
-      <label className="block text-xs font-bold mb-1">نوع التذكرة</label>
-      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.ticketType} onChange={e => setEditFormData({ ...editFormData, ticketType: e.target.value })}>
-        <option value="">-- اختر --</option>
-        {TICKET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-      </select>
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">المصدر</label>
-      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.source} onChange={e => setEditFormData({ ...editFormData, source: e.target.value })}>
-        <option value="">-- اختر --</option>
-        {TICKET_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-      </select>
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">أقرب فرع</label>
-      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.nearestBranch} onChange={e => setEditFormData({ ...editFormData, nearestBranch: e.target.value })}>
-        <option value="">-- اختر --</option>
-        {BRANCH_OPTIONS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
-      </select>
-    </div>
-  </div>
+              {/* ===== قسم: قطع الغيار ===== */}
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+                <div className="flex items-center gap-2 px-5 py-3 bg-emerald-50/60 dark:bg-emerald-900/20 border-b border-slate-100 dark:border-slate-700">
+                  <Package size={16} className="text-emerald-600 dark:text-emerald-400" />
+                  <h4 className="font-black text-sm text-emerald-700 dark:text-emerald-300">قطع الغيار</h4>
+                </div>
+                <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">🛠️ قطع غيار بتكلفة</label>
+                    <textarea rows="3" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 resize-none" value={editFormData.sparePartsWithCost} onChange={e => setEditFormData({...editFormData, sparePartsWithCost: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">🔧 قطع غيار بدون تكلفة</label>
+                    <textarea rows="3" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 resize-none" value={editFormData.sparePartsWithoutCost} onChange={e => setEditFormData({...editFormData, sparePartsWithoutCost: e.target.value})} />
+                  </div>
+                </div>
+              </div>
 
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-    <div>
-      <label className="block text-xs font-bold mb-1">الفني المختص</label>
-      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.assignedTechnician} onChange={e => setEditFormData({...editFormData, assignedTechnician: e.target.value})}>
-        <option value="">-- غير محدد --</option>
-        {(systemSettings?.technicians || []).map((tech, idx) => <option key={idx} value={tech}>{tech}</option>)}
-      </select>
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">مركز الصيانة</label>
-      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.assignedMaintenanceCenter} onChange={e => setEditFormData({...editFormData, assignedMaintenanceCenter: e.target.value})}>
-        <option value="">-- غير محدد --</option>
-        {(systemSettings?.maintenanceCenters || []).map(center => (
-          <option key={typeof center === 'string' ? center : center.value} value={typeof center === 'string' ? center : center.name}>
-            {typeof center === 'string' ? center : center.name}
-          </option>
-        ))}
-      </select>
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">الكول سنتر</label>
-      <select className="w-full border p-3 rounded-xl text-sm" value={editFormData.assignedCallCenter} onChange={e => setEditFormData({...editFormData, assignedCallCenter: e.target.value})}>
-        <option value="">-- غير محدد --</option>
-        {callCenters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-      </select>
-    </div>
-  </div>
+              {/* ===== قسم: التواريخ ===== */}
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+                <div className="flex items-center gap-2 px-5 py-3 bg-sky-50/60 dark:bg-sky-900/20 border-b border-slate-100 dark:border-slate-700">
+                  <CalendarDays size={16} className="text-sky-600 dark:text-sky-400" />
+                  <h4 className="font-black text-sm text-sky-700 dark:text-sky-300">التواريخ</h4>
+                </div>
+                <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">📅 تاريخ الفاتورة</label>
+                    <input type="date" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-sky-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.invoiceDate} onChange={e => setEditFormData({...editFormData, invoiceDate: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">⏰ تاريخ انتهاء الصيانة</label>
+                    <input type="date" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-sky-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.maintenanceEndDate} onChange={e => setEditFormData({...editFormData, maintenanceEndDate: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">📦 تاريخ تسليم العميل</label>
+                    <input type="date" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-sky-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.deliveryDate} onChange={e => setEditFormData({...editFormData, deliveryDate: e.target.value})} />
+                  </div>
+                </div>
+              </div>
 
-  <div>
-    <label className="block text-xs font-bold mb-1">الوسوم</label>
-    <input className="w-full border p-3 rounded-xl text-sm" value={editFormData.tags?.join(', ')} onChange={e => setEditFormData({...editFormData, tags: e.target.value.split(',').map(t => t.trim())})} />
-  </div>
-  
-  <div>
-    <label className="block text-xs font-bold mb-1">ملاحظات</label>
-    <textarea rows="2" className="w-full border p-3 rounded-xl text-sm" value={editFormData.notes} onChange={e => setEditFormData({...editFormData, notes: e.target.value})} />
-  </div>
+              {/* ===== قسم: الحالة والتصنيف والتخصيص ===== */}
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+                <div className="flex items-center gap-2 px-5 py-3 bg-purple-50/60 dark:bg-purple-900/20 border-b border-slate-100 dark:border-slate-700">
+                  <Filter size={16} className="text-purple-600 dark:text-purple-400" />
+                  <h4 className="font-black text-sm text-purple-700 dark:text-purple-300">الحالة والتصنيف والتخصيص</h4>
+                </div>
+                <div className="p-5 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">الحالة</label>
+                      <select className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-purple-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.status} onChange={e => setEditFormData({ ...editFormData, status: e.target.value })}>
+                        {TICKET_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">الأولوية</label>
+                      <select className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-purple-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.priority} onChange={e => setEditFormData({ ...editFormData, priority: e.target.value })}>
+                        <option value="low">منخفضة</option>
+                        <option value="medium">متوسطة</option>
+                        <option value="high">عالية</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">التكلفة التقديرية</label>
+                      <input type="number" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-purple-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.estimatedCost} onChange={e => setEditFormData({ ...editFormData, estimatedCost: Number(e.target.value) })} />
+                    </div>
+                  </div>
 
-  {/* ===== ✅ قسم Follow up Callcenter - تعديل ===== */}
-  <div className="border-t-2 border-indigo-200 dark:border-indigo-800 pt-4 mt-4">
-    <h4 className="font-black text-lg text-indigo-700 dark:text-indigo-300 mb-4 flex items-center gap-2">
-      <Headphones size={20} className="text-indigo-600" />
-      📋 Follow up Callcenter
-    </h4>
-    
-    <div className="space-y-4">
-      {/* السؤال 1 */}
-      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
-          1- سهولة الوصول الى الشركة
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {[1,2,3,4,5,6,7,8,9,10].map(num => (
-            <label key={num} className="flex items-center gap-1 cursor-pointer">
-              <input
-                type="radio"
-                name="editAccessibility"
-                value={num}
-                checked={editFormData.followUpAccessibility === num}
-                onChange={(e) => setEditFormData({
-                  ...editFormData,
-                  followUpAccessibility: Number(e.target.value)
-                })}
-                className="w-4 h-4 accent-indigo-600"
-              />
-              <span className="text-xs font-bold">{num}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-      
-      {/* السؤال 2 */}
-      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
-          2- تقييم وقت الصيانة
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {[1,2,3,4,5,6,7,8,9,10].map(num => (
-            <label key={num} className="flex items-center gap-1 cursor-pointer">
-              <input
-                type="radio"
-                name="editMaintenanceTime"
-                value={num}
-                checked={editFormData.followUpMaintenanceTime === num}
-                onChange={(e) => setEditFormData({
-                  ...editFormData,
-                  followUpMaintenanceTime: Number(e.target.value)
-                })}
-                className="w-4 h-4 accent-indigo-600"
-              />
-              <span className="text-xs font-bold">{num}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-      
-      {/* السؤال 3 */}
-      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
-          3- التعامل داخل مركز الصيانة
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {[1,2,3,4,5,6,7,8,9,10].map(num => (
-            <label key={num} className="flex items-center gap-1 cursor-pointer">
-              <input
-                type="radio"
-                name="editCenterDealing"
-                value={num}
-                checked={editFormData.followUpCenterDealing === num}
-                onChange={(e) => setEditFormData({
-                  ...editFormData,
-                  followUpCenterDealing: Number(e.target.value)
-                })}
-                className="w-4 h-4 accent-indigo-600"
-              />
-              <span className="text-xs font-bold">{num}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-      
-      {/* السؤال 4 */}
-      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
-          4- سهولة اجراءات التسليم و الاستلام
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {[1,2,3,4,5,6,7,8,9,10].map(num => (
-            <label key={num} className="flex items-center gap-1 cursor-pointer">
-              <input
-                type="radio"
-                name="editDeliveryProcedures"
-                value={num}
-                checked={editFormData.followUpDeliveryProcedures === num}
-                onChange={(e) => setEditFormData({
-                  ...editFormData,
-                  followUpDeliveryProcedures: Number(e.target.value)
-                })}
-                className="w-4 h-4 accent-indigo-600"
-              />
-              <span className="text-xs font-bold">{num}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-      
-      {/* السؤال 5 */}
-      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-        <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
-          5- حضرتك ممكن تشتري منتجات نوفال مرة اخرى ؟
-        </label>
-        <div className="flex gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="editRepurchase"
-              value="yes"
-              checked={editFormData.followUpRepurchase === 'yes'}
-              onChange={(e) => setEditFormData({
-                ...editFormData,
-                followUpRepurchase: e.target.value
-              })}
-              className="w-4 h-4 accent-emerald-600"
-            />
-            <span className="font-bold text-emerald-600">✅ نعم</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="editRepurchase"
-              value="no"
-              checked={editFormData.followUpRepurchase === 'no'}
-              onChange={(e) => setEditFormData({
-                ...editFormData,
-                followUpRepurchase: e.target.value
-              })}
-              className="w-4 h-4 accent-rose-600"
-            />
-            <span className="font-bold text-rose-600">❌ لا</span>
-          </label>
-        </div>
-      </div>
-      
-      {/* ملاحظات التقييم */}
-      <div>
-        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-          📝 ملاحظات إضافية عن التقييم
-        </label>
-        <textarea
-          rows="2"
-          className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm resize-none bg-white dark:bg-slate-900"
-          value={editFormData.followUpNotes || ''}
-          onChange={(e) => setEditFormData({
-            ...editFormData,
-            followUpNotes: e.target.value
-          })}
-          placeholder="أي ملاحظات إضافية عن تجربة العميل..."
-        />
-      </div>
-      
-      {/* من قام بالتقييم */}
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-            👤 من قام بالتقييم
-          </label>
-          <input
-            className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-white dark:bg-slate-900"
-            value={editFormData.followUpBy || appUser.name}
-            onChange={(e) => setEditFormData({
-              ...editFormData,
-              followUpBy: e.target.value
-            })}
-            placeholder="اسم المقيم"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-            📅 تاريخ التقييم
-          </label>
-          <input
-            type="date"
-            className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-white dark:bg-slate-900"
-            value={editFormData.followUpDate || new Date().toISOString().split('T')[0]}
-            onChange={(e) => setEditFormData({
-              ...editFormData,
-              followUpDate: e.target.value
-            })}
-          />
-        </div>
-      </div>
-    </div>
-  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">نوع التذكرة</label>
+                      <select className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-purple-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.ticketType} onChange={e => setEditFormData({ ...editFormData, ticketType: e.target.value })}>
+                        <option value="">-- اختر --</option>
+                        {TICKET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">المصدر</label>
+                      <select className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-purple-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.source} onChange={e => setEditFormData({ ...editFormData, source: e.target.value })}>
+                        <option value="">-- اختر --</option>
+                        {TICKET_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">أقرب فرع</label>
+                      <select className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-purple-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.nearestBranch} onChange={e => setEditFormData({ ...editFormData, nearestBranch: e.target.value })}>
+                        <option value="">-- اختر --</option>
+                        {BRANCH_OPTIONS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
 
-  {/* أزرار الحفظ والإلغاء */}
-  <div className="flex gap-3 pt-4 border-t">
-    <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700">حفظ التعديلات</button>
-    <button type="button" onClick={() => setEditingTicket(null)} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إلغاء</button>
-  </div>
-</form>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">الفني المختص</label>
+                      <select className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-purple-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.assignedTechnician} onChange={e => setEditFormData({...editFormData, assignedTechnician: e.target.value})}>
+                        <option value="">-- غير محدد --</option>
+                        {(systemSettings?.technicians || []).map((tech, idx) => <option key={idx} value={tech}>{tech}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">مركز الصيانة</label>
+                      <select className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-purple-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.assignedMaintenanceCenter} onChange={e => setEditFormData({...editFormData, assignedMaintenanceCenter: e.target.value})}>
+                        <option value="">-- غير محدد --</option>
+                        {(systemSettings?.maintenanceCenters || []).map(center => (
+                          <option key={typeof center === 'string' ? center : center.value} value={typeof center === 'string' ? center : center.name}>
+                            {typeof center === 'string' ? center : center.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">الكول سنتر</label>
+                      <select className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-purple-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.assignedCallCenter} onChange={e => setEditFormData({...editFormData, assignedCallCenter: e.target.value})}>
+                        <option value="">-- غير محدد --</option>
+                        {callCenters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ===== قسم: الوسوم والملاحظات ===== */}
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+                <div className="flex items-center gap-2 px-5 py-3 bg-slate-50 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-700">
+                  <Tag size={16} className="text-slate-500 dark:text-slate-400" />
+                  <h4 className="font-black text-sm text-slate-600 dark:text-slate-300">الوسوم والملاحظات</h4>
+                </div>
+                <div className="p-5 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">الوسوم</label>
+                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.tags?.join(', ')} onChange={e => setEditFormData({...editFormData, tags: e.target.value.split(',').map(t => t.trim())})} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">ملاحظات</label>
+                    <textarea rows="2" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 resize-none" value={editFormData.notes} onChange={e => setEditFormData({...editFormData, notes: e.target.value})} />
+                  </div>
+                </div>
+              </div>
+
+              {/* ===== ✅ قسم Follow up Callcenter - تعديل ===== */}
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+                <div className="flex items-center gap-2 px-5 py-3 bg-indigo-50/60 dark:bg-indigo-900/20 border-b border-slate-100 dark:border-slate-700">
+                  <Headphones size={16} className="text-indigo-600 dark:text-indigo-400" />
+                  <h4 className="font-black text-sm text-indigo-700 dark:text-indigo-300">📋 Follow up Callcenter</h4>
+                </div>
+                <div className="p-5">
+                <div className="space-y-4">
+                  {/* السؤال 1 */}
+                  <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                    <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+                      1- سهولة الوصول الى الشركة
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                        <label key={num} className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="editAccessibility"
+                            value={num}
+                            checked={editFormData.followUpAccessibility === num}
+                            onChange={(e) => setEditFormData({
+                              ...editFormData,
+                              followUpAccessibility: Number(e.target.value)
+                            })}
+                            className="w-4 h-4 accent-indigo-600"
+                          />
+                          <span className="text-xs font-bold">{num}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* السؤال 2 */}
+                  <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                    <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+                      2- تقييم وقت الصيانة
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                        <label key={num} className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="editMaintenanceTime"
+                            value={num}
+                            checked={editFormData.followUpMaintenanceTime === num}
+                            onChange={(e) => setEditFormData({
+                              ...editFormData,
+                              followUpMaintenanceTime: Number(e.target.value)
+                            })}
+                            className="w-4 h-4 accent-indigo-600"
+                          />
+                          <span className="text-xs font-bold">{num}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* السؤال 3 */}
+                  <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                    <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+                      3- التعامل داخل مركز الصيانة
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                        <label key={num} className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="editCenterDealing"
+                            value={num}
+                            checked={editFormData.followUpCenterDealing === num}
+                            onChange={(e) => setEditFormData({
+                              ...editFormData,
+                              followUpCenterDealing: Number(e.target.value)
+                            })}
+                            className="w-4 h-4 accent-indigo-600"
+                          />
+                          <span className="text-xs font-bold">{num}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* السؤال 4 */}
+                  <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                    <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+                      4- سهولة اجراءات التسليم و الاستلام
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                        <label key={num} className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="editDeliveryProcedures"
+                            value={num}
+                            checked={editFormData.followUpDeliveryProcedures === num}
+                            onChange={(e) => setEditFormData({
+                              ...editFormData,
+                              followUpDeliveryProcedures: Number(e.target.value)
+                            })}
+                            className="w-4 h-4 accent-indigo-600"
+                          />
+                          <span className="text-xs font-bold">{num}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* السؤال 5 */}
+                  <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                    <label className="block font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">
+                      5- حضرتك ممكن تشتري منتجات نوفال مرة اخرى ؟
+                    </label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="editRepurchase"
+                          value="yes"
+                          checked={editFormData.followUpRepurchase === 'yes'}
+                          onChange={(e) => setEditFormData({
+                            ...editFormData,
+                            followUpRepurchase: e.target.value
+                          })}
+                          className="w-4 h-4 accent-emerald-600"
+                        />
+                        <span className="font-bold text-emerald-600">✅ نعم</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="editRepurchase"
+                          value="no"
+                          checked={editFormData.followUpRepurchase === 'no'}
+                          onChange={(e) => setEditFormData({
+                            ...editFormData,
+                            followUpRepurchase: e.target.value
+                          })}
+                          className="w-4 h-4 accent-rose-600"
+                        />
+                        <span className="font-bold text-rose-600">❌ لا</span>
+                      </label>
+                    </div>
+                  </div>
+                  
+                  {/* ملاحظات التقييم */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+                      📝 ملاحظات إضافية عن التقييم
+                    </label>
+                    <textarea
+                      rows="2"
+                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm resize-none bg-white dark:bg-slate-900"
+                      value={editFormData.followUpNotes || ''}
+                      onChange={(e) => setEditFormData({
+                        ...editFormData,
+                        followUpNotes: e.target.value
+                      })}
+                      placeholder="أي ملاحظات إضافية عن تجربة العميل..."
+                    />
+                  </div>
+                  
+                  {/* من قام بالتقييم */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+                        👤 من قام بالتقييم
+                      </label>
+                      <input
+                        className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-white dark:bg-slate-900"
+                        value={editFormData.followUpBy || appUser.name}
+                        onChange={(e) => setEditFormData({
+                          ...editFormData,
+                          followUpBy: e.target.value
+                        })}
+                        placeholder="اسم المقيم"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+                        📅 تاريخ التقييم
+                      </label>
+                      <input
+                        type="date"
+                        className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-white dark:bg-slate-900"
+                        value={editFormData.followUpDate || new Date().toISOString().split('T')[0]}
+                        onChange={(e) => setEditFormData({
+                          ...editFormData,
+                          followUpDate: e.target.value
+                        })}
+                      />
+                    </div>
+                  </div>
+                </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ===== ✨ تذييل ثابت بأزرار الحفظ والإلغاء ===== */}
+            <div className="flex gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
+              <button type="button" onClick={() => setEditingTicket(null)} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
+                إلغاء
+              </button>
+              <button type="submit" className="flex-1 bg-gradient-to-l from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20">
+                <Save size={18}/> حفظ التعديلات
+              </button>
+            </div>
+            </form>
+
           </div>
         </div>
       )}
@@ -10059,7 +10614,41 @@ const StatusSelectComp = ({ value, onChange, ticketId }) => {
           <h2 className="text-lg font-black flex items-center gap-2">
             <MessageSquare className="text-indigo-600" size={20}/> تذاكر الصيانة
           </h2>
-          <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg text-xs">{tickets.length} تذكرة</span>
+          <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg text-xs">{displayedTickets.length} تذكرة</span>
+          <button
+            onClick={() => setShowOverdueOnly(prev => !prev)}
+            className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors ${
+              showOverdueOnly
+                ? 'bg-rose-600 text-white'
+                : 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100'
+            }`}
+            title="عرض التذاكر المتأخرة عن SLA فقط"
+          >
+            ⏰ {showOverdueOnly ? 'إلغاء فلتر المتأخرة' : 'المتأخرة فقط'}
+          </button>
+          {/* ✨ ميزة جديدة: إرسال تنبيه بالتذاكر المتأخرة عن SLA لأي شخص مسؤول (نفس رابط تنبيهات التذاكر) */}
+          {systemSettings?.ticketNotifications?.webhookUrl && overdueTickets.length > 0 && (
+            <button
+              onClick={async () => {
+                const ok = await sendWebhookNotification(systemSettings.ticketNotifications.webhookUrl, {
+                  type: 'sla_overdue_alert',
+                  triggeredAt: new Date().toISOString(),
+                  count: overdueTickets.length,
+                  tickets: overdueTickets.map(t => ({
+                    ticketNumber: t.ticketNumber,
+                    customerName: t.customerName,
+                    priority: t.priority,
+                    assignedTechnician: t.assignedTechnician || ''
+                  }))
+                });
+                if (ok) showSuccess("تم إرسال تنبيه التذاكر المتأخرة بنجاح");
+                else showError("فشل إرسال التنبيه");
+              }}
+              className="px-3 py-1 rounded-lg text-xs font-bold bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-100 flex items-center gap-1"
+            >
+              <Bell size={12}/> إرسال تنبيه بالمتأخرة ({overdueTickets.length})
+            </button>
+          )}
         </div>
         
         <div className="flex flex-wrap gap-2">
@@ -10143,6 +10732,7 @@ const StatusSelectComp = ({ value, onChange, ticketId }) => {
               <th className="p-3">النوع</th>
               <th className="p-3">الحالة</th>
               <th className="p-3">الأولوية</th>
+              <th className="p-3">SLA</th>
               <th className="p-3">الضمان</th>
               <th className="p-3">المصدر</th>
               <th className="p-3">مركز الصيانة</th>
@@ -10152,12 +10742,12 @@ const StatusSelectComp = ({ value, onChange, ticketId }) => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50 dark:divide-slate-700 font-medium text-xs">
-            {tickets.length === 0 && !loadingData ? (
+            {displayedTickets.length === 0 && !loadingData ? (
               <tr>
-                <td colSpan="14" className="p-10 text-center text-slate-400">لا توجد تذاكر</td>
+                <td colSpan="15" className="p-10 text-center text-slate-400">لا توجد تذاكر</td>
               </tr>
             ) : (
-              tickets.map(t => (
+              displayedTickets.map(t => (
                 <tr 
                   key={t.id} 
                   className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors cursor-pointer" 
@@ -10189,6 +10779,22 @@ const StatusSelectComp = ({ value, onChange, ticketId }) => {
                     <span className={`px-2 py-1 rounded-full text-[9px] font-bold ${getPriorityColor(t.priority)}`}>
                       {t.priority === 'high' ? 'عالية' : t.priority === 'medium' ? 'متوسطة' : 'منخفضة'}
                     </span>
+                  </td>
+                  <td className="p-3">
+                    {(() => {
+                      const sla = getTicketSLAInfo(t, systemSettings?.ticketSLA);
+                      if (!sla) return '-';
+                      if (sla.level === 'completed') {
+                        return <span className="px-2 py-1 rounded-full text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500">تمت</span>;
+                      }
+                      if (sla.level === 'overdue') {
+                        return <span className="px-2 py-1 rounded-full text-[9px] font-bold bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300">⏰ متأخرة {Math.abs(Math.round(sla.hoursRemaining))} س</span>;
+                      }
+                      if (sla.level === 'due_soon') {
+                        return <span className="px-2 py-1 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">⏳ باقي {Math.round(sla.hoursRemaining)} س</span>;
+                      }
+                      return <span className="px-2 py-1 rounded-full text-[9px] font-bold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">✅ في الموعد</span>;
+                    })()}
                   </td>
                   <td className="p-3">{WARRANTY_OPTIONS.find(w => w.value === t.warrantyStatus)?.label || '-'}</td>
                   <td className="p-3">{TICKET_SOURCES.find(s => s.value === t.source)?.label || '-'}</td>
@@ -10336,7 +10942,11 @@ const WARRANTY_PERIODS = [
 
     setGlobalLoading(true);
     try {
-      const itemsToDelete = Array.from(selectedItems);
+      // 🛠️ FIX: الحذف الفردي بيمنع الأدمن من حذف حسابه الحالي (الزرار
+      // بيتعطّل له)، لكن الحذف الجماعي معندهوش نفس الحماية — لو الأدمن
+      // عمل "تحديد الكل" كان ممكن يحذف حسابه بالغلط ويتقفل بره النظام.
+      const skippedSelf = selectedItems.has(appUser.id);
+      const itemsToDelete = Array.from(selectedItems).filter(id => id !== appUser.id);
       const chunks = [];
       
       for (let i = 0; i < itemsToDelete.length; i += 400) {
@@ -10357,7 +10967,9 @@ const WARRANTY_PERIODS = [
       }
 
       await logUserActivity(appUser, 'حذف مجمع مستخدمين', `تم حذف ${deleted} مستخدم`);
-      showSuccess(`تم حذف ${deleted} مستخدم بنجاح`);
+      showSuccess(skippedSelf
+        ? `تم حذف ${deleted} مستخدم بنجاح (تم تجاهل حسابك الحالي لحمايته من الحذف)`
+        : `تم حذف ${deleted} مستخدم بنجاح`);
       
       setSelectedItems(new Set());
       setShowBulkDeleteModal(false);
@@ -10429,7 +11041,7 @@ const WARRANTY_PERIODS = [
 
         await addDoc(collection(db, 'employees'), {
             email: emailToSave,
-            pass: newUser.pass,
+            pass: hashPassword(newUser.pass),
             name: newUser.name,
             phone: newUser.phone || '',
             role: newUser.role,
@@ -11094,7 +11706,7 @@ const WARRANTY_PERIODS = [
                             {u.department || '-'}
                           </td>
                           <td className="p-5 text-center">
-                            <span className={`px-3 py-1 rounded-md text-[10px] font-bold bg-${roleColor}-100 dark:bg-${roleColor}-900/30 text-${roleColor}-700 dark:text-${roleColor}-300`}>
+                            <span className={`px-3 py-1 rounded-md text-[10px] font-bold ${getRoleColorClasses(u.role)}`}>
                               {USER_ROLES.find(r => r.key === u.role)?.label || u.role}
                             </span>
                           </td>
@@ -11438,14 +12050,40 @@ for (const item of itemsToTransfer) {
 
    // دالة حذف الفرع
    const handleDeleteWarehouse = async (id) => {
+     // 🛠️ FIX: حذف الفرع مباشرة من غير أي تحقق كان بيسيب أصناف مخزون
+     // وموظفين معلّقين على warehouseId مش موجود أصلًا (بيانات يتيمة)،
+     // فبتختفي فعليًا من كل الفلاتر والتقارير من غير أي تنبيه أو تفسير.
+     setGlobalLoading(true);
+     try {
+       const [invSnap, empSnap] = await Promise.all([
+         getDocs(query(collection(db, 'inventory'), where('warehouseId', '==', id), where('isDeleted', '==', false))),
+         getDocs(query(collection(db, 'employees'), where('assignedWarehouseId', '==', id)))
+       ]);
+
+       if (invSnap.size > 0 || empSnap.size > 0) {
+         setGlobalLoading(false);
+         showError(
+           `لا يمكن حذف هذا الفرع لأنه مرتبط بـ ${invSnap.size} صنف مخزون و ${empSnap.size} موظف. ` +
+           `يرجى نقل المخزون وإعادة تعيين الموظفين لفرع آخر أولاً.`
+         );
+         return;
+       }
+     } catch (e) {
+       setGlobalLoading(false);
+       showError("فشل التحقق من بيانات الفرع قبل الحذف: " + e.message);
+       return;
+     }
+
      const confirmed = await showConfirm(
        'تأكيد حذف الفرع',
        'هل أنت متأكد من حذف هذا الفرع؟'
      );
      
-     if (!confirmed) return;
+     if (!confirmed) {
+       setGlobalLoading(false);
+       return;
+     }
      
-     setGlobalLoading(true);
      try {
        await deleteDoc(doc(db, 'warehouses', id));
        showSuccess("تم حذف الفرع بنجاح");
@@ -12012,7 +12650,7 @@ for (const item of itemsToTransfer) {
 // ==========================================================================
 // 🏪 نقطة البيع POS - الكود الكامل المعدل
 // ==========================================================================
-function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehouseMap }) { 
+function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehouseMap, prefillFromTicket, onConsumeTicketPrefill }) { 
   const [sellQty, setSellQty] = useState(1);
   const [search, setSearch] = useState('');
   const [foundItem, setFoundItem] = useState(null);
@@ -12028,19 +12666,94 @@ function POSManager({ appUser, systemSettings, notify, setGlobalLoading, warehou
     paymentMethod: 'cash',
     notes: '',
     bankTransferDetails: '',
-    cardLastFour: ''
+    cardLastFour: '',
+    // ✨ ميزة جديدة: ربط الفاتورة بتذكرة الصيانة اللي طلعت منها (لو موجودة)
+    ticketId: '',
+    ticketNumber: ''
   });
   const [invoiceData, setInvoiceData] = useState(null);
   const [recentCustomers, setRecentCustomers] = useState([]);
   const [searchHistory, setSearchHistory] = useState([]);
   const [quickAmounts] = useState([100, 200, 500, 1000, 2000, 5000]);
   const [cart, setCart] = useState([]);
+
+  // ✨ ميزة جديدة: تعبئة نقطة البيع تلقائيًا لما الفاتورة جاية من تذكرة صيانة
+  useEffect(() => {
+    if (!prefillFromTicket) return;
+    setInvoice(prev => ({
+      ...prev,
+      customerName: prefillFromTicket.customerName || '',
+      phone: prefillFromTicket.customerPhone || '',
+      ticketId: prefillFromTicket.ticketId || '',
+      ticketNumber: prefillFromTicket.ticketNumber || ''
+    }));
+    // قطع الغيار بتضاف كـ "خدمات" (isService) عشان مش مرتبطة بصنف حقيقي
+    // في المخزون بمعرّف (id)، فمينفعش تتعامل كأصناف مخزون عادية وقت الدفع.
+    const serviceItems = (prefillFromTicket.items || []).map((item, idx) => ({
+      id: `ticket-item-${prefillFromTicket.ticketId}-${idx}`,
+      name: item.name,
+      price: Number(item.price) || 0,
+      quantity: Number(item.quantity) || 1,
+      serialNumber: '-',
+      isService: true,
+      underWarranty: false
+    }));
+    if (serviceItems.length > 0) {
+      setCart(prev => [...prev, ...serviceItems]);
+    }
+    showInfo(`تم تجهيز بيانات التذكرة #${prefillFromTicket.ticketNumber} في الفاتورة`);
+    if (onConsumeTicketPrefill) onConsumeTicketPrefill();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillFromTicket]);
+
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', email: '' });
   const [paymentModal, setPaymentModal] = useState(false);
   const [cashReceived, setCashReceived] = useState(0);
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrcode, setQrcode] = useState('');
+  // ✨ ميزة جديدة: بحث ذكي عن العميل أثناء الكتابة في اسم العميل
+  const [customerSuggestions, setCustomerSuggestions] = useState([]);
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const [searchingCustomers, setSearchingCustomers] = useState(false);
+  const debouncedCustomerName = useDebounce(invoice.customerName, 400);
+
+  useEffect(() => {
+    const term = (debouncedCustomerName || '').trim();
+    if (term.length < 2) {
+      setCustomerSuggestions([]);
+      return;
+    }
+    const tokens = buildQueryTokens(term);
+    if (tokens.length === 0) return;
+
+    let cancelled = false;
+    const search = async () => {
+      setSearchingCustomers(true);
+      try {
+        const q = query(
+          collection(db, 'customers'),
+          where('searchTokens', 'array-contains-any', tokens),
+          limit(20)
+        );
+        const snap = await getDocs(q);
+        let results = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // ترتيب النتائج: الأقرب لبداية الاسم أولاً
+        const normalizedTerm = normalizeSearch(term);
+        results.sort((a, b) => {
+          const aStarts = normalizeSearch(a.name || '').startsWith(normalizedTerm) ? 0 : 1;
+          const bStarts = normalizeSearch(b.name || '').startsWith(normalizedTerm) ? 0 : 1;
+          return aStarts - bStarts;
+        });
+        if (!cancelled) setCustomerSuggestions(results.slice(0, 6));
+      } catch (error) {
+        console.error("Customer search error:", error);
+      }
+      if (!cancelled) setSearchingCustomers(false);
+    };
+    search();
+    return () => { cancelled = true; };
+  }, [debouncedCustomerName]);
 
   useEffect(() => {
     const fetchRecentCustomers = async () => {
@@ -12319,85 +13032,158 @@ const handleCheckout = async () => {
   const invId = 'INV-' + Date.now().toString().slice(-8);
   
   try {
-    // ✅ استخدام Batch بدلاً من Transaction
-    const batch = writeBatch(db);
+    // 🛠️ FIX: كان بيستخدم Batch مع قراءة الكمية (getDoc) قبلها بشكل منفصل.
+    // ده معناه لو كاشيرين بيبيعوا نفس المنتج في نفس اللحظة، الاتنين ممكن
+    // يقروا نفس الكمية المتاحة، الاتنين يعدّوا إن الكمية كافية، ويحصل بيع
+    // بكمية أكبر من المتاح فعليًا (oversell) لأن آخر batch بيكتب فوق الأول
+    // بدل ما يخصم من القيمة الحقيقية وقت الكتابة. استخدام runTransaction
+    // بيضمن إن القراءة والتحقق والخصم بيحصلوا كوحدة واحدة ذرية (atomic).
+    // ✨ ميزة جديدة: لو العميل مش موجود بالفعل (مفيش رقم هاتف مطابق)،
+    // يتم إنشاؤه تلقائيًا بدل ما بياناته تفضل موجودة في الفاتورة بس
+    // (نفس الأسلوب المستخدم بالفعل عند إنشاء تذكرة صيانة لعميل جديد).
+    let customerRefForUpdate = null;
+    let isNewCustomer = false;
+    const normalizedInvoicePhone = normalizePhone(invoice.phone);
+    if (normalizedInvoicePhone) {
+      const existingSnap = await getDocs(query(collection(db, 'customers'), where('phone', '==', normalizedInvoicePhone)));
+      if (!existingSnap.empty) {
+        customerRefForUpdate = existingSnap.docs[0].ref;
+      } else {
+        customerRefForUpdate = doc(collection(db, 'customers'));
+        isNewCustomer = true;
+      }
+    }
+
+    const transRef = doc(collection(db, 'transactions'));
     const itemsToProcess = foundItem ? [foundItem] : cart;
-    
-    // ✅ التحقق من الكميات أولاً (خارج المعاملة)
-    for (const item of itemsToProcess) {
-      if (!item.isService) {
-        const itemRef = doc(db, 'inventory', item.id);
-        const itemSnap = await getDoc(itemRef);
-        
+
+    await runTransaction(db, async (transaction) => {
+      // 1️⃣ كل القراءات الأول (متطلب أساسي لـ Firestore transactions)
+      const itemRefs = itemsToProcess
+        .filter(item => !item.isService)
+        .map(item => doc(db, 'inventory', item.id));
+      const itemSnaps = await Promise.all(itemRefs.map(ref => transaction.get(ref)));
+
+      // 2️⃣ التحقق من توفر الكمية بناءً على أحدث قراءة فعلية داخل نفس الـ transaction
+      let snapIdx = 0;
+      for (const item of itemsToProcess) {
+        if (item.isService) continue;
+        const itemSnap = itemSnaps[snapIdx++];
         if (!itemSnap.exists()) {
           throw new Error(`❌ المنتج ${item.name} غير موجود!`);
         }
-        
         const currentQty = itemSnap.data().quantity || 0;
         if (currentQty < item.quantity) {
           throw new Error(`❌ الكمية غير كافية للمنتج ${item.name}! المتاح: ${currentQty}, المطلوب: ${item.quantity}`);
         }
-        
-        // ✅ إضافة تحديث الكمية إلى Batch
-        batch.update(itemRef, { 
+      }
+
+      // 3️⃣ الكتابات: خصم الكميات + إنشاء الفاتورة + تحديث العميل
+      snapIdx = 0;
+      for (const item of itemsToProcess) {
+        if (item.isService) continue;
+        const itemRef = itemRefs[snapIdx];
+        const currentQty = itemSnaps[snapIdx].data().quantity || 0;
+        snapIdx++;
+        transaction.update(itemRef, {
           quantity: currentQty - item.quantity,
           updatedAt: serverTimestamp()
         });
       }
-    }
 
-    // ✅ إضافة الفاتورة إلى Batch
-    const joinedNames = itemsToProcess.map(i => i.name).join(' + ');
-    const joinedSerials = itemsToProcess.map(i => i.serialNumber).join(', ');
+      const joinedNames = itemsToProcess.map(i => i.name).join(' + ');
+      const joinedSerials = itemsToProcess.map(i => i.serialNumber).join(', ');
 
-    const transactionData = { 
-      ...calculations, 
-      customerName: invoice.customerName,
-      phone: invoice.phone,
-      email: invoice.email,
-      technicianName: invoice.technicianName,
-      discount: Number(invoice.discount) || 0,
-      discountType: invoice.discountType,
-      taxEnabled: invoice.taxEnabled,
-      installationFeeId: invoice.installationFeeId || null,
-      paymentMethod: invoice.paymentMethod,
-      paymentDetails: invoice.paymentMethod === 'card' ? { cardLastFour: invoice.cardLastFour } :
-                     invoice.paymentMethod === 'transfer' ? { bankTransferDetails: invoice.bankTransferDetails } : {},
-      notes: invoice.notes,
-      type: 'sell', 
-      items: itemsToProcess.map(item => ({
-        ...item,
-        underWarranty: item.underWarranty || false,
-        isService: item.isService || false
-      })),
-      itemName: joinedNames, 
-      serialNumber: joinedSerials, 
-      warehouseId: appUser.assignedWarehouseId || 'main', 
-      operator: appUser.name || appUser.email || 'موظف', 
-      invoiceNumber: invId, 
-      timestamp: serverTimestamp() 
-    };
-    
-    const transRef = doc(collection(db, 'transactions'));
-    batch.set(transRef, transactionData);
-    
-    // ✅ تحديث بيانات العميل
-    if (invoice.phone) {
-      const customerQuery = query(collection(db, 'customers'), where('phone', '==', invoice.phone));
-      const customerSnap = await getDocs(customerQuery);
-      if (!customerSnap.empty) {
-        const customerRef = doc(db, 'customers', customerSnap.docs[0].id);
-        batch.update(customerRef, {
-          totalPurchases: increment(1),
-          lastPurchase: serverTimestamp()
-        });
+      const transactionData = { 
+        ...calculations, 
+        customerName: invoice.customerName,
+        phone: invoice.phone,
+        email: invoice.email,
+        technicianName: invoice.technicianName,
+        discount: Number(invoice.discount) || 0,
+        discountType: invoice.discountType,
+        taxEnabled: invoice.taxEnabled,
+        installationFeeId: invoice.installationFeeId || null,
+        paymentMethod: invoice.paymentMethod,
+        paymentDetails: invoice.paymentMethod === 'card' ? { cardLastFour: invoice.cardLastFour } :
+                       invoice.paymentMethod === 'transfer' ? { bankTransferDetails: invoice.bankTransferDetails } : {},
+        notes: invoice.notes,
+        type: 'sell', 
+        // ✨ ميزة جديدة: ربط الفاتورة بتذكرة الصيانة (لو الفاتورة دي طالعة من تذكرة)
+        ticketId: invoice.ticketId || null,
+        ticketNumber: invoice.ticketNumber || null,
+        items: itemsToProcess.map(item => {
+          const warrantyMonths = Number(item.warrantyMonths) || 0;
+          let warrantyEndDate = null;
+          if (!item.isService && !item.underWarranty && warrantyMonths > 0) {
+            const end = new Date();
+            end.setMonth(end.getMonth() + warrantyMonths);
+            warrantyEndDate = end.toISOString().split('T')[0];
+          }
+          return {
+            ...item,
+            underWarranty: item.underWarranty || false,
+            isService: item.isService || false,
+            warrantyMonths,
+            warrantyEndDate
+          };
+        }),
+        itemName: joinedNames, 
+        serialNumber: joinedSerials, 
+        warehouseId: appUser.assignedWarehouseId || 'main', 
+        operator: appUser.name || appUser.email || 'موظف', 
+        invoiceNumber: invId, 
+        timestamp: serverTimestamp() 
+      };
+
+      transaction.set(transRef, transactionData);
+
+      if (customerRefForUpdate) {
+        if (isNewCustomer) {
+          transaction.set(customerRefForUpdate, {
+            name: invoice.customerName,
+            phone: normalizedInvoicePhone,
+            email: invoice.email || '',
+            searchKey: normalizeSearch(`${invoice.customerName} ${normalizedInvoicePhone}`),
+            searchTokens: buildSearchTokens(invoice.customerName, normalizedInvoicePhone),
+            createdAt: serverTimestamp(),
+            totalPurchases: 1,
+            lastPurchase: serverTimestamp()
+          });
+        } else {
+          transaction.update(customerRefForUpdate, {
+            totalPurchases: increment(1),
+            lastPurchase: serverTimestamp()
+          });
+        }
       }
-    }
-    
-    // ✅ تنفيذ Batch
-    await batch.commit();
+    });
     
     await logUserActivity(appUser, 'إصدار فاتورة', `إصدار فاتورة #${invId} للعميل ${invoice.customerName} بقيمة ${calculations.finalTotal} ج`);
+
+    // ✨ ميزة جديدة: ربط التذكرة برقم الفاتورة الناتجة عنها (ربط ثنائي الاتجاه)
+    if (invoice.ticketId) {
+      try {
+        await updateDoc(doc(db, 'tickets', invoice.ticketId), {
+          linkedInvoiceNumber: invId,
+          linkedInvoiceDate: serverTimestamp()
+        });
+      } catch (linkError) {
+        console.error("Ticket-invoice link error:", linkError);
+      }
+    }
+
+    // ✨ ميزة جديدة: تسجيل صريح للخصومات على الفواتير (سجل تعديلات الخصومات)
+    if ((Number(invoice.discount) || 0) > 0) {
+      const discountLabel = invoice.discountType === 'percent'
+        ? `${invoice.discount}%`
+        : `${invoice.discount} ج`;
+      await logUserActivity(
+        appUser,
+        'تطبيق خصم',
+        `تطبيق خصم ${discountLabel} على فاتورة #${invId} للعميل ${invoice.customerName} (قيمة الخصم الفعلية: ${calculations.discountAmount || 0} ج)`
+      );
+    }
 
     setInvoiceData({ 
       items: foundItem ? [foundItem] : cart,
@@ -12421,7 +13207,9 @@ const handleCheckout = async () => {
       paymentMethod: 'cash',
       notes: '',
       bankTransferDetails: '',
-      cardLastFour: ''
+      cardLastFour: '',
+      ticketId: '',
+      ticketNumber: ''
     });
     
     showSuccess("✅ تم البيع بنجاح");
@@ -12596,6 +13384,16 @@ const handleCheckout = async () => {
         <h2 className="text-2xl font-black mb-8 flex items-center gap-3 text-slate-800 dark:text-white">
           <Receipt className="text-indigo-600" size={26}/> نقطة البيع POS
         </h2>
+
+        {/* ✨ ميزة جديدة: تنبيه إن الفاتورة دي مرتبطة بتذكرة صيانة */}
+        {invoice.ticketId && (
+          <div className="mb-6 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded-xl p-3 flex items-center gap-2 text-sm">
+            <LinkIcon size={16} className="text-indigo-600 dark:text-indigo-400 shrink-0"/>
+            <span className="text-indigo-700 dark:text-indigo-300 font-bold">
+              هذه الفاتورة مرتبطة بتذكرة الصيانة #{invoice.ticketNumber}
+            </span>
+          </div>
+        )}
         
         {/* ===== شريط البحث ===== */}
         <form onSubmit={handleSearch} className="flex gap-3 mb-8 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
@@ -12663,6 +13461,24 @@ const handleCheckout = async () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
+                    {/* ✨ ميزة جديدة: تحديد مدة ضمان المنتج المباع (لتفعيل تنبيهات اقتراب انتهاء الضمان لاحقًا) */}
+                    {!item.underWarranty && (
+                      <div className="flex items-center gap-1" title="مدة ضمان هذا المنتج بالشهور">
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          value={item.warrantyMonths || ''}
+                          onChange={(e) => {
+                            const updatedCart = [...cart];
+                            updatedCart[idx] = { ...updatedCart[idx], warrantyMonths: Number(e.target.value) || 0 };
+                            setCart(updatedCart);
+                          }}
+                          className="w-14 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 text-xs text-center bg-white dark:bg-slate-900"
+                        />
+                        <span className="text-[9px] text-slate-400">شهر ضمان</span>
+                      </div>
+                    )}
                     <span className={`font-black ${item.underWarranty ? 'text-emerald-500 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
                       {item.underWarranty ? '0 ج' : `${(item.price * item.quantity).toLocaleString()} ج`}
                     </span>
@@ -12690,9 +13506,46 @@ const handleCheckout = async () => {
                   className="w-full border border-slate-200 dark:border-slate-700 pr-10 p-3 rounded-xl font-bold focus:border-indigo-500 outline-none text-sm bg-white dark:bg-slate-900" 
                   placeholder="اسم العميل" 
                   value={invoice.customerName} 
-                  onChange={e => setInvoice({...invoice, customerName: e.target.value})} 
+                  onChange={e => {
+                    setInvoice({...invoice, customerName: e.target.value});
+                    setShowCustomerSuggestions(true);
+                  }}
+                  onFocus={() => setShowCustomerSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 150)}
+                  autoComplete="off"
                   required
                 />
+                {/* ✨ قائمة اقتراحات العملاء الموجودين فعليًا */}
+                {showCustomerSuggestions && invoice.customerName.trim().length >= 2 && (
+                  <div className="absolute z-20 top-full mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                    {searchingCustomers ? (
+                      <div className="p-3 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                        <Loader2 size={14} className="animate-spin"/> جاري البحث...
+                      </div>
+                    ) : customerSuggestions.length > 0 ? (
+                      <>
+                        <div className="px-3 py-1.5 text-[10px] text-slate-400 border-b border-slate-100 dark:border-slate-700">
+                          عملاء موجودين فعلاً - اضغط للاختيار
+                        </div>
+                        {customerSuggestions.map(c => (
+                          <button
+                            type="button"
+                            key={c.id}
+                            onClick={() => { handleSelectCustomer(c); setShowCustomerSuggestions(false); }}
+                            className="w-full text-right px-3 py-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 flex items-center justify-between gap-2 border-b border-slate-50 dark:border-slate-700/50 last:border-0"
+                          >
+                            <span className="font-bold text-sm">{c.name}</span>
+                            <span className="text-xs text-slate-400 font-mono" dir="ltr">{c.phone}</span>
+                          </button>
+                        ))}
+                      </>
+                    ) : (
+                      <div className="p-3 text-center text-xs text-slate-400">
+                        مفيش عميل بهذا الاسم - هيتم اعتباره عميل جديد تلقائيًا عند إتمام البيع
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => setShowCustomerModal(true)}
@@ -12754,6 +13607,7 @@ const handleCheckout = async () => {
                 value={invoice.discount} 
                 onChange={e => setInvoice({...invoice, discount: e.target.value})} 
                 min="0"
+                max={invoice.discountType === 'percent' ? 100 : undefined}
                 placeholder="0"
               />
               <select 
@@ -13014,7 +13868,11 @@ function ReturnsManager({ appUser, systemSettings, notify, setGlobalLoading, war
         fromWarehouse: appUser.assignedWarehouseId || 'main',
         status: 'pending',
         approvedBy: '',
-        approvedAt: null
+        approvedAt: null,
+        // 🛠️ FIX: تسجيل الصنف اللي اتخصمت منه الكمية فعليًا (لو موجود)،
+        // عشان لو المرتجع اترفض بعدين، نرجّع الكمية لنفس الصنف بالظبط
+        // مش نبحث تاني بالسيريال (اللي ممكن يطابق صنف مختلف أو يفشل).
+        deductedInventoryId: (foundProduct && foundProduct.id) ? foundProduct.id : null
       };
 
       const docRef = await addDoc(collection(db, 'returns'), returnData);
@@ -13067,6 +13925,13 @@ const handleApproveReturn = async (returnId) => {
     }
     
     const returnData = returnSnap.data();
+
+    // 🛠️ FIX: مفيش أي تحقق قبل كده من إن المرتجع لسه "قيد الانتظار"، فلو
+    // الأدمن ضغط "موافقة" مرتين بسرعة (أو الشبكة اتأخرت والزرار اتضغط تاني)
+    // كان بيتكرر إضافة الكمية للمخزون/مخزن المرتجعات مرتين لنفس المرتجع.
+    if (returnData.status && returnData.status !== 'pending') {
+      throw new Error("تمت معالجة هذا المرتجع بالفعل");
+    }
     
     // ✅ معالجة حسب نوع المرتجع
     const reason = returnData.reason;
@@ -13109,6 +13974,7 @@ const handleApproveReturn = async (returnId) => {
           notes: `مرتجع من ${returnData.fromWarehouse}`,
           warehouseId: approveData.toWarehouse,
           searchKey: normalizeSearch(`${productName} ${serialNumber}`),
+          searchTokens: buildSearchTokens(productName, serialNumber),
           createdAt: serverTimestamp(),
           isDeleted: false
         });
@@ -13191,6 +14057,31 @@ const handleApproveReturn = async (returnId) => {
     setGlobalLoading(true);
     try {
       const returnRef = doc(db, 'returns', returnId);
+      const returnSnap = await getDoc(returnRef);
+      if (!returnSnap.exists()) {
+        throw new Error("المرتجع غير موجود");
+      }
+      const returnData = returnSnap.data();
+
+      // 🛠️ FIX: منع رفض مرتجع اتعالج بالفعل (موافق عليه أو مرفوض سابقًا)
+      if (returnData.status && returnData.status !== 'pending') {
+        throw new Error("تمت معالجة هذا المرتجع بالفعل");
+      }
+
+      // 🛠️ FIX: إضافة المرتجع كانت بتخصم الكمية من مخزون المصدر فورًا،
+      // ولما يترفض المرتجع الكمية دي مكنتش بترجع تاني للمخزون أبدًا،
+      // فالمخزون كان بيفقد كمية حقيقية بدون أي سبب. هنا بنرجّعها لنفس
+      // الصنف بالظبط اللي اتخصم منه (لو كان الخصم حصل أصلًا).
+      if (returnData.deductedInventoryId) {
+        const sourceRef = doc(db, 'inventory', returnData.deductedInventoryId);
+        const sourceSnap = await getDoc(sourceRef);
+        if (sourceSnap.exists()) {
+          await updateDoc(sourceRef, {
+            quantity: increment(returnData.quantity || 1),
+            updatedAt: serverTimestamp()
+          });
+        }
+      }
       
       await updateDoc(returnRef, {
         status: 'rejected',
@@ -13198,11 +14089,11 @@ const handleApproveReturn = async (returnId) => {
         approvedAt: serverTimestamp()
       });
       
-      showSuccess("تم رفض المرتجع");
+      showSuccess("تم رفض المرتجع وإرجاع الكمية للمخزون");
       loadReturns();
     } catch (error) {
       console.error("Error rejecting return:", error);
-      showError("فشل رفض المرتجع");
+      showError("فشل رفض المرتجع: " + (error.message || ''));
     }
     setGlobalLoading(false);
   };
@@ -13615,6 +14506,20 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
   const [apiKeys, setApiKeys] = useState([]);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [newApiKey, setNewApiKey] = useState({ name: '', permissions: [] });
+  // 🛠️ FIX: settings المحلية كانت بتتاخد من systemSettings مرة واحدة بس
+  // وقت أول رندر (useState لا يتزامن تلقائيًا مع تغيّر الـ prop). فلو
+  // الإعدادات الحقيقية اتحمّلت من Firebase بعد ما الشاشة فتحت (تحميل غير
+  // متزامن)، أو اتغيّرت من جلسة أدمن تانية، الشاشة كانت تفضل عارضة قيم
+  // قديمة/افتراضية، وأي حفظ بعد كده كان بيدَرِس التحديثات الحقيقية.
+  // هنا بنعمل مزامنة تلقائية، لكن بس لو المستخدم معملش أي تعديل محلي
+  // لسه (عشان منمسحش تعديلات المستخدم الحالية بالغلط).
+  const lastSyncedRef = useRef(systemSettings);
+  useEffect(() => {
+    if (JSON.stringify(settings) === JSON.stringify(lastSyncedRef.current)) {
+      setLocalSettings(systemSettings);
+    }
+    lastSyncedRef.current = systemSettings;
+  }, [systemSettings]);
 
   // مراقبة تغييرات settings
   useEffect(() => {
@@ -13887,7 +14792,9 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
           { id: 'branches', label: 'الفروع', icon: MapPin },
           { id: 'maintenance_centers', label: 'مراكز الصيانة', icon: WrenchIcon },
           { id: 'products', label: 'المنتجات والموديلات', icon: Package },
-          { id: 'import_data', label: 'استيراد بيانات (Excel)', icon: UploadCloud }
+          { id: 'import_data', label: 'استيراد بيانات (Excel)', icon: UploadCloud },
+          { id: 'audit_log', label: 'سجل التدقيق', icon: History },
+          { id: 'duplicate_customers', label: 'دمج العملاء المكررين', icon: UsersRound }
           // تم حذف { id: 'faults', label: 'أكواد الأعطال', icon: AlertCircle }
         ].map(tab => (
           <button
@@ -13906,6 +14813,12 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
       </div>
       
       {/* باقي المحتوى كما هو */}
+      {activeTab === 'audit_log' && (appUser.permissions?.viewAuditLog || appUser.role === 'admin') && (
+        <AuditLogManager />
+      )}
+      {activeTab === 'duplicate_customers' && appUser.role === 'admin' && (
+        <DuplicateCustomersManager appUser={appUser} />
+      )}
       {activeTab === 'products' && (appUser.permissions?.manageProductModels || appUser.role === 'admin') && (
         <ProductModelManager systemSettings={settings} setLocalSettings={setLocalSettings} />
       )}
@@ -14040,6 +14953,196 @@ function SettingsManager({ systemSettings, setSettings, notify, setGlobalLoading
                 onChange={e => setLocalSettings({...settings, footerText: e.target.value})}
                 placeholder="شكراً لتعاملكم معنا..."
               />
+            </div>
+
+            {/* ✨ ميزة جديدة: رابط خدمة إرسال البريد الإلكتروني */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2">رابط خدمة إرسال البريد الإلكتروني (Webhook)</label>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                مطلوب عشان زرار "إرسال بالبريد" في الفاتورة يشتغل فعليًا. تقدر تستخدم EmailJS أو Zapier أو Make لإنشاء الرابط ده.
+              </p>
+              <input
+                type="url"
+                placeholder="https://api.emailjs.com/... أو أي رابط Webhook لإرسال البريد"
+                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                value={settings.emailWebhookUrl || ''}
+                onChange={e => setLocalSettings({...settings, emailWebhookUrl: e.target.value})}
+              />
+            </div>
+
+            {/* ✨ ميزة جديدة: تنبيهات النواقص التلقائية */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400">تنبيهات النواقص التلقائية</label>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={settings.lowStockAlerts?.enabled || false}
+                    onChange={e => setLocalSettings({
+                      ...settings,
+                      lowStockAlerts: { ...(settings.lowStockAlerts || {}), enabled: e.target.checked }
+                    })}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                لما تفعّلها، النظام هيبعت قائمة النواقص تلقائيًا لرابط (Webhook) تحدده — تقدر تربطه بخدمة زي Zapier أو Make أو n8n عشان توصّل الرسالة بريد إلكتروني أو واتساب.
+                ملحوظة: بما إن التطبيق ده يعمل من المتصفح، الإرسال بيحصل لما حد يفتح شاشة "النواقص" وعدّى الوقت المحدد من آخر إرسال — مش سيرفر شغال 24 ساعة.
+              </p>
+              <input
+                type="url"
+                placeholder="https://hooks.zapier.com/... أو أي رابط Webhook"
+                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 mb-3"
+                value={settings.lowStockAlerts?.webhookUrl || ''}
+                onChange={e => setLocalSettings({
+                  ...settings,
+                  lowStockAlerts: { ...(settings.lowStockAlerts || {}), webhookUrl: e.target.value }
+                })}
+              />
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">إرسال كل كام ساعة</label>
+              <input
+                type="number"
+                min="1"
+                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                value={settings.lowStockAlerts?.frequencyHours || 24}
+                onChange={e => setLocalSettings({
+                  ...settings,
+                  lowStockAlerts: { ...(settings.lowStockAlerts || {}), frequencyHours: Number(e.target.value) || 24 }
+                })}
+              />
+            </div>
+
+            {/* ✨ ميزة جديدة: إشعار العميل عند تغيير حالة تذكرته */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400">إشعار العميل عند تغيير حالة التذكرة</label>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={settings.ticketNotifications?.enabled || false}
+                    onChange={e => setLocalSettings({
+                      ...settings,
+                      ticketNotifications: { ...(settings.ticketNotifications || {}), enabled: e.target.checked }
+                    })}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                لما تفعّلها، أي تغيير في حالة تذكرة صيانة (مثلاً "جاهزة للاستلام") هيبعت طلب لرابط Webhook تحدده هنا، تقدر تربطه بخدمة زي Zapier أو Make عشان توصّل SMS أو رسالة واتساب للعميل تلقائيًا.
+              </p>
+              <input
+                type="url"
+                placeholder="https://hooks.zapier.com/... أو أي رابط Webhook"
+                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                value={settings.ticketNotifications?.webhookUrl || ''}
+                onChange={e => setLocalSettings({
+                  ...settings,
+                  ticketNotifications: { ...(settings.ticketNotifications || {}), webhookUrl: e.target.value }
+                })}
+              />
+            </div>
+
+            {/* ✨ ميزة جديدة: تنبيه اقتراب انتهاء الضمان */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400">تنبيه اقتراب انتهاء الضمان</label>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={settings.warrantyAlerts?.enabled || false}
+                    onChange={e => setLocalSettings({
+                      ...settings,
+                      warrantyAlerts: { ...(settings.warrantyAlerts || {}), enabled: e.target.checked }
+                    })}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                لما تفعّلها، هتقدر تشوف وترسل تنبيهات للمنتجات اللي ضمانها قرّب يخلص من شاشة "تنبيهات الضمان" (تحت التقارير)، بنفس أسلوب تنبيهات النواقص.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input
+                  type="url"
+                  placeholder="رابط Webhook"
+                  className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                  value={settings.warrantyAlerts?.webhookUrl || ''}
+                  onChange={e => setLocalSettings({
+                    ...settings,
+                    warrantyAlerts: { ...(settings.warrantyAlerts || {}), webhookUrl: e.target.value }
+                  })}
+                />
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1">التنبيه قبل الانتهاء بكام يوم</label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                    value={settings.warrantyAlerts?.daysBeforeExpiry || 30}
+                    onChange={e => setLocalSettings({
+                      ...settings,
+                      warrantyAlerts: { ...(settings.warrantyAlerts || {}), daysBeforeExpiry: Number(e.target.value) || 30 }
+                    })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* ✨ ميزة جديدة: تسجيل خروج تلقائي بعد فترة خمول */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2">تسجيل الخروج التلقائي بعد الخمول (بالدقائق)</label>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                مفيد لو الأجهزة (زي الكاشير) مشتركة بين أكتر من موظف - يمنع بقاء الجلسة مفتوحة لو حد نسي يعمل تسجيل خروج. اكتب 0 لتعطيل هذه الميزة.
+              </p>
+              <input
+                type="number"
+                min="0"
+                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                value={settings.autoLogoutMinutes ?? 30}
+                onChange={e => setLocalSettings({...settings, autoLogoutMinutes: Number(e.target.value) || 0})}
+              />
+            </div>
+
+            {/* ✨ ميزة جديدة: تتبع SLA للتذاكر */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2">مهلة حل التذكرة المستهدفة (SLA) - بالساعات</label>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                لو التذكرة عدّت المدة دي من وقت إنشائها من غير ما توصل لحالة نهائية (تسليم/إغلاق)، هتتحسب "متأخرة" في شاشة التذاكر.
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-rose-500 mb-1">أولوية عالية</label>
+                  <input
+                    type="number" min="1"
+                    className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-rose-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                    value={settings.ticketSLA?.high ?? 4}
+                    onChange={e => setLocalSettings({...settings, ticketSLA: { ...(settings.ticketSLA || {}), high: Number(e.target.value) || 1 }})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-amber-500 mb-1">أولوية متوسطة</label>
+                  <input
+                    type="number" min="1"
+                    className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-amber-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                    value={settings.ticketSLA?.medium ?? 24}
+                    onChange={e => setLocalSettings({...settings, ticketSLA: { ...(settings.ticketSLA || {}), medium: Number(e.target.value) || 1 }})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-emerald-500 mb-1">أولوية منخفضة</label>
+                  <input
+                    type="number" min="1"
+                    className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-emerald-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                    value={settings.ticketSLA?.low ?? 72}
+                    onChange={e => setLocalSettings({...settings, ticketSLA: { ...(settings.ticketSLA || {}), low: Number(e.target.value) || 1 }})}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -14368,6 +15471,14 @@ function ProductModelManager({ systemSettings, setLocalSettings }) {
   };
 
   const deleteProduct = async (id) => {
+    // 🛠️ FIX: الحذف كان بيحصل فورًا من غير أي تأكيد، رغم إنه بيمسح
+    // بشكل تسلسلي كل الموديلات وأكواد الأعطال المرتبطة بالمنتج ده.
+    const confirmed = await showConfirm(
+      'تأكيد حذف المنتج',
+      'سيتم حذف هذا المنتج وكل الموديلات وأكواد الأعطال المرتبطة به نهائيًا. هل أنت متأكد؟'
+    );
+    if (!confirmed) return;
+
     // حذف جميع الموديلات المرتبطة بهذا المنتج
     const modelsSnap = await getDocs(query(collection(db, 'models'), where('productId', '==', id)));
     for (const modelDoc of modelsSnap.docs) {
@@ -14410,6 +15521,12 @@ function ProductModelManager({ systemSettings, setLocalSettings }) {
   };
 
   const deleteModel = async (modelId) => {
+    const confirmed = await showConfirm(
+      'تأكيد حذف الموديل',
+      'سيتم حذف هذا الموديل وكل أكواد الأعطال المرتبطة به نهائيًا. هل أنت متأكد؟'
+    );
+    if (!confirmed) return;
+
     // حذف أكواد الأعطال الرئيسية والفرعية المرتبطة بهذا الموديل
     const mainFaultsSnap = await getDocs(query(collection(db, 'mainFaultCodes'), where('modelId', '==', modelId)));
     for (const mainFaultDoc of mainFaultsSnap.docs) {
@@ -14445,6 +15562,12 @@ function ProductModelManager({ systemSettings, setLocalSettings }) {
   };
 
   const deleteMainFault = async (mainFaultId) => {
+    const confirmed = await showConfirm(
+      'تأكيد الحذف',
+      'سيتم حذف كود العطل الرئيسي وكل الأكواد الفرعية المرتبطة به. هل أنت متأكد؟'
+    );
+    if (!confirmed) return;
+
     // حذف أكواد الأعطال الفرعية المرتبطة
     const subFaultsSnap = await getDocs(query(collection(db, 'subFaultCodes'), where('mainFaultId', '==', mainFaultId)));
     for (const subFaultDoc of subFaultsSnap.docs) {
@@ -14475,6 +15598,8 @@ function ProductModelManager({ systemSettings, setLocalSettings }) {
   };
 
   const deleteSubFault = async (subFaultId) => {
+    const confirmed = await showConfirm('تأكيد الحذف', 'هل أنت متأكد من حذف كود العطل الفرعي هذا؟');
+    if (!confirmed) return;
     await deleteDoc(doc(db, 'subFaultCodes', subFaultId));
   };
 
@@ -14592,74 +15717,380 @@ function ProductModelManager({ systemSettings, setLocalSettings }) {
 }
 
 // ==========================================================================
-// 🏷️ إدارة أكواد الأعطال
+// 🔁 دمج العملاء المكررين - Duplicate Customers Manager
+// (ميزة جديدة: تكتشف العملاء اللي عندهم نفس رقم الهاتف بعد التوحيد
+// وتسمح بدمجهم في سجل واحد بدل التكرار)
 // ==========================================================================
-function FaultCodeManager() {
-  const [faults, setFaults] = useState([]);
-  const [models, setModels] = useState([]);
-  const [selectedModelId, setSelectedModelId] = useState('');
-  const [newCode, setNewCode] = useState('');
-  const [newDesc, setNewDesc] = useState('');
+function DuplicateCustomersManager({ appUser }) {
+  const [loading, setLoading] = useState(true);
+  const [duplicateGroups, setDuplicateGroups] = useState([]);
+  const [selectedPrimary, setSelectedPrimary] = useState({});
+  const [merging, setMerging] = useState(null);
 
-  useEffect(() => {
-    const loadModels = async () => {
-      const snap = await getDocs(collection(db, 'models'));
-      setModels(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    };
-    loadModels();
-  }, []);
+  const scanForDuplicates = async () => {
+    setLoading(true);
+    try {
+      const snap = await getDocs(collection(db, 'customers'));
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-  useEffect(() => {
-    if (selectedModelId) {
-      const q = query(collection(db, 'faultCodes'), where('modelId', '==', selectedModelId));
-      const unsub = onSnapshot(q, snap => setFaults(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-      return unsub;
-    } else {
-      setFaults([]);
+      // تجميع حسب رقم الهاتف الموحّد + حسب الاسم (لو الهاتف فاضي)
+      const groups = {};
+      all.forEach(c => {
+        const key = normalizePhone(c.phone) || `name:${normalizeSearch(c.name || '')}`;
+        if (!key || key === 'name:') return;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(c);
+      });
+
+      const dupGroups = Object.values(groups).filter(g => g.length > 1);
+      // ترتيب كل مجموعة: الأقدم أولاً (مرشح طبيعي ليكون العميل الأساسي)
+      dupGroups.forEach(g => g.sort((a, b) => {
+        const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+        const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+        return aTime - bTime;
+      }));
+
+      setDuplicateGroups(dupGroups);
+      const defaults = {};
+      dupGroups.forEach((g, idx) => { defaults[idx] = g[0].id; });
+      setSelectedPrimary(defaults);
+    } catch (error) {
+      console.error("Duplicate scan error:", error);
+      showError("فشل فحص العملاء المكررين");
     }
-  }, [selectedModelId]);
-
-  const addFault = async () => {
-    if (!selectedModelId || !newCode.trim() || !newDesc.trim()) return;
-    await addDoc(collection(db, 'faultCodes'), { modelId: selectedModelId, code: newCode.trim(), description: newDesc.trim() });
-    setNewCode('');
-    setNewDesc('');
+    setLoading(false);
   };
 
-  const deleteFault = async (id) => {
-    await deleteDoc(doc(db, 'faultCodes', id));
+  useEffect(() => { scanForDuplicates(); }, []);
+
+  const handleMerge = async (groupIdx) => {
+    const group = duplicateGroups[groupIdx];
+    const primaryId = selectedPrimary[groupIdx];
+    const primary = group.find(c => c.id === primaryId);
+    const duplicates = group.filter(c => c.id !== primaryId);
+
+    const confirmed = await showConfirm(
+      'تأكيد الدمج',
+      `سيتم دمج ${duplicates.length} سجل مكرر في سجل "${primary.name}" وحذفهم نهائيًا. كل التذاكر المرتبطة بيهم هتتنقل للسجل الأساسي. هل أنت متأكد؟`
+    );
+    if (!confirmed) return;
+
+    setMerging(groupIdx);
+    try {
+      // 1️⃣ جمع الإحصائيات وكل الوسوم من كل السجلات المكررة
+      const totalPurchases = group.reduce((sum, c) => sum + (c.totalPurchases || 0), 0);
+      const allTags = [...new Set(group.flatMap(c => c.tags || []))];
+      const lastPurchaseDates = group.map(c => c.lastPurchase?.toDate?.() || null).filter(Boolean);
+      const latestPurchase = lastPurchaseDates.length > 0
+        ? new Date(Math.max(...lastPurchaseDates.map(d => d.getTime())))
+        : null;
+
+      await updateDoc(doc(db, 'customers', primary.id), {
+        totalPurchases,
+        tags: allTags,
+        ...(latestPurchase ? { lastPurchase: Timestamp.fromDate(latestPurchase) } : {})
+      });
+
+      // 2️⃣ نقل كل التذاكر المرتبطة بالسجلات المكررة إلى السجل الأساسي
+      for (const dup of duplicates) {
+        const ticketsSnap = await getDocs(query(collection(db, 'tickets'), where('customerId', '==', dup.id)));
+        const batch = writeBatch(db);
+        ticketsSnap.docs.forEach(t => {
+          batch.update(t.ref, { customerId: primary.id });
+        });
+        if (ticketsSnap.docs.length > 0) await batch.commit();
+      }
+
+      // 3️⃣ حذف السجلات المكررة
+      for (const dup of duplicates) {
+        await deleteDoc(doc(db, 'customers', dup.id));
+      }
+
+      await logUserActivity(
+        appUser,
+        'دمج عملاء مكررين',
+        `دمج ${duplicates.length} سجل في العميل "${primary.name}" (${primary.phone})`
+      );
+
+      showSuccess(`تم دمج ${duplicates.length} سجل بنجاح`);
+      await scanForDuplicates();
+    } catch (error) {
+      console.error("Merge error:", error);
+      showError("فشل دمج العملاء: " + error.message);
+    }
+    setMerging(null);
   };
+
+  if (loading) return <LoadingSkeleton type="table" count={4} />;
 
   return (
-    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border">
-      <h3 className="font-bold text-indigo-600 mb-4">أكواد الأعطال</h3>
-      <div className="mb-4">
-        <label className="block text-sm font-bold mb-1">اختر الموديل</label>
-        <select className="w-full border p-3 rounded-xl" value={selectedModelId} onChange={e => setSelectedModelId(e.target.value)}>
-          <option value="">-- اختر موديل --</option>
-          {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          بيتم اكتشاف العملاء اللي عندهم نفس رقم الهاتف (بعد توحيد الصيغة) في أكتر من سجل منفصل.
+        </p>
+        <button
+          onClick={scanForDuplicates}
+          className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-indigo-100"
+        >
+          <RefreshCw size={14}/> إعادة الفحص
+        </button>
       </div>
-      {selectedModelId && (
-        <>
-          <div className="flex gap-2 mb-4">
-            <input className="flex-1 border p-3 rounded-xl" placeholder="الكود (مثال: ERR-001)" value={newCode} onChange={e => setNewCode(e.target.value)} />
-            <input className="flex-2 border p-3 rounded-xl" placeholder="وصف العطل" value={newDesc} onChange={e => setNewDesc(e.target.value)} />
-            <button onClick={addFault} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold">إضافة</button>
+
+      {duplicateGroups.length === 0 ? (
+        <div className="text-center p-12 text-slate-400 border-2 border-dashed rounded-2xl">
+          ✅ مفيش عملاء مكررين حاليًا
+        </div>
+      ) : (
+        duplicateGroups.map((group, idx) => (
+          <div key={idx} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+              <span className="text-xs font-bold text-amber-700 dark:text-amber-400">
+                {group.length} سجل مكرر - رقم الهاتف: {group[0].phone || 'بدون رقم'}
+              </span>
+              <button
+                onClick={() => handleMerge(idx)}
+                disabled={merging === idx}
+                className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {merging === idx ? 'جاري الدمج...' : 'دمج الآن'}
+              </button>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {group.map(c => (
+                <label key={c.id} className="flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <input
+                    type="radio"
+                    name={`primary-${idx}`}
+                    checked={selectedPrimary[idx] === c.id}
+                    onChange={() => setSelectedPrimary({ ...selectedPrimary, [idx]: c.id })}
+                    className="w-4 h-4 accent-indigo-600"
+                  />
+                  <div className="flex-1">
+                    <p className="font-bold text-sm">{c.name}</p>
+                    <p className="text-xs text-slate-400">{c.email || 'بدون بريد'} · {c.totalPurchases || 0} عملية شراء</p>
+                  </div>
+                  {selectedPrimary[idx] === c.id && (
+                    <span className="text-[10px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-2 py-1 rounded-full font-bold">
+                      سيتم الاحتفاظ به
+                    </span>
+                  )}
+                </label>
+              ))}
+            </div>
           </div>
-          <div className="space-y-2 max-h-60 overflow-y-auto">
-            {faults.map(f => (
-              <div key={f.id} className="flex justify-between items-center p-3 border-b">
-                <div><span className="font-mono font-bold">{f.code}</span> – {f.description}</div>
-                <button onClick={() => deleteFault(f.id)} className="text-rose-500">حذف</button>
-              </div>
-            ))}
-          </div>
-        </>
+        ))
       )}
     </div>
   );
 }
+
+// ==========================================================================
+// 🕵️ سجل التدقيق - Audit Log Manager
+// (ميزة جديدة: صلاحية viewAuditLog كانت موجودة من غير أي شاشة فعلية تستخدمها)
+// ==========================================================================
+function AuditLogManager() {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [lastDoc, setLastDoc] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [employees, setEmployees] = useState([]);
+  const [filterUserId, setFilterUserId] = useState('all');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterAction, setFilterAction] = useState('all');
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    const loadEmployees = async () => {
+      const snap = await getDocs(collection(db, 'employees'));
+      setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    };
+    loadEmployees();
+  }, []);
+
+  const loadLogs = useCallback(async (isNextPage = false) => {
+    setLoading(true);
+    try {
+      let constraints = [orderBy('timestamp', 'desc')];
+
+      if (filterUserId !== 'all') {
+        constraints.push(where('userId', '==', filterUserId));
+      }
+      if (filterAction !== 'all') {
+        constraints.push(where('action', '==', filterAction));
+      }
+      if (filterDateFrom) {
+        const fromDate = new Date(filterDateFrom);
+        fromDate.setHours(0, 0, 0, 0);
+        constraints.push(where('timestamp', '>=', fromDate));
+      }
+      if (filterDateTo) {
+        const toDate = new Date(filterDateTo);
+        toDate.setHours(23, 59, 59, 999);
+        constraints.push(where('timestamp', '<=', toDate));
+      }
+
+      if (isNextPage && lastDoc) constraints.push(startAfter(lastDoc));
+      constraints.push(limit(100));
+
+      const q = query(collection(db, 'activity_logs'), ...constraints);
+      const snap = await getDocs(q);
+      const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      setLogs(prev => isNextPage ? [...prev, ...fetched] : fetched);
+      setLastDoc(snap.docs[snap.docs.length - 1] || null);
+      setHasMore(snap.docs.length === 100);
+    } catch (error) {
+      console.error("Error loading audit log:", error);
+      showError("فشل تحميل سجل التدقيق");
+    }
+    setLoading(false);
+  }, [filterUserId, filterAction, filterDateFrom, filterDateTo]);
+
+  useEffect(() => {
+    setLastDoc(null);
+    loadLogs(false);
+  }, [filterUserId, filterAction, filterDateFrom, filterDateTo]);
+
+  const filteredLogs = logs.filter(log => {
+    if (!search) return true;
+    const term = normalizeSearch(search);
+    return normalizeSearch(log.userName || '').includes(term) ||
+           normalizeSearch(log.action || '').includes(term) ||
+           normalizeSearch(log.details || '').includes(term);
+  });
+
+  const formatLogDate = (ts) => {
+    if (!ts) return '-';
+    const date = ts?.toDate ? ts.toDate() : new Date(ts);
+    return date.toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+  };
+
+  const handleExport = () => {
+    const rows = [
+      ['التاريخ', 'المستخدم', 'الدور', 'العملية', 'التفاصيل'],
+      ...filteredLogs.map(l => [
+        formatLogDate(l.timestamp), l.userName || '', l.userRole || '', l.action || '', l.details || ''
+      ])
+    ];
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `audit_log_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex flex-wrap gap-3 items-end justify-between">
+        <div className="flex flex-wrap gap-3 items-end flex-1">
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1">المستخدم</label>
+            <select
+              className="border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900"
+              value={filterUserId}
+              onChange={e => setFilterUserId(e.target.value)}
+            >
+              <option value="all">كل المستخدمين</option>
+              {employees.map(emp => (
+                <option key={emp.id} value={emp.id}>{emp.name || emp.email}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1">نوع العملية</label>
+            <select
+              className="border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900"
+              value={filterAction}
+              onChange={e => setFilterAction(e.target.value)}
+            >
+              <option value="all">كل العمليات</option>
+              <option value="تعديل سعر">تعديل سعر</option>
+              <option value="تطبيق خصم">تطبيق خصم</option>
+              <option value="إصدار فاتورة">إصدار فاتورة</option>
+              <option value="تعديل صنف">تعديل صنف</option>
+              <option value="إضافة صنف">إضافة صنف</option>
+              <option value="إضافة مرتجع">إضافة مرتجع</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1">من تاريخ</label>
+            <input type="date" className="border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1">إلى تاريخ</label>
+            <input type="date" className="border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} />
+          </div>
+          <div className="flex-1 min-w-[180px]">
+            <label className="block text-xs font-bold text-slate-500 mb-1">بحث</label>
+            <input
+              type="text"
+              placeholder="ابحث في التفاصيل أو اسم المستخدم..."
+              className="w-full border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+        <button onClick={handleExport} className="bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-1 hover:bg-emerald-700">
+          <Download size={14}/> تصدير CSV
+        </button>
+      </div>
+
+      <div className="overflow-x-auto border rounded-xl">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 dark:bg-slate-800">
+            <tr>
+              <th className="p-3 text-right">التاريخ والوقت</th>
+              <th className="p-3 text-right">المستخدم</th>
+              <th className="p-3 text-right">الدور</th>
+              <th className="p-3 text-right">العملية</th>
+              <th className="p-3 text-right">التفاصيل</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredLogs.map(log => (
+              <tr key={log.id} className="border-t hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                <td className="p-3 whitespace-nowrap text-slate-500">{formatLogDate(log.timestamp)}</td>
+                <td className="p-3 font-bold">{log.userName || '-'}</td>
+                <td className="p-3">{log.userRole || '-'}</td>
+                <td className="p-3">
+                  <span className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-2 py-1 rounded-lg text-xs font-bold">
+                    {log.action || '-'}
+                  </span>
+                </td>
+                <td className="p-3 text-slate-600 dark:text-slate-300">{log.details || '-'}</td>
+              </tr>
+            ))}
+            {!loading && filteredLogs.length === 0 && (
+              <tr><td colSpan="5" className="p-8 text-center text-slate-400">لا توجد سجلات مطابقة</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => loadLogs(true)}
+            disabled={loading}
+            className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {loading ? 'جاري التحميل...' : 'تحميل المزيد'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ملحوظة تنظيف: تم حذف FaultCodeManager من هنا - كان كود ميت غير
+// مستخدم في أي مكان بالواجهة، وبيعتمد على تصميم قديم لأكواد الأعطال
+// (مجموعة "faultCodes" بمستوى واحد) تم استبداله بنظام "mainFaultCodes"
+// / "subFaultCodes" ذو المستويين المستخدم فعليًا في ProductModelManager.
 
 
 // ==========================================================================
@@ -14714,7 +16145,9 @@ function ExcelImportManager() {
     const selectedFile = e.target.files[0];
     if (!selectedFile) return;
     
-    if (!selectedFile.name.endsWith('.csv') && !selectedFile.name.endsWith('.xlsx')) {
+    const isCSV = selectedFile.name.toLowerCase().endsWith('.csv');
+    const isXLSX = selectedFile.name.toLowerCase().endsWith('.xlsx');
+    if (!isCSV && !isXLSX) {
       showError("يرجى رفع ملف CSV أو Excel فقط");
       return;
     }
@@ -14724,13 +16157,36 @@ function ExcelImportManager() {
     setImportStats({ products: 0, models: 0, mainFaults: 0, subFaults: 0 });
     
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target.result;
-      const parsedData = parseCSVData(text);
-      setPreviewData(parsedData.slice(0, 100));
-      setShowPreview(true);
-    };
-    reader.readAsText(selectedFile, 'UTF-8');
+
+    // 🛠️ FIX: كان بيقبل ملفات .xlsx في الواجهة، لكن بيقراها بـ readAsText
+    // كأنها نص عادي! ملفات Excel الحقيقية (.xlsx) هي ملفات ثنائية (ZIP)
+    // مش نص، فقراءتها كنص كان بينتج بيانات تالفة (يظهر غالبًا كخطأ
+    // "الأعمدة المطلوبة غير موجودة" أو استيراد بيانات مشوّهة). دلوقتي
+    // بنستخدم SheetJS لقراءة ملفات .xlsx الحقيقية، وبنسيبها CSV زي ما هي.
+    if (isXLSX) {
+      reader.onload = (event) => {
+        try {
+          const workbook = XLSX.read(event.target.result, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const csvText = XLSX.utils.sheet_to_csv(firstSheet);
+          const parsedData = parseCSVData(csvText);
+          setPreviewData(parsedData.slice(0, 100));
+          setShowPreview(true);
+        } catch (error) {
+          console.error('Excel parse error:', error);
+          showError("فشل قراءة ملف Excel، تأكد إن الملف سليم وغير تالف");
+        }
+      };
+      reader.readAsArrayBuffer(selectedFile);
+    } else {
+      reader.onload = (event) => {
+        const text = event.target.result;
+        const parsedData = parseCSVData(text);
+        setPreviewData(parsedData.slice(0, 100));
+        setShowPreview(true);
+      };
+      reader.readAsText(selectedFile, 'UTF-8');
+    }
   };
 
   const parseCSVData = (text) => {
@@ -15123,6 +16579,153 @@ function ExcelImportManager() {
 
 
 // ==========================================================================
+// 🛡️ تنبيهات اقتراب انتهاء الضمان - Warranty Alerts View
+// (ميزة جديدة: تتبع ضمان المنتجات المباعة وتنبيه العملاء/الإدارة قبل الانتهاء)
+// ==========================================================================
+function WarrantyAlertsView({ systemSettings, appUser }) {
+  const [loading, setLoading] = useState(true);
+  const [warrantyItems, setWarrantyItems] = useState([]);
+  const [sendingAlert, setSendingAlert] = useState(false);
+  const config = systemSettings.warrantyAlerts || {};
+  const daysWindow = config.daysBeforeExpiry || 30;
+
+  useEffect(() => {
+    const loadWarrantyData = async () => {
+      setLoading(true);
+      try {
+        // ملحوظة: warrantyEndDate حقل جوه مصفوفة items، فمينفعش نعمل عليه
+        // Firestore range query مباشر. بنجيب آخر دفعة فواتير بيع ونفلتر
+        // محليًا - كافي لحجم مبيعات معظم المحلات، ولو الحجم كبر جدًا
+        // محتاج نظام تجميع بيانات إضافي (مثلاً collection منفصلة للضمانات).
+        const q = query(
+          collection(db, 'transactions'),
+          where('type', '==', 'sell'),
+          orderBy('timestamp', 'desc'),
+          limit(2000)
+        );
+        const snap = await getDocs(q);
+        const today = new Date();
+        const windowEnd = new Date();
+        windowEnd.setDate(windowEnd.getDate() + daysWindow);
+
+        const results = [];
+        snap.docs.forEach(d => {
+          const data = d.data();
+          (data.items || []).forEach(item => {
+            if (!item.warrantyEndDate) return;
+            const endDate = new Date(item.warrantyEndDate);
+            if (endDate <= windowEnd) {
+              const daysLeft = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+              results.push({
+                id: `${d.id}_${item.id || item.serialNumber}`,
+                name: item.name,
+                serialNumber: item.serialNumber,
+                customerName: data.customerName,
+                customerPhone: data.phone,
+                warrantyEndDate: item.warrantyEndDate,
+                daysLeft,
+                expired: daysLeft < 0
+              });
+            }
+          });
+        });
+
+        results.sort((a, b) => a.daysLeft - b.daysLeft);
+        setWarrantyItems(results);
+      } catch (error) {
+        console.error("Warranty alerts error:", error);
+        showError("فشل تحميل بيانات الضمان");
+      }
+      setLoading(false);
+    };
+    loadWarrantyData();
+  }, [daysWindow]);
+
+  const sendAlert = async () => {
+    if (!config.webhookUrl || warrantyItems.length === 0) return;
+    setSendingAlert(true);
+    const ok = await sendWebhookNotification(config.webhookUrl, {
+      type: 'warranty_expiry_alert',
+      triggeredAt: new Date().toISOString(),
+      count: warrantyItems.length,
+      items: warrantyItems
+    });
+    setSendingAlert(false);
+    if (ok) showSuccess("تم إرسال تنبيه الضمان بنجاح");
+    else showError("فشل إرسال التنبيه، تأكد من رابط الـ Webhook");
+  };
+
+  if (loading) return <LoadingSkeleton type="table" count={5} />;
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+      <div className="p-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50 dark:bg-slate-900/50">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="text-indigo-600" size={20}/>
+          <h2 className="text-lg font-black">تنبيهات اقتراب انتهاء الضمان</h2>
+          <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg text-xs">{warrantyItems.length} منتج</span>
+        </div>
+        {config.webhookUrl && (
+          <button
+            onClick={sendAlert}
+            disabled={sendingAlert || warrantyItems.length === 0}
+            className="bg-amber-50 text-amber-700 px-4 py-2 rounded-lg text-xs font-bold hover:bg-amber-100 flex items-center gap-2 disabled:opacity-50"
+          >
+            <Bell size={14}/> {sendingAlert ? 'جاري الإرسال...' : 'إرسال تنبيه الآن'}
+          </button>
+        )}
+      </div>
+
+      {!config.enabled && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-xs font-bold">
+          ⚠️ ميزة تنبيهات الضمان متوقفة حاليًا. فعّلها من الإعدادات العامة.
+        </div>
+      )}
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 dark:bg-slate-800">
+            <tr>
+              <th className="p-3 text-right">المنتج</th>
+              <th className="p-3 text-right">السيريال</th>
+              <th className="p-3 text-right">العميل</th>
+              <th className="p-3 text-right">الهاتف</th>
+              <th className="p-3 text-right">تاريخ انتهاء الضمان</th>
+              <th className="p-3 text-right">الحالة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {warrantyItems.map(item => (
+              <tr key={item.id} className="border-t hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                <td className="p-3 font-bold">{item.name}</td>
+                <td className="p-3 font-mono text-xs">{item.serialNumber}</td>
+                <td className="p-3">{item.customerName || '-'}</td>
+                <td className="p-3 font-mono" dir="ltr">{item.customerPhone || '-'}</td>
+                <td className="p-3">{item.warrantyEndDate}</td>
+                <td className="p-3">
+                  {item.expired ? (
+                    <span className="bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2 py-1 rounded-lg text-xs font-bold">
+                      منتهي منذ {Math.abs(item.daysLeft)} يوم
+                    </span>
+                  ) : (
+                    <span className="bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-2 py-1 rounded-lg text-xs font-bold">
+                      باقي {item.daysLeft} يوم
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {warrantyItems.length === 0 && (
+              <tr><td colSpan="6" className="p-8 text-center text-slate-400">لا توجد منتجات قريبة من انتهاء الضمان حاليًا</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================================================
 // 📦 مخزن المرتجعات - Returns Warehouse Manager
 // ==========================================================================
 function ReturnsWarehouseManager({ appUser, notify, setGlobalLoading }) {
@@ -15423,6 +17026,9 @@ useEffect(() => {
 
 
   const [viewedUser, setViewedUser] = useState(null);
+  // ✨ ميزة جديدة: ربط التذكرة بالفاتورة - بيانات مؤقتة بتتنقل من شاشة
+  // التذاكر لشاشة نقطة البيع لما يتم إنشاء فاتورة من تذكرة صيانة
+  const [pendingTicketInvoice, setPendingTicketInvoice] = useState(null);
   const [lowStockItems, setLowStockItems] = useState([]);
 
   const [notifications, setNotifications] = useState([]);
@@ -15462,7 +17068,34 @@ useEffect(() => {
     installationFees: [],
     productCategories: [],
     technicians: [],
-    maintenanceCenters: []
+    maintenanceCenters: [],
+    // ✨ ميزة جديدة: تنبيهات النواقص التلقائية (بريد/واتساب عبر Webhook)
+    lowStockAlerts: {
+      enabled: false,
+      webhookUrl: '',
+      frequencyHours: 24
+    },
+    // ✨ ميزة جديدة: إشعار العميل تلقائيًا عند تغيير حالة تذكرته
+    ticketNotifications: {
+      enabled: false,
+      webhookUrl: ''
+    },
+    // ✨ ميزة جديدة: تنبيه اقتراب انتهاء ضمان المنتجات المباعة
+    warrantyAlerts: {
+      enabled: false,
+      webhookUrl: '',
+      daysBeforeExpiry: 30
+    },
+    // ✨ ميزة جديدة: تسجيل خروج تلقائي بعد فترة خمول (بالدقائق)
+    autoLogoutMinutes: 30,
+    // ✨ ميزة جديدة: تتبع SLA للتذاكر (المدة المستهدفة للحل حسب الأولوية بالساعات)
+    ticketSLA: {
+      high: 4,
+      medium: 24,
+      low: 72
+    },
+    // ✨ ميزة جديدة: رابط خدمة إرسال البريد الإلكتروني (كان الرابط قبل كده وهمي وثابت)
+    emailWebhookUrl: ''
   });
 
   // تفعيل/إلغاء الوضع الداكن
@@ -15528,6 +17161,14 @@ useEffect(() => {
   };
 
   // مراقبة حالة الاتصال بالإنترنت
+  // 🛠️ FIX (نقطة #3): كان فيه بنية تحتية كاملة لـ "المزامنة لما الاتصال
+  // يرجع" (offlineDB, syncManager, قائمة انتظار) لكن ولا عملية إضافة/تعديل/
+  // حذف واحدة في التطبيق فعليًا بتستخدمها - كل الكتابات بتروح مباشرة لـ
+  // Firestore وتفشل بصمت لو الاتصال مقطوع، والبيانات بتضيع. المؤشر
+  // "متصل/غير متصل" في الواجهة كان بيوهم المستخدم إن في حماية حقيقية.
+  // لحد ما نوصّل كل شاشات الكتابة فعليًا بنظام المزامنة (شغل كبير محتاج
+  // اختبار دقيق لكل شاشة على حدة)، الأصح دلوقتي إننا نكون صريحين وننبّه
+  // المستخدم بوضوح وقت انقطاع النت بدل ما نسيبه يفتكر إن حفظه هيتأجل تلقائيًا.
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
@@ -15537,7 +17178,13 @@ useEffect(() => {
         }
       });
     };
-    const handleOffline = () => setIsOnline(false);
+    const handleOffline = () => {
+      setIsOnline(false);
+      showWarning(
+        "أنت غير متصل بالإنترنت الآن. أي عملية إضافة أو تعديل أو حذف ستفشل ولن تُحفظ تلقائياً حتى يعود الاتصال، فيرجى الانتظار قبل المتابعة.",
+        "انقطع الاتصال بالإنترنت"
+      );
+    };
     
     window.addEventListener('online', handleOnline); 
     window.addEventListener('offline', handleOffline);
@@ -15592,8 +17239,12 @@ useEffect(() => {
 };
 
   const handleGenerateInvoiceFromTicket = (ticket) => {
+    // 🛠️ FIX: كان بيتم تجاهل بيانات التذكرة بالكامل (العميل، قطع الغيار)
+    // ومجرد الانتقال لشاشة نقطة البيع فاضية - يعني الكاشير كان مضطر
+    // يدخل كل حاجة يدوي تاني من الأول. دلوقتي بننقل البيانات فعليًا.
+    setPendingTicketInvoice(ticket);
     setCurrentView('transactions');
-    showSuccess(`تم تحويل التذكرة ${ticket.ticketNumber} إلى فاتورة`);
+    showSuccess(`تم تجهيز فاتورة للتذكرة ${ticket.ticketNumber} - راجع بيانات العميل وقطع الغيار في نقطة البيع`);
   };
   
   useEffect(() => {
@@ -15644,6 +17295,31 @@ useEffect(() => {
      setCurrentView('dashboard');
      showSuccess("تم تسجيل الخروج بنجاح");
   };
+
+  // ✨ ميزة جديدة: تسجيل خروج تلقائي بعد فترة خمول (مفيد للأجهزة المشتركة
+  // زي كاشير الفروع، عشان الجلسة متفضلش مفتوحة لو حد نسي يعمل تسجيل خروج)
+  useEffect(() => {
+    const minutes = Number(systemSettings?.autoLogoutMinutes) || 0;
+    if (!appUser || minutes <= 0) return;
+
+    let timer;
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        showWarning("تم تسجيل خروجك تلقائيًا بسبب عدم النشاط لفترة طويلة");
+        handleLogout();
+      }, minutes * 60 * 1000);
+    };
+
+    const activityEvents = ['mousedown', 'keydown', 'touchstart', 'scroll'];
+    activityEvents.forEach(evt => window.addEventListener(evt, resetTimer));
+    resetTimer();
+
+    return () => {
+      clearTimeout(timer);
+      activityEvents.forEach(evt => window.removeEventListener(evt, resetTimer));
+    };
+  }, [appUser, systemSettings?.autoLogoutMinutes]);
 
   const openProfileView = (user) => {
       setViewedUser(user);
@@ -15757,9 +17433,10 @@ useEffect(() => {
                { id: 'transactions', label: 'نقطة البيع', icon: Receipt, permission: 'viewPOS' },
                { id: 'customers', label: 'سجل العملاء', icon: Users, permission: 'viewCustomers' },
                { id: 'tickets', label: 'تذاكر الصيانة', icon: MessageSquare, permission: 'manageTickets' },
-               { id: 'invoices', label: 'أرشيف الفواتير', icon: FileText, permission: 'viewPOS' },
+               { id: 'invoices', label: 'أرشيف الفواتير', icon: FileText, permission: 'viewInvoices' },
                { id: 'reports', label: 'التقارير', icon: History, permission: 'viewReports' },
-               { id: 'lowstock', label: 'النواقص', icon: AlertOctagon, permission: 'viewLowStock' }
+               { id: 'lowstock', label: 'النواقص', icon: AlertOctagon, permission: 'viewLowStock' },
+               { id: 'warranty_alerts', label: 'تنبيهات الضمان', icon: ShieldCheck, permission: 'viewReports' }
              ].map(item => {
                 if (item.permission && !appUser.permissions?.[item.permission] && appUser.role !== 'admin') {
                     return null;
@@ -15950,6 +17627,7 @@ useEffect(() => {
                 {currentView === 'invoices' && 'أرشيف الفواتير'}
                 {currentView === 'reports' && 'التقارير'}
                 {currentView === 'lowstock' && 'النواقص'}
+                {currentView === 'warranty_alerts' && 'تنبيهات الضمان'}
                 {currentView === 'settings' && 'الإعدادات المركزية'}
                 {currentView === 'warehouses' && 'إدارة الفروع'}
                 {currentView === 'users' && 'إدارة المستخدمين'}
@@ -15957,7 +17635,7 @@ useEffect(() => {
               </h2>
             </div>
             <div className="flex items-center gap-3 font-bold">
-               <div className="flex items-center gap-2">
+               <div className="flex items-center gap-2" title={isOnline ? '' : 'تحذير: أي تعديل الآن لن يُحفظ تلقائياً، يرجى الانتظار حتى يعود الاتصال'}>
                  <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
                  <span className={`text-[9px] uppercase px-2 py-1 rounded border ${
                    isOnline 
@@ -15977,7 +17655,7 @@ useEffect(() => {
              <div className="max-w-7xl mx-auto h-full pb-10 print:pb-0">
                 
                 {/* الصفحات المختلفة */}
-                {currentView === 'dashboard' && <DashboardView appUser={appUser} warehouses={warehouses} onNavigateToInventory={handleNavigateToInventory} notify={notify} />}
+                {currentView === 'dashboard' && <DashboardView appUser={appUser} warehouses={warehouses} onNavigateToInventory={handleNavigateToInventory} notify={notify} systemSettings={systemSettings} />}
                 
                 {currentView === 'inventory' && appUser.permissions?.viewInventory && 
                   <InventoryManager appUser={appUser} warehouses={warehouses} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} />
@@ -15988,7 +17666,7 @@ useEffect(() => {
                 }
                 
                 {currentView === 'transactions' && appUser.permissions?.viewPOS && 
-                  <POSManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} />
+                  <POSManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} prefillFromTicket={pendingTicketInvoice} onConsumeTicketPrefill={() => setPendingTicketInvoice(null)} />
                 }
                 
                 {currentView === 'customers' && appUser.permissions?.viewCustomers && 
@@ -16034,7 +17712,11 @@ useEffect(() => {
                 }
                 
                 {currentView === 'lowstock' && appUser.permissions?.viewLowStock && 
-                  <LowStockView lowStockItems={lowStockItems} appUser={appUser} warehouseMap={warehouseMap} />
+                  <LowStockView lowStockItems={lowStockItems} appUser={appUser} warehouseMap={warehouseMap} systemSettings={systemSettings} />
+                }
+
+                {currentView === 'warranty_alerts' && (appUser.permissions?.viewReports || appUser.role === 'admin') && 
+                  <WarrantyAlertsView systemSettings={systemSettings} appUser={appUser} />
                 }
                 
                 {currentView === 'settings' && (appUser.role === 'admin' || 
@@ -16095,6 +17777,8 @@ function InvoicesManager({ systemSettings, appUser }) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [invoiceData, setInvoiceData] = useState(null);
+  const [lastDoc, setLastDoc] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
   
   // فلاتر جديدة
   const [filterCustomerName, setFilterCustomerName] = useState('');
@@ -16115,15 +17799,29 @@ function InvoicesManager({ systemSettings, appUser }) {
     loadWarehouses();
   }, []);
 
-  
-  useEffect(() => {
-    const loadInvoices = async () => {
+  // 🛠️ FIX: كانت الشاشة بتجيب آخر 500 فاتورة مرة واحدة بس (من غير أي
+  // تحميل إضافي)، وكل الفلاتر (اسم العميل، رقم الفاتورة، التاريخ) كانت
+  // بتشتغل محليًا على الـ 500 دول بس. أي فاتورة أقدم مكانتش تظهر أبدًا
+  // مهما دورت عليها. هنا: (1) فلترة التاريخ بقت Firestore query حقيقي
+  // بدل التقطيع العشوائي، و(2) ضفنا تحميل صفحات إضافية (تحميل المزيد).
+  const loadInvoices = useCallback(async (isNextPage = false) => {
+      setLoading(true);
       try {
         let constraints = [
           where("type", "==", "sell"),
-          orderBy("timestamp", "desc"),
-          limit(500)
+          orderBy("timestamp", "desc")
         ];
+
+        if (filterDateFrom) {
+          const fromDate = new Date(filterDateFrom);
+          fromDate.setHours(0, 0, 0, 0);
+          constraints.push(where('timestamp', '>=', fromDate));
+        }
+        if (filterDateTo) {
+          const toDate = new Date(filterDateTo);
+          toDate.setHours(23, 59, 59, 999);
+          constraints.push(where('timestamp', '<=', toDate));
+        }
         
         // ✅ التحكم في البيانات حسب صلاحيات المستخدم
         // إذا كان لديه صلاحية viewAllInvoices أو هو أدمن، يرى كل الفواتير
@@ -16132,6 +17830,11 @@ function InvoicesManager({ systemSettings, appUser }) {
         if (!canViewAllInvoices) {
           constraints.push(where('warehouseId', '==', appUser.assignedWarehouseId || 'main'));
         }
+
+        if (isNextPage && lastDoc) {
+          constraints.push(startAfter(lastDoc));
+        }
+        constraints.push(limit(500));
         
         const q = query(collection(db, "transactions"), ...constraints);
         const snap = await getDocs(q);
@@ -16139,14 +17842,19 @@ function InvoicesManager({ systemSettings, appUser }) {
           id: d.id,
           ...d.data()
         }));
-        setInvoices(data);
+        setInvoices(prev => isNextPage ? [...prev, ...data] : data);
+        setLastDoc(snap.docs[snap.docs.length - 1] || null);
+        setHasMore(snap.docs.length === 500);
       } catch(e) {
         console.error(e);
       }
       setLoading(false);
-    };
-    loadInvoices();
-  }, [appUser]);
+  }, [appUser, filterDateFrom, filterDateTo]);
+
+  useEffect(() => {
+    setLastDoc(null);
+    loadInvoices(false);
+  }, [appUser, filterDateFrom, filterDateTo]);
 
   const filtered = invoices.filter(inv => {
     const matchesGlobalSearch = !search || 
@@ -16166,18 +17874,8 @@ function InvoicesManager({ systemSettings, appUser }) {
     
     const matchesWarehouse = filterWarehouse === 'all' || inv.warehouseId === filterWarehouse;
     
-    let matchesDate = true;
-    if (filterDateFrom) {
-      const invDate = inv.timestamp?.toDate ? inv.timestamp.toDate() : new Date(inv.timestamp);
-      matchesDate = matchesDate && invDate >= new Date(filterDateFrom);
-    }
-    if (filterDateTo) {
-      const invDate = inv.timestamp?.toDate ? inv.timestamp.toDate() : new Date(inv.timestamp);
-      matchesDate = matchesDate && invDate <= new Date(filterDateTo + 'T23:59:59');
-    }
-    
     return matchesGlobalSearch && matchesCustomerName && matchesInvoiceNumber && 
-           matchesPhone && matchesWarehouse && matchesDate;
+           matchesPhone && matchesWarehouse;
   }).sort((a, b) => {
     let comparison = 0;
     if (sortBy === 'date') {
@@ -16301,6 +17999,29 @@ function InvoicesManager({ systemSettings, appUser }) {
         <span className="text-sm text-slate-500">{filtered.length} فاتورة</span>
         <button
           onClick={() => {
+            const exportData = filtered.map(inv => ({
+              'رقم الفاتورة': inv.invoiceNumber || '-',
+              'التاريخ': formatDate(inv.timestamp),
+              'العميل': inv.customerName || '-',
+              'الهاتف': inv.phone || '-',
+              'الصنف': inv.itemName || '-',
+              'السيريال': inv.serialNumber || '-',
+              'الصافي': inv.finalTotal || inv.total || 0,
+              'البائع': inv.operator || '-',
+              'المخزن': inv.warehouseId || '-'
+            }));
+            if (exportToExcel(exportData, `Invoices_${new Date().toISOString().split('T')[0]}`, 'الفواتير')) {
+              showSuccess("تم تصدير ملف Excel بنجاح");
+            } else {
+              showError("لا توجد بيانات للتصدير");
+            }
+          }}
+          className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1 hover:bg-emerald-700"
+        >
+          <Download size={14}/> تصدير Excel
+        </button>
+        <button
+          onClick={() => {
             setSearch('');
             setFilterCustomerName('');
             setFilterInvoiceNumber('');
@@ -16338,6 +18059,11 @@ function InvoicesManager({ systemSettings, appUser }) {
                 <tr key={inv.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30">
                   <td className="p-3 font-bold font-mono text-indigo-600 dark:text-indigo-400">
                     {inv.invoiceNumber || inv.id.slice(0,8)}
+                    {inv.ticketNumber && (
+                      <span className="mr-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded text-[9px] font-bold" title="مرتبطة بتذكرة صيانة">
+                        🎫 #{inv.ticketNumber}
+                      </span>
+                    )}
                   </td>
                   <td className="p-3 font-bold">{inv.customerName}</td>
                   <td className="p-3 font-mono" dir="ltr">{inv.phone || '-'}</td>
@@ -16371,6 +18097,17 @@ function InvoicesManager({ systemSettings, appUser }) {
               )}
             </tbody>
           </table>
+          {hasMore && (
+            <div className="flex justify-center p-4">
+              <button
+                onClick={() => loadInvoices(true)}
+                disabled={loading}
+                className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {loading ? 'جاري التحميل...' : 'تحميل المزيد'}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
