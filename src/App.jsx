@@ -9520,7 +9520,9 @@ const StatusSelectComp = ({ value, onChange, ticketId }) => {
     <p>المركز: {warehouseMap?.[fullTicketView.assignedCenter] || fullTicketView.assignedCenter}</p>
   </div>
 </div>
-
+          </div>
+        </div>
+      )}
 
       {/* ===== مودال تعيين مسؤولين ===== */}
       {showAssignModal && selectedTicket && (
@@ -10047,6 +10049,9 @@ const StatusSelectComp = ({ value, onChange, ticketId }) => {
     <button type="button" onClick={() => setEditingTicket(null)} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إلغاء</button>
   </div>
 </form>
+          </div>
+        </div>
+      )}
 
       {/* ===== رأس الصفحة ===== */}
       <div className="p-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
@@ -10536,6 +10541,7 @@ const WARRANTY_PERIODS = [
     const matchesDepartment = filterDepartment === 'all' || user.department === filterDepartment;
     return matchesSearch && matchesRole && matchesWarehouse && matchesDepartment;
   });
+
 
   return (
     <div className="space-y-6 text-right" dir="rtl">
