@@ -3695,36 +3695,6 @@ useEffect(() => {
 
     const BATCH_SIZE = 400;
 
-for (let i = 0; i < importData.length; i += BATCH_SIZE) {
-
-  const chunk = importData.slice(i, i + BATCH_SIZE);
-
-  const batch = writeBatch(db);
-
-  chunk.forEach((item) => {
-
-    const ref = doc(collection(db, "inventory"));
-
-    batch.set(ref, {
-      ...item,
-      serialNumber: normalizeSerial(item.serialNumber),
-      quantity: item.quantity || 1,
-      isDeleted: false,
-      createdAt: serverTimestamp()
-    });
-
-  });
-
-  await batch.commit();
-
-  setImportProgress(prev => ({
-    ...prev,
-    processed: Math.min(prev.processed + chunk.length, totalItems),
-    currentBatch: prev.currentBatch + 1
-  }));
-
-}
-    
     setImportProgress({ 
       total: totalItems, 
       processed: 0, 
@@ -3874,7 +3844,13 @@ for (let i = 0; i < importData.length; i += BATCH_SIZE) {
       }
     };
     
-    const processParsedData = (data) => {
+    const processParsedData = (rawData) => {
+      // 🧹 استبعاد الصفوف الفارغة تمامًا (زي الصفوف الفاضية اللي بتتصدّر
+      // من Excel أحيانًا لحد آخر صف في الشيت) قبل أي فحص للعدد أو الصحة
+      const data = rawData.filter(row =>
+        Object.values(row || {}).some(v => String(v ?? '').trim() !== '')
+      );
+
       if (data.length > 50000) {
         showError("عدد الأصناف كبير جداً. الحد الأقصى 50000 صنف");
         e.target.value = null;
