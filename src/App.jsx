@@ -1451,6 +1451,35 @@ const normalizeSerial = (value) => {
 };
 //--------------------------------------------//
 
+// ==========================================================================
+// 🔎 FIX: البحث بـ array-contains-any بيقارن العنصر كامل بس (مطابقة تامة)،
+// فلو المستخدم كتب جزء من السريال بس (زي "4005" بدل "44005C") مكنش بيلاقي
+// حاجة رغم إن الصنف موجود فعليًا. الحل: نولّد كل الأجزاء الفرعية (substrings)
+// لرقم السريال ونخزنها في searchTokens، عشان أي جزء يكتبه المستخدم يبقى
+// عنصر موجود فعليًا في المصفوفة ويتطابق مع array-contains-any.
+// ==========================================================================
+const buildSerialNgrams = (serial) => {
+  const s = normalizeSerial(serial);
+  if (!s) return [];
+  const MIN_LEN = 2; // أقل طول لجزء يتقبل بالبحث (يمنع نتايج عشوائية بحرف واحد)
+  const grams = new Set();
+  for (let start = 0; start < s.length; start++) {
+    for (let len = MIN_LEN; start + len <= s.length; len++) {
+      grams.add(s.slice(start, start + len));
+    }
+  }
+  return [...grams];
+};
+
+// بيبني مصفوفة searchTokens الكاملة لصنف مخزون: كلمات كاملة للاسم/التصنيف/
+// التاجات (زي ما كان)، + كل الأجزاء الفرعية لرقم السريال عشان البحث الجزئي.
+const buildInventorySearchTokens = (name, serialNumber, category, ...tags) => {
+  return [...new Set([
+    ...buildSearchTokens(name, category, ...tags),
+    ...buildSerialNgrams(serialNumber)
+  ])];
+};
+
 // ✨ ميزة جديدة: توحيد رقم الهاتف قبل أي حفظ أو مطابقة، عشان نفس الرقم
 // بصيغ مختلفة (مسافات، +20، 0020) ميتعاملش معاه كأنه أرقام مختلفة
 // ويتسبب في عملاء مكررين.
@@ -3425,7 +3454,7 @@ const fixSearchKeys = async () => {
     const jobs = [
       {
         name: 'inventory',
-        tokensOf: (data) => buildSearchTokens(data.name, data.serialNumber, data.category, ...(data.tags || [])),
+        tokensOf: (data) => buildInventorySearchTokens(data.name, data.serialNumber, data.category, ...(data.tags || [])),
         extraFieldsOf: () => ({})
       },
       {
@@ -3726,7 +3755,7 @@ useEffect(() => {
               firestoreBatch.set(newRef, {
                 ...item,
                 searchKey: normalizeSearch(`${item.name} ${item.serialNumber} ${item.category} ${(item.tags || []).join(' ')}`),
-                searchTokens: buildSearchTokens(item.name, item.serialNumber, item.category, ...(item.tags || [])),
+                searchTokens: buildInventorySearchTokens(item.name, item.serialNumber, item.category, ...(item.tags || [])),
                 createdAt: serverTimestamp(),
                 isDeleted: false,
                 importedBy: appUser.name,
@@ -3971,7 +4000,7 @@ useEffect(() => {
       notes: newItem.notes || '',
       warehouseId: warehouseToUse,
       searchKey: normalizeSearch(`${newItem.name} ${serialNormalized} ${newItem.category} ${(newItem.tags || []).join(' ')}`),
-      searchTokens: buildSearchTokens(newItem.name, serialNormalized, newItem.category, ...(newItem.tags || [])),
+      searchTokens: buildInventorySearchTokens(newItem.name, serialNormalized, newItem.category, ...(newItem.tags || [])),
       createdAt: serverTimestamp(),
       isDeleted: false
     };
@@ -4036,7 +4065,7 @@ useEffect(() => {
         notes: dataToUpdate.notes,
         minStock: Number(dataToUpdate.minStock),
         searchKey: normalizeSearch(`${dataToUpdate.name} ${dataToUpdate.serialNumber} ${dataToUpdate.category} ${(dataToUpdate.tags || []).join(' ')}`),
-        searchTokens: buildSearchTokens(dataToUpdate.name, dataToUpdate.serialNumber, dataToUpdate.category, ...(dataToUpdate.tags || [])),
+        searchTokens: buildInventorySearchTokens(dataToUpdate.name, dataToUpdate.serialNumber, dataToUpdate.category, ...(dataToUpdate.tags || [])),
         updatedAt: serverTimestamp()
       });
       
@@ -5767,7 +5796,7 @@ function EnhancedTransferManager({ appUser, warehouseMap, notify, setGlobalLoadi
             notes: sourceData.notes || '',
             warehouseId: req.toWarehouseId,
             searchKey: normalizeSearch(`${sourceData.name} ${sourceData.serialNumber} ${sourceData.category || ''}`),
-            searchTokens: buildSearchTokens(sourceData.name, sourceData.serialNumber, sourceData.category),
+            searchTokens: buildInventorySearchTokens(sourceData.name, sourceData.serialNumber, sourceData.category),
             createdAt: serverTimestamp(),
             isDeleted: false,
             transferredFrom: req.fromWarehouseId,
@@ -13950,7 +13979,7 @@ const handleApproveReturn = async (returnId) => {
           notes: `مرتجع من ${returnData.fromWarehouse}`,
           warehouseId: approveData.toWarehouse,
           searchKey: normalizeSearch(`${productName} ${serialNumber}`),
-          searchTokens: buildSearchTokens(productName, serialNumber),
+          searchTokens: buildInventorySearchTokens(productName, serialNumber),
           createdAt: serverTimestamp(),
           isDeleted: false
         });
