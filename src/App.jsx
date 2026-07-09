@@ -1452,6 +1452,20 @@ const normalizeSerial = (value) => {
 //--------------------------------------------//
 
 // ==========================================================================
+// 🛠️ FIX: أي قيمة بتتحط كـ Document ID في Firestore (زي serialNumber)
+// ممكن تحتوي على "/" لو المستخدم كتب سريال بالشكل ده (مثلاً "14000/14006")،
+// و"/" في مسار المستند بتتفسّر كفاصل بين segments، فبيبقى المسار غير صالح
+// (لازم عدد الـ segments يكون زوجي) وبيفشل الـ commit بالكامل (كل الدفعة
+// اللي هو جواها، مش بس الصنف ده). الحل: استبدال أي حرف مش مسموح بيه في
+// Document ID (/ وأيضًا * [ ] وعلامات التحكم) بشرطة "-" قبل استخدامه كـ ID.
+const sanitizeDocId = (value) => {
+  return (value || "")
+    .toString()
+    .trim()
+    .replace(/[\/\*\[\]\x00-\x1F\x7F]/g, '-');
+};
+
+// ==========================================================================
 // 🔎 FIX: البحث بـ array-contains-any بيقارن العنصر كامل بس (مطابقة تامة)،
 // فلو المستخدم كتب جزء من السريال بس (زي "4005" بدل "44005C") مكنش بيلاقي
 // حاجة رغم إن الصنف موجود فعليًا. الحل: نولّد كل الأجزاء الفرعية (substrings)
@@ -3845,12 +3859,15 @@ useEffect(() => {
                   importedAt: serverTimestamp()
                 });
 
-                const regRef = doc(db, 'serial_registry', item.serialNumber);
-                firestoreBatch.set(regRef, { 
-                  exists: true, 
-                  imported: true,
-                  importedAt: serverTimestamp() 
-                }, { merge: true });
+                const safeSerialId = sanitizeDocId(item.serialNumber);
+                if (safeSerialId) {
+                  const regRef = doc(db, 'serial_registry', safeSerialId);
+                  firestoreBatch.set(regRef, { 
+                    exists: true, 
+                    imported: true,
+                    importedAt: serverTimestamp() 
+                  }, { merge: true });
+                }
               }
               
               await firestoreBatch.commit();
