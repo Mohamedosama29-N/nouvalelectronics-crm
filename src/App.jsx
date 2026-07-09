@@ -8220,6 +8220,51 @@ function TicketCard({ ticket, onStatusChange, onView, onEdit }) {
 // ==========================================================================
 // 🎫 مدير التذاكر المحسن - كامل مع كل الإضافات
 // ==========================================================================
+// ==========================================================================
+// ✅ مكون اختيار الحالة (مع منع انتشار الحدث بالكامل)
+// 🛠️ FIX: هذا المكوّن كان مُعرَّفًا جوه EnhancedTicketManager نفسه (function
+// داخل function)، يعني كل مرة الأب بيعيد الرسم (لأي سبب، حتى لو مش متعلق
+// بالتذاكر خالص) كان React بيشوفه "component type" جديد كل مرة، فيهدم
+// عنصر <select> القديم ويبني واحد جديد بدل منه. أي popup مفتوح من المتصفح
+// (زي قائمة الاختيار) مرتبط بالـ DOM node القديم بالذات، فلما تنهدم بيتقفل
+// القائمة فورًا - وده اللي كان بيبان "بيتقفل قبل ما ألحق أختار". نقله هنا
+// كمكوّن ثابت على مستوى الملف بيحل المشكلة نهائيًا لأن هويته متتغيرش أبدًا.
+// ==========================================================================
+const StatusSelectComp = ({ value, onChange, ticketId }) => {
+  const handleChange = (e) => {
+    // ✅ منع انتشار الحدث لأعلى
+    e.stopPropagation();
+    e.preventDefault();
+    // ✅ تنفيذ التغيير
+    onChange(ticketId, e.target.value);
+  };
+
+  const handleClick = (e) => {
+    // ✅ منع انتشار حدث النقر
+    e.stopPropagation();
+  };
+
+  const handleMouseDown = (e) => {
+    // ✅ منع انتشار حدث الضغط بالماوس
+    e.stopPropagation();
+  };
+
+  return (
+    <select
+      value={value}
+      onChange={handleChange}
+      onClick={handleClick}
+      onMouseDown={handleMouseDown}
+      onTouchStart={(e) => e.stopPropagation()}
+      className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 bg-white dark:bg-slate-900 font-bold cursor-pointer hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 relative z-10"
+    >
+      {TICKET_STATUSES.map(s => (
+        <option key={s.value} value={s.value}>{s.label}</option>
+      ))}
+    </select>
+  );
+};
+
 function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUser, warehouseMap, onGenerateInvoice }) {
   const [tickets, setTickets] = useState([]);
   const [search, setSearch] = useState('');
@@ -9279,45 +9324,6 @@ const loadTickets = useCallback(async (isNextPage = false) => {
     setDateRange({ from: '', to: '' });
     setSearch('');
   };
-
-  // ✅ مكون StatusSelect مع منع انتشار الحدث بالكامل
-  // ==========================================================================
-// ✅ مكون اختيار الحالة (مع منع انتشار الحدث بالكامل)
-// ==========================================================================
-const StatusSelectComp = ({ value, onChange, ticketId }) => {
-  const handleChange = (e) => {
-    // ✅ منع انتشار الحدث لأعلى
-    e.stopPropagation();
-    e.preventDefault();
-    // ✅ تنفيذ التغيير
-    onChange(ticketId, e.target.value);
-  };
-
-  const handleClick = (e) => {
-    // ✅ منع انتشار حدث النقر
-    e.stopPropagation();
-  };
-
-  const handleMouseDown = (e) => {
-    // ✅ منع انتشار حدث الضغط بالماوس (وهو المسبب الرئيسي للمشكلة)
-    e.stopPropagation();
-  };
-
-  return (
-    <select
-      value={value}
-      onChange={handleChange}
-      onClick={handleClick}
-      onMouseDown={handleMouseDown}
-      onTouchStart={(e) => e.stopPropagation()}
-      className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 bg-white dark:bg-slate-900 font-bold cursor-pointer hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 relative z-10"
-    >
-      {TICKET_STATUSES.map(s => (
-        <option key={s.value} value={s.value}>{s.label}</option>
-      ))}
-    </select>
-  );
-};
 
   // ====================== RENDER ======================
   return (
