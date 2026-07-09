@@ -23,7 +23,7 @@ import {
 import { 
   getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, deleteDoc, 
   query, where, serverTimestamp, orderBy, onSnapshot, setDoc, increment, 
-  limit, runTransaction, writeBatch, startAfter, Timestamp, arrayUnion
+  limit, runTransaction, writeBatch, startAfter, Timestamp, arrayUnion, getCountFromServer
 } from 'firebase/firestore';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 
@@ -34,7 +34,7 @@ import {
   Lock, FileSpreadsheet, Calculator, AlertOctagon, MapPin, Bell,
   Phone, Loader2, Menu, UserCog, Wrench, Wallet, Mail, 
   CheckCircle2, Calendar, X, LogIn, Shield, Image as ImageIcon, Percent,
-  ChevronDown, Database, UploadCloud, DownloadCloud, Check, Activity, Eye,
+  ChevronDown, ChevronLeft, ChevronRight, Database, UploadCloud, DownloadCloud, Check, Activity, Eye,
   Home, Map as MapIcon, Building, FileText, Printer as PrinterIcon, Copy, Grid,
   Filter, RefreshCw, UsersRound, UserCheck, UserX, UserPlus, Briefcase, Edit2, CalendarDays, Tag, Link2 as LinkIcon,
   HardHat, Headphones, Settings as SettingsIcon, GitBranch, GitMerge,
@@ -2752,6 +2752,7 @@ function InvoiceTemplateManager({ systemSettings, setSettings, notify }) {
 function DashboardView({ appUser, warehouses, onNavigateToInventory, notify, systemSettings }) {
   const [stats, setStats] = useState({ 
     totalItems: 0, 
+    itemsCount: 0,
     totalValue: 0, 
     lowStockCount: 0, 
     salesToday: 0,
@@ -2819,6 +2820,7 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify, sys
            }
            
            let totalQty = 0;
+           let itemsCount = 0; // 🔢 FIX: عدد الأصناف الفعلي (عدد المستندات) مش مجموع القطع
            let totalVal = 0;
            let lowStock = 0;
            let lowStockList = [];
@@ -2827,13 +2829,17 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify, sys
 
            invSnap.docs.forEach(doc => {
              const data = doc.data();
-             if (!data.isDeleted) {
+             // ✨ FIX: توحيد الشرط مع باقي السيستم (where('isDeleted','==',false))
+             // بدل !data.isDeleted، عشان أي صنف قديم ناقصه الحقل ميتحسبش هنا
+             // بينما هو مختفي فعليًا من كل مكان تاني (المخزون، البحث، الجرد).
+             if (data.isDeleted === false) {
                 if (appUser.role === 'admin' || appUser.permissions?.viewAllWarehouses || data.warehouseId === (appUser.assignedWarehouseId || 'main')) {
                    const qty = Number(data.quantity ?? 0);
                    const price = Number(data.price ?? 0);
                    const minStock = Number(data.minStock ?? 0);
                    
                    totalQty += qty;
+                   itemsCount += 1;
                    totalVal += qty * price;
                    
                    warehouseCount[data.warehouseId] = (warehouseCount[data.warehouseId] || 0) + qty;
@@ -3017,6 +3023,7 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify, sys
            if (isMounted) {
                setStats({
                   totalItems: totalQty,
+                  itemsCount: itemsCount,
                   totalValue: totalVal,
                   lowStockCount: lowStock,
                   salesToday: salesToday,
@@ -3164,6 +3171,23 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify, sys
                 {stats.totalTrend > 0 ? '+' : ''}{stats.totalTrend}%
               </span>
               <span className="text-[9px] text-slate-400 dark:text-slate-500">عن الأمس</span>
+            </div>
+          </div>
+        </button>
+
+        <button 
+          onClick={() => handleStatClick('inventory')}
+          className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-all hover:border-violet-300 dark:hover:border-violet-600 relative overflow-hidden group text-right"
+        >
+          <div className="p-3 bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-300 rounded-xl group-hover:bg-violet-100 dark:group-hover:bg-violet-800/50 transition-colors w-fit">
+            <Layers size={22}/>
+          </div>
+          <div className="mt-3">
+            {/* 🔢 FIX: عدد الأصناف الفعلي (عدد الأنواع/المنتجات) - مختلف عن إجمالي القطع فوق */}
+            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">عدد الأصناف بالمخزن</p>
+            <p className="text-2xl font-black text-slate-800 dark:text-white">{(stats.itemsCount || 0).toLocaleString()}</p>
+            <div className="flex items-center gap-1 mt-2">
+              <span className="text-[9px] text-slate-400 dark:text-slate-500">نوع/منتج مختلف، مش مجموع الكميات</span>
             </div>
           </div>
         </button>
@@ -3424,6 +3448,11 @@ function InventoryManager({ appUser, warehouses, notify, setGlobalLoading, wareh
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
+  // 📄 FIX: تحويل التمرير المتراكم ("تحميل المزيد") لصفحات حقيقية بأرقام
+  const PAGE_SIZE = 50;
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageCursors, setPageCursors] = useState([null]); // pageCursors[i] = مؤشر بداية الصفحة i+1
+  const [totalCount, setTotalCount] = useState(0); // 🔢 العدد الفعلي للأصناف المطابقة للفلاتر (مش القطع)
   
   const [showBulkUpdate, setShowBulkUpdate] = useState(false);
   const [bulkPercent, setBulkPercent] = useState(0);
@@ -3451,17 +3480,25 @@ const fixSearchKeys = async () => {
 
     // مصفوفة الكوليكشنز اللي محتاجة ترقية searchTokens، وكل واحدة
     // وطريقة بناء التوكنز الخاصة بيها من حقولها
+    // ✨ FIX: بعض الأصناف/العملاء/التذاكر القديمة اتضافت من غير حقل isDeleted
+    // خالص. أغلب استعلامات السيستم بتستخدم where('isDeleted','==',false)
+    // (مطابقة صارمة)، فأي مستند من غير الحقل ده بيختفي من كل حتة (المخزون،
+    // البحث، الجرد، النقل...) رغم إنه مش محذوف فعليًا. هنا بنضيفه بقيمة
+    // false لأي مستند ناقصه، من غير ما نلمس المستندات اللي فعلاً isDeleted:true.
+    const withDeletedFlag = (data, extra = {}) =>
+      data.isDeleted === undefined ? { ...extra, isDeleted: false } : extra;
+
     const jobs = [
       {
         name: 'inventory',
         tokensOf: (data) => buildInventorySearchTokens(data.name, data.serialNumber, data.category, ...(data.tags || [])),
-        extraFieldsOf: () => ({})
+        extraFieldsOf: (data) => withDeletedFlag(data)
       },
       {
         name: 'customers',
         // ✨ FIX: توحيد رقم الهاتف للعملاء القدام كمان (إزالة مسافات/بادئات دولية مختلفة)
         tokensOf: (data) => buildSearchTokens(data.name, normalizePhone(data.phone), data.email, ...(data.tags || [])),
-        extraFieldsOf: (data) => ({ phone: normalizePhone(data.phone) })
+        extraFieldsOf: (data) => withDeletedFlag(data, { phone: normalizePhone(data.phone) })
       },
       {
         name: 'tickets',
@@ -3469,7 +3506,7 @@ const fixSearchKeys = async () => {
           data.customerName, data.customerPhone, data.ticketNumber,
           data.assignedTechnician, data.assignedMaintenanceCenter, data.device, data.deviceSerial
         ),
-        extraFieldsOf: () => ({})
+        extraFieldsOf: (data) => withDeletedFlag(data)
       }
     ];
 
@@ -3493,7 +3530,8 @@ const fixSearchKeys = async () => {
     }
 
     showSuccess(`✅ تم تحديث فهارس البحث لـ ${count} مستند (مخزون + عملاء + تذاكر)`);
-    loadItems(false); // إعادة تحميل بيانات المخزون
+    loadItems(1); // إعادة تحميل بيانات المخزون
+    loadTotalCount();
   } catch (error) {
     console.error('Error:', error);
     showError('❌ فشل التحديث');
@@ -3513,9 +3551,9 @@ const fixSearchKeys = async () => {
   }, []);
 
   // ==========================================================================
-// 📦 تحميل بيانات المخزون مع Pagination وبحث متقدم
+// 📦 تحميل بيانات المخزون مع صفحات حقيقية (Pagination) وبحث متقدم
 // ==========================================================================
-const loadItems = useCallback(async (isNextPage = false) => {
+const loadItems = useCallback(async (page = 1) => {
   if (!appUser) return;
   setLoadingData(true);
 
@@ -3541,11 +3579,13 @@ const loadItems = useCallback(async (isNextPage = false) => {
       constraints.push(orderBy('name'));
     }
 
-    // 4️⃣ التحميل التدريجي (Pagination)
-    if (isNextPage && lastDoc) {
-      constraints.push(startAfter(lastDoc));
+    // 4️⃣ 📄 FIX: صفحات حقيقية بدل التحميل التراكمي - نستخدم مؤشر بداية
+    // الصفحة المطلوبة (لو سبق زيارتها) بدل ما نضيف كل دفعة على اللي قبلها
+    const cursor = pageCursors[page - 1];
+    if (page > 1 && cursor) {
+      constraints.push(startAfter(cursor));
     }
-    constraints.push(limit(50)); // تحميل 50 صنف في كل مرة
+    constraints.push(limit(PAGE_SIZE));
 
     // 5️⃣ تنفيذ الاستعلام
     let q = query(collection(db, 'inventory'), ...constraints);
@@ -3582,16 +3622,18 @@ const loadItems = useCallback(async (isNextPage = false) => {
       );
     }
 
-    // 7️⃣ تحديث الحالة
-    if (isNextPage) {
-      setItems(prev => [...prev, ...fetched]);
-    } else {
-      setItems(fetched);
-    }
-    
-    // 8️⃣ حفظ آخر مستند للتحميل التالي
-    setLastDoc(snap.docs[snap.docs.length - 1] || null);
-    setHasMore(snap.docs.length === 50); // إذا كان العدد 50، فهناك المزيد
+    // 8️⃣ 📄 استبدال محتوى الصفحة الحالية بدل التراكم فوق بعضه
+    setItems(fetched);
+
+    // 9️⃣ حفظ مؤشر بداية الصفحة التالية (لو لسه معندناش مؤشر ليها)
+    const lastVisible = snap.docs[snap.docs.length - 1] || null;
+    setPageCursors(prev => {
+      const next = [...prev];
+      next[page] = lastVisible;
+      return next;
+    });
+    setHasMore(snap.docs.length === PAGE_SIZE);
+    setCurrentPage(page);
     
   } catch (e) {
     console.error("Error loading inventory:", e);
@@ -3604,12 +3646,35 @@ const loadItems = useCallback(async (isNextPage = false) => {
     }
   }
   setLoadingData(false);
-}, [appUser, debouncedSearch, searchFilters, selectedTags, lastDoc]);
+}, [appUser, debouncedSearch, searchFilters, selectedTags, pageCursors]);
+
+// 🔢 FIX: العدد الفعلي لعدد "الأصناف" (المستندات المطابقة للبحث/الصلاحيات)
+// مش مجموع الكميات، ومش بس عدد الأصناف المحمّلة في الصفحة الحالية
+const loadTotalCount = useCallback(async () => {
+  if (!appUser) return;
+  try {
+    let constraints = [];
+    if (appUser.role !== 'admin' && !appUser.permissions?.viewAllWarehouses) {
+      constraints.push(where('warehouseId', '==', appUser.assignedWarehouseId || 'main'));
+    }
+    constraints.push(where('isDeleted', '==', false));
+    const queryTokens = buildQueryTokens(debouncedSearch);
+    if (queryTokens.length > 0) {
+      constraints.push(where('searchTokens', 'array-contains-any', queryTokens));
+    }
+    const countSnap = await getCountFromServer(query(collection(db, 'inventory'), ...constraints));
+    setTotalCount(countSnap.data().count);
+  } catch (e) {
+    console.error('Error counting inventory:', e);
+  }
+}, [appUser, debouncedSearch]);
 
 
 useEffect(() => {
 
-  loadItems();
+  setPageCursors([null]);
+  loadItems(1);
+  loadTotalCount();
 
 }, [debouncedSearch, appUser, searchFilters, selectedTags]);
 
@@ -3687,7 +3752,9 @@ useEffect(() => {
       setShowBulkDeleteModal(false);
       setBulkDeleteConfirm('');
       setLastDoc(null);
-      loadItems(false);
+      setPageCursors([null]);
+      loadItems(1);
+      loadTotalCount();
       
     } catch (error) {
       console.error("Bulk delete error:", error);
@@ -3722,7 +3789,13 @@ useEffect(() => {
     
     const totalItems = importData.length;
 
-    const BATCH_SIZE = 400;
+    // ⚠️ FIX: كل صنف بيتكتب في عمليتين منفصلتين جوه نفس الـ batch
+    // (مستند inventory + مستند serial_registry). Firestore بيسمح بحد أقصى
+    // 500 عملية لكل writeBatch. كان BATCH_SIZE = 400 صنف يعني 800 عملية
+    // فعليًا لكل دفعة - أكبر من الحد المسموح، فكل commit كان بيفشل بالكامل
+    // بصمت (يتحسب "فشل" جوه catch) رغم ظهور رسالة "نجاح" في الآخر.
+    // 200 صنف × عمليتين = 400 عملية، في أمان تحت الحد الأقصى (500).
+    const BATCH_SIZE = 200;
 
     setImportProgress({ 
       total: totalItems, 
@@ -3732,6 +3805,15 @@ useEffect(() => {
       currentBatch: 0,
       totalBatches: Math.ceil(totalItems / BATCH_SIZE)
     });
+
+    // ⚠️ FIX: رسالة "تم الاستيراد بنجاح" كانت بتعتمد على processed/failed
+    // الجاية من الـ Worker نفسه - وده بس بيعرف إنه "جهّز" البيانات وبعتها،
+    // مش إنها اتحفظت فعليًا في Firestore (الحفظ الفعلي بيحصل هنا في الـ
+    // main thread بعد كده). فكانت ممكن تظهر "نجاح" حتى لو فشل الحفظ الفعلي.
+    // هنا بنتابع نتيجة كل commit فعلي بنفسنا، ونستنى كل الدفعات المعلّقة
+    // قبل ما نوري رسالة النهاية، ونعرض العدد الحقيقي المتحفظ فعلاً.
+    const realCounts = { processed: 0, failed: 0 };
+    const pendingCommits = [];
 
     try {
       const worker = new Worker('/workers/inventoryImportWorker.js');
@@ -3747,46 +3829,51 @@ useEffect(() => {
         const { type, processed, failed, total, batch, batchIndex, totalBatches, error } = e.data;
         
         if (type === 'batch') {
-          try {
-            const firestoreBatch = writeBatch(db);
-            
-            for (const item of batch) {
-              const newRef = doc(collection(db, 'inventory'));
-              firestoreBatch.set(newRef, {
-                ...item,
-                searchKey: normalizeSearch(`${item.name} ${item.serialNumber} ${item.category} ${(item.tags || []).join(' ')}`),
-                searchTokens: buildInventorySearchTokens(item.name, item.serialNumber, item.category, ...(item.tags || [])),
-                createdAt: serverTimestamp(),
-                isDeleted: false,
-                importedBy: appUser.name,
-                importedAt: serverTimestamp()
-              });
+          const commitPromise = (async () => {
+            try {
+              const firestoreBatch = writeBatch(db);
+              
+              for (const item of batch) {
+                const newRef = doc(collection(db, 'inventory'));
+                firestoreBatch.set(newRef, {
+                  ...item,
+                  searchKey: normalizeSearch(`${item.name} ${item.serialNumber} ${item.category} ${(item.tags || []).join(' ')}`),
+                  searchTokens: buildInventorySearchTokens(item.name, item.serialNumber, item.category, ...(item.tags || [])),
+                  createdAt: serverTimestamp(),
+                  isDeleted: false,
+                  importedBy: appUser.name,
+                  importedAt: serverTimestamp()
+                });
 
-              const regRef = doc(db, 'serial_registry', item.serialNumber);
-              firestoreBatch.set(regRef, { 
-                exists: true, 
-                imported: true,
-                importedAt: serverTimestamp() 
-              }, { merge: true });
+                const regRef = doc(db, 'serial_registry', item.serialNumber);
+                firestoreBatch.set(regRef, { 
+                  exists: true, 
+                  imported: true,
+                  importedAt: serverTimestamp() 
+                }, { merge: true });
+              }
+              
+              await firestoreBatch.commit();
+              realCounts.processed += batch.length;
+              
+              setImportProgress(prev => ({
+                ...prev,
+                processed: prev.processed + batch.length,
+                currentBatch: batchIndex + 1,
+                status: `جاري الاستيراد... ${Math.round(((batchIndex + 1) / totalBatches) * 100)}% (${batchIndex + 1}/${totalBatches})`
+              }));
+              
+            } catch (err) {
+              console.error('Error saving batch:', err);
+              realCounts.failed += batch.length;
+              setImportProgress(prev => ({
+                ...prev,
+                failed: prev.failed + batch.length,
+                status: `خطأ في الدفعة ${batchIndex + 1}`
+              }));
             }
-            
-            await firestoreBatch.commit();
-            
-            setImportProgress(prev => ({
-              ...prev,
-              processed: prev.processed + batch.length,
-              currentBatch: batchIndex + 1,
-              status: `جاري الاستيراد... ${Math.round(((batchIndex + 1) / totalBatches) * 100)}% (${batchIndex + 1}/${totalBatches})`
-            }));
-            
-          } catch (err) {
-            console.error('Error saving batch:', err);
-            setImportProgress(prev => ({
-              ...prev,
-              failed: prev.failed + batch.length,
-              status: `خطأ في الدفعة ${batchIndex + 1}`
-            }));
-          }
+          })();
+          pendingCommits.push(commitPromise);
           
         } else if (type === 'progress') {
           setImportProgress(prev => ({
@@ -3797,16 +3884,21 @@ useEffect(() => {
           }));
           
         } else if (type === 'complete') {
-          await logUserActivity(appUser, 'استيراد أصناف', `استيراد ${processed} صنف (فشل ${failed})`);
+          // ⏳ لازم نستنى كل الدفعات المعلّقة تخلص فعليًا قبل ما نعرض رسالة
+          // النهاية، عشان الرقم اللي هيتعرض يبقى حقيقي مش وهمي
+          await Promise.allSettled(pendingCommits);
+
+          await logUserActivity(appUser, 'استيراد أصناف', `استيراد ${realCounts.processed} صنف (فشل ${realCounts.failed})`);
           
-          if (failed === 0) {
-            showSuccess(`✅ تم استيراد ${processed} صنف بنجاح`);
+          if (realCounts.failed === 0) {
+            showSuccess(`✅ تم استيراد ${realCounts.processed} صنف بنجاح فعليًا في قاعدة البيانات`);
           } else {
-            showWarning(`⚠️ تم استيراد ${processed} صنف، فشل ${failed} صنف`);
+            showWarning(`⚠️ اتحفظ فعليًا ${realCounts.processed} صنف، وفشل حفظ ${realCounts.failed} صنف (راجع Console لتفاصيل الخطأ)`);
           }
           
           setLastDoc(null);
-          await loadItems(false);
+          await loadItems(1);
+          loadTotalCount();
           
           setGlobalLoading(false);
           worker.terminate();
@@ -4016,7 +4108,9 @@ useEffect(() => {
     showSuccess("تم إضافة الصنف بنجاح");
 
     setLastDoc(null);
-    loadItems(false);
+    setPageCursors([null]);
+    loadItems(1);
+    loadTotalCount();
 
     setNewItem({ 
       serialNumber: '',
@@ -4216,7 +4310,7 @@ useEffect(() => {
       setShowBulkUpdate(false);
       setBulkPercent(0);
       setLastDoc(null);
-      loadItems(false);
+      loadItems(currentPage);
       
     } catch(e) {
       console.error("Bulk update error:", e);
@@ -4625,8 +4719,8 @@ useEffect(() => {
                <h3 className="font-black text-lg text-slate-800 dark:text-white flex items-center gap-2">
                  <Package size={22} className="text-indigo-600"/> إدارة المخزون
                </h3>
-               <span className="bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg text-xs">
-                 {items.length} صنف
+               <span className="bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg text-xs font-bold">
+                 {totalCount.toLocaleString('ar-EG')} صنف
                </span>
              </div>
              
@@ -4873,14 +4967,33 @@ useEffect(() => {
             )}
           </div>
 
-          {hasMore && !loadingData && items.length >= 100 && (
-            <div className="p-4 text-center bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700">
-              <button 
-                onClick={() => loadItems(true)} 
-                className="text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:underline flex items-center justify-center gap-1 mx-auto"
-              >
-                تحميل المزيد <ChevronDown size={14}/>
-              </button>
+          {/* 📄 FIX: صفحات حقيقية بدل "تحميل المزيد" التراكمي */}
+          {items.length > 0 && (
+            <div className="p-3 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700 flex-wrap gap-2">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
+                عرض {((currentPage - 1) * PAGE_SIZE) + 1} - {((currentPage - 1) * PAGE_SIZE) + items.length} من {totalCount.toLocaleString('ar-EG')} صنف
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => loadItems(currentPage - 1)}
+                  disabled={currentPage <= 1 || loadingData}
+                  className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="الصفحة السابقة"
+                >
+                  <ChevronRight size={16} />
+                </button>
+                <span className="px-3 py-1.5 text-xs font-black text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg min-w-[90px] text-center">
+                  {loadingData ? <Loader2 size={12} className="animate-spin inline"/> : `صفحة ${currentPage} من ${Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}`}
+                </span>
+                <button
+                  onClick={() => loadItems(currentPage + 1)}
+                  disabled={!hasMore || loadingData}
+                  className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="الصفحة التالية"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+              </div>
             </div>
           )}
        </div>
@@ -7167,7 +7280,31 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
   const [editingCustomer, setEditingCustomer] = useState(false);
   const [editedData, setEditedData] = useState(customer);
   const [availableTags, setAvailableTags] = useState([]);
-  
+
+  // 🛠️ FIX: خانة "الحالة" في كروت التذاكر هنا كانت متعطّلة تمامًا
+  // (onStatusChange={() => {}})، فلما المستخدم يختار حالة جديدة، القيمة
+  // كانت بترجع للقديمة فورًا مع أول إعادة رسم لأنها لسه مربوطة بـ
+  // ticket.status الأصلي اللي معملهوش تحديث — وده كان بيبان للمستخدم
+  // وكأن الـ dropdown "بيقفل بسرعة" قبل ما يلحق يختار. دلوقتي بنحدّث فعليًا
+  // في Firestore وفي الحالة المحلية للتذاكر بعد نجاح التحديث.
+  const handleTicketStatusChange = async (ticketId, newStatus) => {
+    try {
+      await updateDoc(doc(db, 'tickets', ticketId), {
+        status: newStatus,
+        updatedAt: serverTimestamp(),
+        history: arrayUnion({
+          action: `تغيير الحالة إلى ${TICKET_STATUSES.find(s => s.value === newStatus)?.label || newStatus}`,
+          timestamp: new Date().toISOString(),
+          by: appUser?.name || '-'
+        })
+      });
+      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: newStatus } : t));
+      showSuccess('تم تحديث حالة التذكرة');
+    } catch (e) {
+      showError('فشل تحديث الحالة: ' + e.message);
+    }
+  };
+
   const [cart, setCart] = useState([]);
   const [search, setSearch] = useState('');
   const [invoice, setInvoice] = useState({ 
@@ -7896,7 +8033,7 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
                           key={ticket.id}
                           ticket={ticket}
                           systemSettings={systemSettings}
-                          onStatusChange={() => {}}
+                          onStatusChange={handleTicketStatusChange}
                           onView={() => {}}
                           onEdit={(t)=>setEditingTicket(t)}
                         />
@@ -8016,7 +8153,14 @@ function TicketCard({ ticket, onStatusChange, onView, onEdit }) {
           <select
             className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 bg-white dark:bg-slate-900"
             value={ticket.status}
-            onChange={(e) => onStatusChange(ticket.id, e.target.value)}
+            onChange={(e) => {
+              // ✅ منع انتشار الحدث لأعلى (نفس إصلاح StatusSelectComp)
+              e.stopPropagation();
+              onStatusChange(ticket.id, e.target.value);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
           >
             {TICKET_STATUSES.map(s => (
               <option key={s.value} value={s.value}>{s.label}</option>
