@@ -5421,7 +5421,18 @@ function ReportsManager({ notify, appUser }) {
       case 'customers':
         return { 'الاسم': data.name || '-', 'الهاتف': data.phone || '-', 'البريد الإلكتروني': data.email || '', 'المحافظة': data.governorate || '', 'المدينة': data.city || '', 'عدد المشتريات': data.totalPurchases || 0 };
       case 'tickets':
-        return { 'رقم التذكرة': data.ticketNumber || '-', 'العميل': data.customerName || '-', 'الهاتف': data.customerPhone || '-', 'الحالة': TICKET_STATUSES.find(s => s.value === data.status)?.label || data.status, 'الأولوية': data.priority || '-', 'الفني': data.assignedTechnician || '-', 'تاريخ الإنشاء': formatDate(data.createdAt) };
+        return {
+          'رقم التذكرة': data.ticketNumber || '-', 'اسم العميل': data.customerName || '-', 'الهاتف': data.customerPhone || '-',
+          'المحافظة': data.governorate || '-', 'المدينة': data.city || '-', 'العنوان': data.customerAddress || '-',
+          'الجهاز': data.device || data.deviceType || '-', 'الموديل': data.deviceModel || '-', 'السيريال': data.deviceSerial || '-',
+          'وصف العطل الرئيسي': data.mainFaultDescription || '-', 'وصف المشكلة': data.issue || '-',
+          'الحالة': TICKET_STATUSES.find(s => s.value === data.status)?.label || data.status,
+          'الأولوية': data.priority === 'high' ? 'عالية' : data.priority === 'medium' ? 'متوسطة' : data.priority === 'low' ? 'منخفضة' : (data.priority || '-'),
+          'نوع التذكرة': data.ticketType || '-', 'المصدر': data.source || '-', 'حالة الضمان': data.warrantyStatus || '-',
+          'الفني المسؤول': data.assignedTechnician || '-', 'مركز الصيانة': data.assignedMaintenanceCenter || '-',
+          'التكلفة التقديرية': data.estimatedCost || 0, 'تاريخ التسليم': data.deliveryDate || '-',
+          'تاريخ الإنشاء': formatDate(data.createdAt), 'آخر تحديث': formatDate(data.updatedAt), 'ملاحظات': data.notes || '-'
+        };
       case 'transfers':
         return { 'من مخزن': data.fromWarehouseId || '-', 'إلى مخزن': data.toWarehouseId || '-', 'الحالة': data.status || '-', 'عدد الأصناف': (data.items || []).length, 'تاريخ الطلب': formatDate(data.createdAt) };
       case 'invoices':
@@ -11029,36 +11040,90 @@ const loadTickets = useCallback(async (isNextPage = false) => {
           
           <button 
             onClick={() => {
-              // 🆕 تصدير Excel للتذاكر - مش موجود قبل كده خالص
+              // 🆕 تقرير تفصيلي شامل للتذاكر (كل الحقول تقريبًا، مش بس الأساسيات)
               if (displayedTickets.length === 0) {
                 showError("لا توجد تذاكر للتصدير");
                 return;
               }
-              const exportData = displayedTickets.map(t => ({
-                'رقم التذكرة': t.ticketNumber || t.id,
-                'العميل': t.customerName || '-',
-                'الهاتف': t.customerPhone || '-',
-                'الجهاز': t.deviceType || '-',
-                'النوع': t.ticketType || '-',
-                'الحالة': TICKET_STATUSES.find(s => s.value === t.status)?.label || t.status,
-                'الأولوية': t.priority === 'high' ? 'عالية' : t.priority === 'medium' ? 'متوسطة' : t.priority === 'low' ? 'منخفضة' : (t.priority || '-'),
-                'الضمان': t.warrantyStatus || '-',
-                'المصدر': t.source || '-',
-                'مركز الصيانة': t.maintenanceCenter || '-',
-                'الفني': t.assignedTechnician || '-',
-                'تاريخ الإنشاء': formatDate(t.createdAt),
-                'آخر تحديث': formatDate(t.updatedAt)
-              }));
-              if (exportToExcel(exportData, `Tickets_${new Date().toISOString().split('T')[0]}`, 'تذاكر الصيانة')) {
-                showSuccess("تم تصدير ملف Excel بنجاح");
+              const exportData = displayedTickets.map(t => {
+                const sla = getTicketSLAInfo(t, systemSettings?.ticketSLA);
+                const partsWithCost = Array.isArray(t.spareParts)
+                  ? t.spareParts.filter(p => Number(p.cost) > 0).map(p => `${p.name || p.itemName || '-'} (${p.cost} ج)`).join(' | ')
+                  : (t.sparePartsWithCost || '-');
+                const partsWithoutCost = Array.isArray(t.spareParts)
+                  ? t.spareParts.filter(p => !Number(p.cost)).map(p => p.name || p.itemName || '-').join(' | ')
+                  : (t.sparePartsWithoutCost || '-');
+                return {
+                  'رقم التذكرة': t.ticketNumber || t.id,
+                  // بيانات العميل
+                  'اسم العميل': t.customerName || '-',
+                  'الهاتف': t.customerPhone || '-',
+                  'هاتف إضافي': t.secondPhone || '-',
+                  'أرضي': t.landline || '-',
+                  'البريد الإلكتروني': t.customerEmail || '-',
+                  'المحافظة': t.governorate || '-',
+                  'المدينة': t.city || '-',
+                  'العنوان': t.customerAddress || '-',
+                  // بيانات الجهاز والعطل
+                  'الجهاز': t.device || t.deviceType || '-',
+                  'الموديل': t.deviceModel || '-',
+                  'السيريال': t.deviceSerial || '-',
+                  'كود المنتج': t.productCode || '-',
+                  'كود العطل الرئيسي': t.mainFaultCode || '-',
+                  'وصف العطل الرئيسي': t.mainFaultDescription || '-',
+                  'كود العطل الفرعي': t.subFaultCode || '-',
+                  'وصف العطل الفرعي': t.subFaultDescription || '-',
+                  'وصف المشكلة': t.issue || '-',
+                  // الحالة والتصنيف
+                  'الحالة': TICKET_STATUSES.find(s => s.value === t.status)?.label || t.status,
+                  'الأولوية': t.priority === 'high' ? 'عالية' : t.priority === 'medium' ? 'متوسطة' : t.priority === 'low' ? 'منخفضة' : (t.priority || '-'),
+                  'نوع التذكرة': t.ticketType || '-',
+                  'المصدر': t.source || '-',
+                  'أقرب فرع': t.nearestBranch || '-',
+                  'حالة الضمان': t.warrantyStatus || '-',
+                  'فترة الضمان': WARRANTY_PERIODS?.find?.(w => w.value === t.warrantyPeriod)?.label || t.warrantyPeriod || '-',
+                  // التعيين
+                  'الفني المسؤول': t.assignedTechnician || '-',
+                  'مركز الصيانة': t.assignedMaintenanceCenter || '-',
+                  'الكول سنتر': t.assignedCallCenter || '-',
+                  // التكلفة وقطع الغيار
+                  'التكلفة التقديرية': t.estimatedCost || 0,
+                  'المدة التقديرية': t.estimatedDuration || '-',
+                  'قطع غيار بتكلفة': partsWithCost || '-',
+                  'قطع غيار بدون تكلفة': partsWithoutCost || '-',
+                  // التواريخ
+                  'تاريخ الفاتورة': t.invoiceDate || '-',
+                  'تاريخ انتهاء الصيانة': t.maintenanceEndDate || '-',
+                  'وقت انتهاء الصيانة': t.maintenanceEndTime || '-',
+                  'تاريخ التسليم': t.deliveryDate || '-',
+                  'وقت التسليم': t.deliveryTime || '-',
+                  'تاريخ الإنشاء': formatDate(t.createdAt),
+                  'آخر تحديث': formatDate(t.updatedAt),
+                  // SLA
+                  'حالة SLA': sla ? (sla.level === 'overdue' ? 'متأخرة' : sla.level === 'due_soon' ? 'قريبة من الموعد' : sla.level === 'completed' ? 'منتهية' : 'في الموعد') : '-',
+                  'الوقت المستهدف (ساعة)': sla?.targetHours ?? '-',
+                  // تقييم المتابعة (لو موجود)
+                  'تقييم: سهولة الوصول': t.followUp?.accessibility || '-',
+                  'تقييم: وقت الصيانة': t.followUp?.maintenanceTime || '-',
+                  'تقييم: التعامل بالمركز': t.followUp?.centerDealing || '-',
+                  'تقييم: إجراءات التسليم': t.followUp?.deliveryProcedures || '-',
+                  'الشراء مرة أخرى': t.followUp?.repurchase === 'yes' ? 'نعم' : t.followUp?.repurchase === 'no' ? 'لا' : '-',
+                  'ملاحظات المتابعة': t.followUpNotes || '-',
+                  // ملاحظات ووسوم
+                  'الوسوم': Array.isArray(t.tags) ? t.tags.join(', ') : (t.tags || '-'),
+                  'ملاحظات': t.notes || '-'
+                };
+              });
+              if (exportToExcel(exportData, `Tickets_Detailed_${new Date().toISOString().split('T')[0]}`, 'تذاكر الصيانة')) {
+                showSuccess(`تم تصدير التقرير التفصيلي بنجاح (${exportData.length} تذكرة)`);
               } else {
                 showError("حدث خطأ أثناء التصدير");
               }
             }}
             className="px-3 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 flex items-center gap-2"
-            title="تصدير التذاكر الظاهرة حاليًا إلى Excel"
+            title="تصدير تقرير تفصيلي شامل لكل بيانات التذاكر الظاهرة حاليًا"
           >
-            <Download size={14}/> تصدير Excel
+            <Download size={14}/> تصدير تقرير تفصيلي
           </button>
 
           <button onClick={resetFilters} className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs font-bold">
