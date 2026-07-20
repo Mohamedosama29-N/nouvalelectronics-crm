@@ -46,7 +46,8 @@ import {
   MessageCircle, Share2, FileJson, Server, Cloud, Zap, EyeOff,
   RotateCcw, Sparkles, Box, Layers, ShoppingBag, Truck, 
   Wrench as WrenchIcon, Headphones as HeadphonesIcon, Star as StarIcon,
-  FileText as FileTextIcon, Settings as CogIcon, Trash as TrashIcon, Info
+  FileText as FileTextIcon, Settings as CogIcon, Trash as TrashIcon, Info,
+  ArrowUp, ArrowDown, FileSpreadsheet as FileSpreadsheetIcon
 } from 'lucide-react';
 
 // ==========================================================================
@@ -1262,7 +1263,47 @@ const ROLE_DEFAULT_PERMISSIONS = {
   }
 };
 
+// ==========================================================================
+// 🎛️ نظام تخصيص الداشبورد لكل مستخدم (Dashboard Widgets)
+// كل عنصر هنا = كارت/قسم مستقل تقدر تظهره أو تخفيه، وتتحكم في ترتيبه، لكل
+// مستخدم على حدة. الإعدادات المخصصة بتتخزن في مستند الموظف نفسه تحت
+// employees/{id}.dashboardConfig.widgets = { [id]: { visible, order } }
+// لو مفيش إعدادات مخصصة للمستخدم، كل العناصر بتظهر بالترتيب الافتراضي هنا.
+// size: 'sm' = كارت رئيسي كبير، 'xs' = كارت صغير في صف، 'full' = قسم كامل العرض
+// permission: لو موجودة، العنصر بيتفلتر حسب صلاحية المستخدم كمان (مش بس التخصيص)
+// ==========================================================================
+const DASHBOARD_WIDGETS = [
+  { id: 'totalItems', label: 'إجمالي القطع بالمخزن', category: 'مخزون', size: 'sm' },
+  { id: 'itemsCount', label: 'عدد الأصناف بالمخزن', category: 'مخزون', size: 'sm' },
+  { id: 'inventoryValue', label: 'قيمة المخزون الإجمالية', category: 'مخزون', size: 'sm', permission: 'viewInventoryValue' },
+  { id: 'salesToday', label: 'مبيعات اليوم', category: 'مبيعات', size: 'sm' },
+  { id: 'lowStock', label: 'نواقص تحتاج طلب', category: 'مخزون', size: 'sm' },
+  { id: 'salesWeek', label: 'مبيعات الأسبوع', category: 'مبيعات', size: 'xs' },
+  { id: 'salesMonth', label: 'مبيعات الشهر', category: 'مبيعات', size: 'xs' },
+  { id: 'salesYear', label: 'مبيعات السنة', category: 'مبيعات', size: 'xs' },
+  { id: 'avgInvoice', label: 'متوسط الفاتورة', category: 'مبيعات', size: 'xs' },
+  { id: 'ticketsToday', label: 'تذاكر اليوم', category: 'صيانة', size: 'xs', permission: 'manageTickets' },
+  { id: 'ticketsWeek', label: 'تذاكر الأسبوع', category: 'صيانة', size: 'xs', permission: 'manageTickets' },
+  { id: 'ticketsMonth', label: 'تذاكر الشهر', category: 'صيانة', size: 'xs', permission: 'manageTickets' },
+  { id: 'ticketsWaiting', label: 'تذاكر بانتظار الموافقة', category: 'صيانة', size: 'xs', permission: 'manageTickets' },
+  { id: 'ticketsHighPriority', label: 'تذاكر عالية الأولوية', category: 'صيانة', size: 'xs', permission: 'manageTickets' },
+  { id: 'ticketsSLA', label: 'تذاكر متأخرة عن SLA', category: 'صيانة', size: 'xs', permission: 'manageTickets' },
+  { id: 'topProducts', label: 'أفضل المنتجات مبيعاً', category: 'مبيعات', size: 'full' },
+  { id: 'charts', label: 'الرسوم البيانية', category: 'تقارير', size: 'full', permission: 'viewCharts' },
+  { id: 'recentActivity', label: 'آخر النشاطات', category: 'عام', size: 'full' }
+];
 
+// بيرجع قائمة العناصر بعد تطبيق تخصيص المستخدم (ظاهر/مخفي + ترتيب)، مرتبة فعليًا
+const getDashboardWidgetConfig = (appUser) => {
+  const saved = appUser?.dashboardConfig?.widgets || {};
+  return DASHBOARD_WIDGETS
+    .map((w, idx) => ({
+      ...w,
+      visible: saved[w.id]?.visible !== undefined ? saved[w.id].visible : true,
+      order: saved[w.id]?.order !== undefined ? saved[w.id].order : idx
+    }))
+    .sort((a, b) => a.order - b.order);
+};
 
 const TICKET_STATUSES = [
   { value: 'created', label: 'إنشاء', color: 'gray' },
@@ -2809,6 +2850,17 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify, sys
   const [selectedWarehouse, setSelectedWarehouse] = useState('all');
   const [chartType, setChartType] = useState('sales');
 
+  // 🎛️ تخصيص الداشبورد: ترتيب وإظهار/إخفاء العناصر حسب إعدادات المستخدم
+  // الحالي (اللي بيضبطها المدير من صفحة "فريق العمل والصلاحيات")
+  const widgetConfig = useMemo(() => getDashboardWidgetConfig(appUser), [appUser]);
+  const isWidgetVisible = (id) => {
+    const w = widgetConfig.find(x => x.id === id);
+    if (!w || !w.visible) return false;
+    if (w.permission && !(appUser.role === 'admin' || appUser.permissions?.[w.permission])) return false;
+    return true;
+  };
+  const widgetOrder = (id) => widgetConfig.findIndex(x => x.id === id);
+
   const handleRefresh = () => {
     setRefreshKey(prev => prev + 1);
   };
@@ -3169,267 +3221,240 @@ function DashboardView({ appUser, warehouses, onNavigateToInventory, notify, sys
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <button 
-          onClick={() => handleStatClick('inventory')}
-          className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-all hover:border-indigo-300 dark:hover:border-indigo-600 relative overflow-hidden group text-right"
-        >
-          <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 rounded-xl group-hover:bg-indigo-100 dark:group-hover:bg-indigo-800/50 transition-colors w-fit">
-            <Package size={22}/>
-          </div>
-          <div className="mt-3">
-            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">إجمالي القطع بالمخزن</p>
-            <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.totalItems.toLocaleString()}</p>
-            <div className="flex items-center gap-1 mt-2">
-              <span className={`text-[9px] font-bold ${stats.totalTrend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                {stats.totalTrend > 0 ? '+' : ''}{stats.totalTrend}%
-              </span>
-              <span className="text-[9px] text-slate-400 dark:text-slate-500">عن الأمس</span>
-            </div>
-          </div>
-        </button>
+      {/* 🎛️ من هنا لتحت: كل قسم عبارة عن "widget" مستقل - بيتفلتر ويترتب حسب
+          تخصيص الداشبورد الخاص بالمستخدم الحالي (widgetConfig) */}
+      {(() => {
+        const SM_IDS = ['totalItems', 'itemsCount', 'inventoryValue', 'salesToday', 'lowStock'];
+        const XS_IDS = ['salesWeek', 'salesMonth', 'salesYear', 'avgInvoice', 'ticketsToday', 'ticketsWeek', 'ticketsMonth', 'ticketsWaiting', 'ticketsHighPriority', 'ticketsSLA'];
+        const FULL_IDS = ['topProducts', 'charts', 'recentActivity'];
 
-        <button 
-          onClick={() => handleStatClick('inventory')}
-          className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-all hover:border-violet-300 dark:hover:border-violet-600 relative overflow-hidden group text-right"
-        >
-          <div className="p-3 bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-300 rounded-xl group-hover:bg-violet-100 dark:group-hover:bg-violet-800/50 transition-colors w-fit">
-            <Layers size={22}/>
-          </div>
-          <div className="mt-3">
-            {/* 🔢 FIX: عدد الأصناف الفعلي (عدد الأنواع/المنتجات) - مختلف عن إجمالي القطع فوق */}
-            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">عدد الأصناف بالمخزن</p>
-            <p className="text-2xl font-black text-slate-800 dark:text-white">{(stats.itemsCount || 0).toLocaleString()}</p>
-            <div className="flex items-center gap-1 mt-2">
-              <span className="text-[9px] text-slate-400 dark:text-slate-500">نوع/منتج مختلف، مش مجموع الكميات</span>
-            </div>
-          </div>
-        </button>
+        const visibleSm = widgetConfig.filter(w => SM_IDS.includes(w.id) && isWidgetVisible(w.id));
+        const visibleXs = widgetConfig.filter(w => XS_IDS.includes(w.id) && isWidgetVisible(w.id));
+        const visibleFull = widgetConfig.filter(w => FULL_IDS.includes(w.id) && isWidgetVisible(w.id));
 
-        {showInventoryValue && (
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow">
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300 rounded-xl w-fit">
-              <Wallet size={22}/>
-            </div>
-            <div className="mt-3">
-              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">قيمة المخزون الإجمالية</p>
-              <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.totalValue.toLocaleString()} ج</p>
-              <div className="flex items-center gap-1 mt-2">
-                <span className={`text-[9px] font-bold ${stats.valueTrend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                  {stats.valueTrend > 0 ? '+' : ''}{stats.valueTrend}%
-                </span>
-                <span className="text-[9px] text-slate-400 dark:text-slate-500">عن الأمس</span>
+        const smRenderers = {
+          totalItems: () => (
+            <button
+              onClick={() => handleStatClick('inventory')}
+              className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-all hover:border-indigo-300 dark:hover:border-indigo-600 relative overflow-hidden group text-right w-full h-full"
+            >
+              <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 rounded-xl group-hover:bg-indigo-100 dark:group-hover:bg-indigo-800/50 transition-colors w-fit">
+                <Package size={22}/>
               </div>
-            </div>
-          </div>
-        )}
-
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow">
-          <div className="p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded-xl w-fit">
-            <Receipt size={22}/>
-          </div>
-          <div className="mt-3">
-            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">مبيعات اليوم</p>
-            <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.salesToday.toLocaleString()} ج</p>
-            <div className="flex items-center gap-1 mt-2">
-              <span className={`text-[9px] font-bold ${stats.salesTrend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                {stats.salesTrend > 0 ? '+' : ''}{stats.salesTrend}%
-              </span>
-              <span className="text-[9px] text-slate-400 dark:text-slate-500">عن الأمس</span>
-            </div>
-          </div>
-        </div>
-
-        <button 
-          onClick={() => handleStatClick('lowstock')}
-          className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-all hover:border-rose-300 dark:hover:border-rose-600 relative overflow-hidden group text-right"
-        >
-          <div className="p-3 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-300 rounded-xl group-hover:bg-rose-100 dark:group-hover:bg-rose-800/50 transition-colors w-fit">
-            <AlertOctagon size={22}/>
-          </div>
-          <div className="mt-3">
-            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">نواقص تحتاج طلب</p>
-            <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.lowStockCount.toLocaleString()}</p>
-            {stats.lowStockCount > 0 && (
-              <p className="text-[9px] text-rose-500 dark:text-rose-400 font-bold mt-2">اضغط لعرض التفاصيل</p>
-            )}
-          </div>
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
-          <p className="text-xs font-bold text-blue-800 dark:text-blue-300 mb-1">مبيعات الأسبوع</p>
-          <p className="text-2xl font-black text-blue-600 dark:text-blue-400">{stats.salesWeek.toLocaleString()} ج</p>
-        </div>
-        <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 p-4 rounded-xl border border-green-100 dark:border-green-800">
-          <p className="text-xs font-bold text-green-800 dark:text-green-300 mb-1">مبيعات الشهر</p>
-          <p className="text-2xl font-black text-green-600 dark:text-green-400">{stats.salesMonth.toLocaleString()} ج</p>
-        </div>
-        <div className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30 p-4 rounded-xl border border-purple-100 dark:border-purple-800">
-          <p className="text-xs font-bold text-purple-800 dark:text-purple-300 mb-1">مبيعات السنة</p>
-          <p className="text-2xl font-black text-purple-600 dark:text-purple-400">{stats.salesYear.toLocaleString()} ج</p>
-        </div>
-        <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30 p-4 rounded-xl border border-amber-100 dark:border-amber-800">
-          <p className="text-xs font-bold text-amber-800 dark:text-amber-300 mb-1">متوسط الفاتورة</p>
-          <p className="text-2xl font-black text-amber-600 dark:text-amber-400">
-            {stats.salesWeek > 0 ? Math.round(stats.salesWeek / (stats.salesWeek / 1000)).toLocaleString() : 0} ج
-          </p>
-        </div>
-      </div>
-
-      {appUser.permissions?.manageTickets && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mt-4">
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
-            <p className="text-xs font-bold text-blue-800 dark:text-blue-300 mb-1">تذاكر اليوم</p>
-            <p className="text-2xl font-black text-blue-600 dark:text-blue-400">{ticketStats.today}</p>
-          </div>
-          <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 p-4 rounded-xl border border-green-100 dark:border-green-800">
-            <p className="text-xs font-bold text-green-800 dark:text-green-300 mb-1">تذاكر الأسبوع</p>
-            <p className="text-2xl font-black text-green-600 dark:text-green-400">{ticketStats.week}</p>
-          </div>
-          <div className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30 p-4 rounded-xl border border-purple-100 dark:border-purple-800">
-            <p className="text-xs font-bold text-purple-800 dark:text-purple-300 mb-1">تذاكر الشهر</p>
-            <p className="text-2xl font-black text-purple-600 dark:text-purple-400">{ticketStats.month}</p>
-          </div>
-          <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30 p-4 rounded-xl border border-amber-100 dark:border-amber-800">
-            <p className="text-xs font-bold text-amber-800 dark:text-amber-300 mb-1">بانتظار الموافقة</p>
-            <p className="text-2xl font-black text-amber-600 dark:text-amber-400">{ticketStats.waitingApproval}</p>
-          </div>
-          <div className="bg-gradient-to-br from-rose-50 to-red-50 dark:from-rose-900/30 dark:to-red-900/30 p-4 rounded-xl border border-rose-100 dark:border-rose-800">
-            <p className="text-xs font-bold text-rose-800 dark:text-rose-300 mb-1">عالية الأولوية</p>
-            <p className="text-2xl font-black text-rose-600 dark:text-rose-400">{ticketStats.highPriority}</p>
-          </div>
-          {/* ✨ ميزة جديدة: تتبع SLA - تذاكر متأخرة عن الموعد المستهدف */}
-          <div className="bg-gradient-to-br from-red-50 to-rose-100 dark:from-red-900/40 dark:to-rose-900/40 p-4 rounded-xl border border-red-200 dark:border-red-800">
-            <p className="text-xs font-bold text-red-800 dark:text-red-300 mb-1">⏰ متأخرة عن SLA</p>
-            <p className="text-2xl font-black text-red-600 dark:text-red-400">{ticketStats.overdueSLA}</p>
-          </div>
-        </div>
-      )}
-
-      {stats.topProducts.length > 0 && (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
-          <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2">
-            <Award className="text-amber-500" size={20}/> أفضل المنتجات مبيعاً
-          </h3>
-          <div className="space-y-3">
-            {stats.topProducts.slice(0, 5).map((product, idx) => (
-              <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <span className="w-6 h-6 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-full flex items-center justify-center text-xs font-bold">
-                    {idx + 1}
+              <div className="mt-3">
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">إجمالي القطع بالمخزن</p>
+                <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.totalItems.toLocaleString()}</p>
+                <div className="flex items-center gap-1 mt-2">
+                  <span className={`text-[9px] font-bold ${stats.totalTrend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                    {stats.totalTrend > 0 ? '+' : ''}{stats.totalTrend}%
                   </span>
-                  <span className="font-bold text-slate-800 dark:text-white">{product.name}</span>
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500">عن الأمس</span>
                 </div>
-                <span className="font-black text-indigo-600 dark:text-indigo-400">{product.value.toLocaleString()} ج</span>
               </div>
-            ))}
+            </button>
+          ),
+          itemsCount: () => (
+            <button
+              onClick={() => handleStatClick('inventory')}
+              className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-all hover:border-violet-300 dark:hover:border-violet-600 relative overflow-hidden group text-right w-full h-full"
+            >
+              <div className="p-3 bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-300 rounded-xl group-hover:bg-violet-100 dark:group-hover:bg-violet-800/50 transition-colors w-fit">
+                <Layers size={22}/>
+              </div>
+              <div className="mt-3">
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">عدد الأصناف بالمخزن</p>
+                <p className="text-2xl font-black text-slate-800 dark:text-white">{(stats.itemsCount || 0).toLocaleString()}</p>
+                <div className="flex items-center gap-1 mt-2">
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500">نوع/منتج مختلف، مش مجموع الكميات</span>
+                </div>
+              </div>
+            </button>
+          ),
+          inventoryValue: () => (
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow h-full">
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300 rounded-xl w-fit">
+                <Wallet size={22}/>
+              </div>
+              <div className="mt-3">
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">قيمة المخزون الإجمالية</p>
+                <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.totalValue.toLocaleString()} ج</p>
+                <div className="flex items-center gap-1 mt-2">
+                  <span className={`text-[9px] font-bold ${stats.valueTrend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                    {stats.valueTrend > 0 ? '+' : ''}{stats.valueTrend}%
+                  </span>
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500">عن الأمس</span>
+                </div>
+              </div>
+            </div>
+          ),
+          salesToday: () => (
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow h-full">
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded-xl w-fit">
+                <Receipt size={22}/>
+              </div>
+              <div className="mt-3">
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">مبيعات اليوم</p>
+                <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.salesToday.toLocaleString()} ج</p>
+                <div className="flex items-center gap-1 mt-2">
+                  <span className={`text-[9px] font-bold ${stats.salesTrend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                    {stats.salesTrend > 0 ? '+' : ''}{stats.salesTrend}%
+                  </span>
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500">عن الأمس</span>
+                </div>
+              </div>
+            </div>
+          ),
+          lowStock: () => (
+            <button
+              onClick={() => handleStatClick('lowstock')}
+              className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-all hover:border-rose-300 dark:hover:border-rose-600 relative overflow-hidden group text-right w-full h-full"
+            >
+              <div className="p-3 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-300 rounded-xl group-hover:bg-rose-100 dark:group-hover:bg-rose-800/50 transition-colors w-fit">
+                <AlertOctagon size={22}/>
+              </div>
+              <div className="mt-3">
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">نواقص تحتاج طلب</p>
+                <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.lowStockCount.toLocaleString()}</p>
+                {stats.lowStockCount > 0 && (
+                  <p className="text-[9px] text-rose-500 dark:text-rose-400 font-bold mt-2">اضغط لعرض التفاصيل</p>
+                )}
+              </div>
+            </button>
+          )
+        };
+
+        const xsCard = (grad, border, textCls, label, value) => (
+          <div className={`bg-gradient-to-br ${grad} p-4 rounded-xl border ${border} h-full`}>
+            <p className={`text-xs font-bold ${textCls} mb-1`}>{label}</p>
+            <p className={`text-2xl font-black ${textCls.replace('800', '600').replace('300', '400')}`}>{value}</p>
           </div>
-        </div>
-      )}
+        );
 
-      {appUser.permissions?.viewCharts && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-          
-          <div className="col-span-2 flex gap-2 mb-2">
-            <button
-              onClick={() => setChartType('sales')}
-              className={`px-4 py-2 rounded-lg font-bold text-sm ${chartType === 'sales' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
-            >
-              المبيعات
-            </button>
-            <button
-              onClick={() => setChartType('tickets')}
-              className={`px-4 py-2 rounded-lg font-bold text-sm ${chartType === 'tickets' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
-            >
-              التذاكر
-            </button>
-            <button
-              onClick={() => setChartType('inventory')}
-              className={`px-4 py-2 rounded-lg font-bold text-sm ${chartType === 'inventory' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
-            >
-              المخزون
-            </button>
-          </div>
+        const xsRenderers = {
+          salesWeek: () => xsCard('from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30', 'border-blue-100 dark:border-blue-800', 'text-blue-800 dark:text-blue-300', 'مبيعات الأسبوع', `${stats.salesWeek.toLocaleString()} ج`),
+          salesMonth: () => xsCard('from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30', 'border-green-100 dark:border-green-800', 'text-green-800 dark:text-green-300', 'مبيعات الشهر', `${stats.salesMonth.toLocaleString()} ج`),
+          salesYear: () => xsCard('from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30', 'border-purple-100 dark:border-purple-800', 'text-purple-800 dark:text-purple-300', 'مبيعات السنة', `${stats.salesYear.toLocaleString()} ج`),
+          avgInvoice: () => xsCard('from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30', 'border-amber-100 dark:border-amber-800', 'text-amber-800 dark:text-amber-300', 'متوسط الفاتورة', `${stats.salesWeek > 0 ? Math.round(stats.salesWeek / (stats.salesWeek / 1000)).toLocaleString() : 0} ج`),
+          ticketsToday: () => xsCard('from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30', 'border-blue-100 dark:border-blue-800', 'text-blue-800 dark:text-blue-300', 'تذاكر اليوم', ticketStats.today),
+          ticketsWeek: () => xsCard('from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30', 'border-green-100 dark:border-green-800', 'text-green-800 dark:text-green-300', 'تذاكر الأسبوع', ticketStats.week),
+          ticketsMonth: () => xsCard('from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30', 'border-purple-100 dark:border-purple-800', 'text-purple-800 dark:text-purple-300', 'تذاكر الشهر', ticketStats.month),
+          ticketsWaiting: () => xsCard('from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30', 'border-amber-100 dark:border-amber-800', 'text-amber-800 dark:text-amber-300', 'بانتظار الموافقة', ticketStats.waitingApproval),
+          ticketsHighPriority: () => xsCard('from-rose-50 to-red-50 dark:from-rose-900/30 dark:to-red-900/30', 'border-rose-100 dark:border-rose-800', 'text-rose-800 dark:text-rose-300', 'عالية الأولوية', ticketStats.highPriority),
+          ticketsSLA: () => xsCard('from-red-50 to-rose-100 dark:from-red-900/40 dark:to-rose-900/40', 'border-red-200 dark:border-red-800', 'text-red-800 dark:text-red-300', '⏰ متأخرة عن SLA', ticketStats.overdueSLA)
+        };
 
-          {chartType === 'sales' && (
-            <>
-              <AdvancedCharts 
-                data={stats.dailySales.map(d => ({ name: d.date, value: d.total }))}
-                type="line"
-                title="المبيعات اليومية (آخر 30 يوم)"
-                height={300}
-              />
-              <AdvancedCharts 
-                data={stats.monthlySales.map(d => ({ name: d.month, value: d.total }))}
-                type="bar"
-                title="المبيعات الشهرية (آخر 12 شهر)"
-                height={300}
-              />
-            </>
-          )}
-
-          {chartType === 'tickets' && (
-            <>
-              <AdvancedCharts 
-                data={ticketStats.byStatus.map(s => ({ name: s.name, value: s.count }))}
-                type="pie"
-                title="توزيع حالات التذاكر"
-                height={300}
-              />
-              <AdvancedCharts 
-                data={ticketStats.byPriority.map(p => ({ name: p.name, value: p.count }))}
-                type="bar"
-                title="توزيع أولويات التذاكر"
-                height={300}
-              />
-            </>
-          )}
-
-          {chartType === 'inventory' && (
-            <>
-              <AdvancedCharts 
-                data={stats.categoryDistribution}
-                type="pie"
-                title="توزيع الأصناف حسب التصنيف"
-                height={300}
-              />
-              <AdvancedCharts 
-                data={stats.warehouseDistribution}
-                type="bar"
-                title="توزيع الأصناف حسب المخزن"
-                height={300}
-              />
-            </>
-          )}
-
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm lg:col-span-2">
-            <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2">
-              <Activity className="text-indigo-600" size={20}/> آخر النشاطات
-            </h3>
-            <div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar">
-              {recentActivities.length > 0 ? (
-                recentActivities.map(act => (
-                  <div key={act.id} className="flex items-start gap-3 p-3 border-b border-slate-100 dark:border-slate-700 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors rounded-lg">
-                    <div className="w-2 h-2 mt-2 rounded-full bg-indigo-400"></div>
-                    <div className="flex-1">
-                      <p className="text-xs font-bold text-slate-800 dark:text-white">{act.action}</p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">{act.details}</p>
-                      <div className="flex justify-between items-center mt-1">
-                        <p className="text-[8px] text-slate-400 dark:text-slate-500">{formatDate(act.timestamp)}</p>
-                        <p className="text-[8px] font-bold text-indigo-600 dark:text-indigo-400">{act.userName}</p>
-                      </div>
+        const fullRenderers = {
+          topProducts: () => stats.topProducts.length > 0 ? (
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+              <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2">
+                <Award className="text-amber-500" size={20}/> أفضل المنتجات مبيعاً
+              </h3>
+              <div className="space-y-3">
+                {stats.topProducts.slice(0, 5).map((product, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-full flex items-center justify-center text-xs font-bold">
+                        {idx + 1}
+                      </span>
+                      <span className="font-bold text-slate-800 dark:text-white">{product.name}</span>
                     </div>
+                    <span className="font-black text-indigo-600 dark:text-indigo-400">{product.value.toLocaleString()} ج</span>
                   </div>
-                ))
-              ) : (
-                <p className="text-center text-slate-400 dark:text-slate-500 py-4">لا توجد نشاطات حديثة</p>
+                ))}
+              </div>
+            </div>
+          ) : null,
+          charts: () => (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="col-span-1 lg:col-span-2 flex gap-2 mb-2">
+                <button
+                  onClick={() => setChartType('sales')}
+                  className={`px-4 py-2 rounded-lg font-bold text-sm ${chartType === 'sales' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                >
+                  المبيعات
+                </button>
+                <button
+                  onClick={() => setChartType('tickets')}
+                  className={`px-4 py-2 rounded-lg font-bold text-sm ${chartType === 'tickets' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                >
+                  التذاكر
+                </button>
+                <button
+                  onClick={() => setChartType('inventory')}
+                  className={`px-4 py-2 rounded-lg font-bold text-sm ${chartType === 'inventory' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                >
+                  المخزون
+                </button>
+              </div>
+
+              {chartType === 'sales' && (
+                <>
+                  <AdvancedCharts data={stats.dailySales.map(d => ({ name: d.date, value: d.total }))} type="line" title="المبيعات اليومية (آخر 30 يوم)" height={300} />
+                  <AdvancedCharts data={stats.monthlySales.map(d => ({ name: d.month, value: d.total }))} type="bar" title="المبيعات الشهرية (آخر 12 شهر)" height={300} />
+                </>
+              )}
+              {chartType === 'tickets' && (
+                <>
+                  <AdvancedCharts data={ticketStats.byStatus.map(s => ({ name: s.name, value: s.count }))} type="pie" title="توزيع حالات التذاكر" height={300} />
+                  <AdvancedCharts data={ticketStats.byPriority.map(p => ({ name: p.name, value: p.count }))} type="bar" title="توزيع أولويات التذاكر" height={300} />
+                </>
+              )}
+              {chartType === 'inventory' && (
+                <>
+                  <AdvancedCharts data={stats.categoryDistribution} type="pie" title="توزيع الأصناف حسب التصنيف" height={300} />
+                  <AdvancedCharts data={stats.warehouseDistribution} type="bar" title="توزيع الأصناف حسب المخزن" height={300} />
+                </>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          ),
+          recentActivity: () => (
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+              <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2">
+                <Activity className="text-indigo-600" size={20}/> آخر النشاطات
+              </h3>
+              <div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar">
+                {recentActivities.length > 0 ? (
+                  recentActivities.map(act => (
+                    <div key={act.id} className="flex items-start gap-3 p-3 border-b border-slate-100 dark:border-slate-700 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors rounded-lg">
+                      <div className="w-2 h-2 mt-2 rounded-full bg-indigo-400"></div>
+                      <div className="flex-1">
+                        <p className="text-xs font-bold text-slate-800 dark:text-white">{act.action}</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">{act.details}</p>
+                        <div className="flex justify-between items-center mt-1">
+                          <p className="text-[8px] text-slate-400 dark:text-slate-500">{formatDate(act.timestamp)}</p>
+                          <p className="text-[8px] font-bold text-indigo-600 dark:text-indigo-400">{act.userName}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-slate-400 dark:text-slate-500 py-4">لا توجد نشاطات حديثة</p>
+                )}
+              </div>
+            </div>
+          )
+        };
+
+        return (
+          <>
+            {visibleSm.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {visibleSm.map(w => <React.Fragment key={w.id}>{smRenderers[w.id]?.()}</React.Fragment>)}
+              </div>
+            )}
+            {visibleXs.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
+                {visibleXs.map(w => <React.Fragment key={w.id}>{xsRenderers[w.id]?.()}</React.Fragment>)}
+              </div>
+            )}
+            {visibleFull.map(w => (
+              <div key={w.id} className="mt-6">
+                {fullRenderers[w.id]?.()}
+              </div>
+            ))}
+          </>
+        );
+      })()}
     </div>
   );
 }
@@ -5367,7 +5392,76 @@ function LowStockView({ lowStockItems = [], appUser, warehouseMap, systemSetting
 // ==========================================================================
 // 📊 مدير التقارير المحسن مع PDF وتصدير متقدم
 // ==========================================================================
-function ReportsManager({ notify }) {
+function ReportsManager({ notify, appUser }) {
+  // 🆕 مركز التصدير الشامل: تصدير Excel لأي مصدر بيانات في السيستم، مش
+  // بس المبيعات (اللي كانت الصفحة دي مقتصرة عليها قبل كده)
+  const [exportSource, setExportSource] = useState('transactions');
+  const [exportingCenter, setExportingCenter] = useState(false);
+
+  const EXPORT_SOURCES = [
+    { id: 'transactions', label: 'المبيعات والمعاملات', collection: 'transactions', permission: 'exportTransactions' },
+    { id: 'inventory', label: 'المخزون', collection: 'inventory', permission: 'exportInventoryCSV' },
+    { id: 'customers', label: 'العملاء', collection: 'customers', permission: 'exportCustomersCSV' },
+    { id: 'tickets', label: 'تذاكر الصيانة', collection: 'tickets', permission: 'manageTickets' },
+    { id: 'transfers', label: 'التحويلات المخزنية', collection: 'transfers', permission: 'viewTransfers' },
+    { id: 'invoices', label: 'الفواتير', collection: 'invoices', permission: 'viewInvoices' },
+    { id: 'users', label: 'المستخدمين', collection: 'employees', permission: 'viewUsers' }
+  ];
+
+  const availableExportSources = EXPORT_SOURCES.filter(s =>
+    appUser?.role === 'admin' || appUser?.permissions?.[s.permission]
+  );
+
+  // كل مصدر له تحويل أعمدة مناسب لقراءة أسهل في Excel، بدل تصدير الحقول
+  // الخام زي ما هي (IDs, timestamps خام...)
+  const mapRowForExport = (source, data) => {
+    switch (source) {
+      case 'inventory':
+        return { 'الاسم': data.name || '-', 'السيريال': data.serialNumber || '-', 'الفئة': data.category || '-', 'الكمية': data.quantity ?? 0, 'السعر': data.price ?? 0, 'الحد الأدنى': data.minStock ?? 0, 'المخزن': data.warehouseId || '-' };
+      case 'customers':
+        return { 'الاسم': data.name || '-', 'الهاتف': data.phone || '-', 'البريد الإلكتروني': data.email || '', 'المحافظة': data.governorate || '', 'المدينة': data.city || '', 'عدد المشتريات': data.totalPurchases || 0 };
+      case 'tickets':
+        return { 'رقم التذكرة': data.ticketNumber || '-', 'العميل': data.customerName || '-', 'الهاتف': data.customerPhone || '-', 'الحالة': TICKET_STATUSES.find(s => s.value === data.status)?.label || data.status, 'الأولوية': data.priority || '-', 'الفني': data.assignedTechnician || '-', 'تاريخ الإنشاء': formatDate(data.createdAt) };
+      case 'transfers':
+        return { 'من مخزن': data.fromWarehouseId || '-', 'إلى مخزن': data.toWarehouseId || '-', 'الحالة': data.status || '-', 'عدد الأصناف': (data.items || []).length, 'تاريخ الطلب': formatDate(data.createdAt) };
+      case 'invoices':
+        return { 'رقم الفاتورة': data.invoiceNumber || '-', 'العميل': data.customerName || '-', 'الإجمالي': data.finalTotal || data.total || 0, 'التاريخ': formatDate(data.timestamp || data.createdAt) };
+      case 'users':
+        return { 'الاسم': data.name || '-', 'البريد الإلكتروني': data.email || '-', 'الدور الوظيفي': USER_ROLES.find(r => r.key === data.role)?.label || data.role, 'الفرع': data.assignedWarehouseId || '-' };
+      case 'transactions':
+      default:
+        return {
+          'رقم الفاتورة': data.invoiceNumber || '-', 'التاريخ': formatDate(data.timestamp), 'نوع العملية': data.type === 'sell' ? 'بيع' : data.type === 'return' ? 'مرتجع' : data.type,
+          'الصنف': data.itemName || '-', 'العميل': data.customerName || '-', 'الصافي': data.finalTotal || data.total || 0, 'البائع': data.operator || '-'
+        };
+    }
+  };
+
+  const handleExportCenter = async () => {
+    const sourceDef = EXPORT_SOURCES.find(s => s.id === exportSource);
+    if (!sourceDef) return;
+    setExportingCenter(true);
+    try {
+      const snap = await getDocs(collection(db, sourceDef.collection));
+      const rows = snap.docs.map(d => mapRowForExport(exportSource, { id: d.id, ...d.data() }));
+      if (rows.length === 0) {
+        showError("لا توجد بيانات في هذا القسم للتصدير");
+      } else if (exportToExcel(rows, `${sourceDef.label}_${new Date().toISOString().split('T')[0]}`, sourceDef.label)) {
+        showSuccess(`تم تصدير "${sourceDef.label}" بنجاح (${rows.length} سجل)`);
+      } else {
+        showError("حدث خطأ أثناء التصدير");
+      }
+    } catch (e) {
+      console.error("Export center error:", e);
+      if (e.code === 'permission-denied') {
+        showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
+      } else {
+        showError("حدث خطأ أثناء تصدير البيانات");
+      }
+    }
+    setExportingCenter(false);
+  };
+
   const [transactions, setTransactions] = useState([]);
   const transactionsRef = useRef([]);
   const [lastDoc, setLastDoc] = useState(null);
@@ -5534,11 +5628,46 @@ function ReportsManager({ notify }) {
     setWarehouse('all');
   };
 
+  const exportCenterPanel = (
+    <div className="bg-gradient-to-l from-indigo-600 to-purple-600 rounded-2xl shadow-sm p-5 text-white mb-6">
+      <h2 className="text-lg font-black flex items-center gap-2 mb-1">
+        <FileSpreadsheetIcon size={20}/> مركز التصدير
+      </h2>
+      <p className="text-xs text-white/80 mb-4">صدّر أي قسم من أقسام السيستم كملف Excel كامل بضغطة واحدة</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <select
+          className="border-0 p-2.5 rounded-lg text-sm font-bold bg-white/95 text-slate-800"
+          value={exportSource}
+          onChange={e => setExportSource(e.target.value)}
+        >
+          {availableExportSources.map(s => (
+            <option key={s.id} value={s.id}>{s.label}</option>
+          ))}
+        </select>
+        <button
+          onClick={handleExportCenter}
+          disabled={exportingCenter || availableExportSources.length === 0}
+          className="bg-white text-indigo-700 px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-indigo-50 disabled:opacity-50 flex items-center gap-2"
+        >
+          {exportingCenter ? <Loader2 size={16} className="animate-spin"/> : <Download size={16}/>}
+          {exportingCenter ? 'جاري التصدير...' : 'تصدير Excel'}
+        </button>
+      </div>
+    </div>
+  );
+
   if (loading && transactions.length === 0) {
-    return <LoadingSkeleton type="table" count={5} />;
+    return (
+      <>
+        {exportCenterPanel}
+        <LoadingSkeleton type="table" count={5} />
+      </>
+    );
   }
 
   return (
+    <>
+    {exportCenterPanel}
     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden text-right" dir="rtl">
        <div className="p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
          <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
@@ -5720,6 +5849,7 @@ function ReportsManager({ notify }) {
           )}
        </div>
     </div>
+    </>
   );
 }
 
@@ -6741,7 +6871,7 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
     e.target.value = null;
   };
 
-  const handleExportCustomers = async () => {
+  const handleExportCustomers = async (format = 'xlsx') => {
     const exportData = customers.map(c => ({
       'الاسم': c.name,
       'الهاتف': c.phone,
@@ -6755,12 +6885,28 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
       'عدد التذاكر': c.ticketsCount || 0
     }));
 
-    await exportToPDF(
-      exportData,
-      'تقرير العملاء',
-      ['الاسم', 'الهاتف', 'البريد الإلكتروني', 'المحافظة', 'المدينة', 'العنوان', 'الوسوم', 'آخر شراء', 'عدد المشتريات', 'عدد التذاكر']
-    );
-    showSuccess("تم تصدير العملاء بنجاح");
+    if (exportData.length === 0) {
+      showError("لا توجد بيانات للتصدير");
+      return;
+    }
+
+    // 🆕 FIX: تصدير Excel كان مش موجود خالص للعملاء (بس PDF)، وExcel أنسب
+    // بكتير للتقارير والتحليل من PDF. خليت xlsx هي الافتراضية، وسايب PDF
+    // كخيار لمين محتاجه للطباعة.
+    if (format === 'xlsx') {
+      if (exportToExcel(exportData, `Customers_${new Date().toISOString().split('T')[0]}`, 'العملاء')) {
+        showSuccess("تم تصدير ملف Excel بنجاح");
+      } else {
+        showError("حدث خطأ أثناء التصدير");
+      }
+    } else {
+      await exportToPDF(
+        exportData,
+        'تقرير العملاء',
+        ['الاسم', 'الهاتف', 'البريد الإلكتروني', 'المحافظة', 'المدينة', 'العنوان', 'الوسوم', 'آخر شراء', 'عدد المشتريات', 'عدد التذاكر']
+      );
+      showSuccess("تم تصدير PDF بنجاح");
+    }
   };
 
   const availableModels = useMemo(() => {
@@ -7162,10 +7308,17 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
              </button>
              
              <button 
-               onClick={handleExportCustomers}
+               onClick={() => handleExportCustomers('xlsx')}
                className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 flex items-center gap-2"
              >
-                <Download size={14}/> تصدير
+                <Download size={14}/> تصدير Excel
+             </button>
+
+             <button 
+               onClick={() => handleExportCustomers('pdf')}
+               className="bg-slate-50 dark:bg-slate-900/30 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-900/50 flex items-center gap-2"
+             >
+                <Download size={14}/> PDF
              </button>
              
              <button 
@@ -10874,6 +11027,40 @@ const loadTickets = useCallback(async (isNextPage = false) => {
             ))}
           </select>
           
+          <button 
+            onClick={() => {
+              // 🆕 تصدير Excel للتذاكر - مش موجود قبل كده خالص
+              if (displayedTickets.length === 0) {
+                showError("لا توجد تذاكر للتصدير");
+                return;
+              }
+              const exportData = displayedTickets.map(t => ({
+                'رقم التذكرة': t.ticketNumber || t.id,
+                'العميل': t.customerName || '-',
+                'الهاتف': t.customerPhone || '-',
+                'الجهاز': t.deviceType || '-',
+                'النوع': t.ticketType || '-',
+                'الحالة': TICKET_STATUSES.find(s => s.value === t.status)?.label || t.status,
+                'الأولوية': t.priority === 'high' ? 'عالية' : t.priority === 'medium' ? 'متوسطة' : t.priority === 'low' ? 'منخفضة' : (t.priority || '-'),
+                'الضمان': t.warrantyStatus || '-',
+                'المصدر': t.source || '-',
+                'مركز الصيانة': t.maintenanceCenter || '-',
+                'الفني': t.assignedTechnician || '-',
+                'تاريخ الإنشاء': formatDate(t.createdAt),
+                'آخر تحديث': formatDate(t.updatedAt)
+              }));
+              if (exportToExcel(exportData, `Tickets_${new Date().toISOString().split('T')[0]}`, 'تذاكر الصيانة')) {
+                showSuccess("تم تصدير ملف Excel بنجاح");
+              } else {
+                showError("حدث خطأ أثناء التصدير");
+              }
+            }}
+            className="px-3 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 flex items-center gap-2"
+            title="تصدير التذاكر الظاهرة حاليًا إلى Excel"
+          >
+            <Download size={14}/> تصدير Excel
+          </button>
+
           <button onClick={resetFilters} className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs font-bold">
             <RotateCcw size={14}/>
           </button>
@@ -11042,6 +11229,10 @@ function EnhancedUserManagement({ appUser, warehouses, notify, setGlobalLoading,
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState('');
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [permissionsUser, setPermissionsUser] = useState(null);
+  // 🎛️ حالة مودال تخصيص الداشبورد لكل مستخدم
+  const [showDashboardModal, setShowDashboardModal] = useState(false);
+  const [dashboardUser, setDashboardUser] = useState(null);
+  const [dashboardWidgetsDraft, setDashboardWidgetsDraft] = useState([]);
   const [departments] = useState(['المبيعات', 'المخزون', 'الصيانة', 'المحاسبة', 'الإدارة', 'الكول سنتر']);
 
   
@@ -11314,6 +11505,55 @@ const WARRANTY_PERIODS = [
       showError("حدث خطأ أثناء حفظ الصلاحيات");
     }
     setGlobalLoading(false);
+  };
+
+  // 🎛️ فتح مودال تخصيص الداشبورد لمستخدم معيّن - بنجهّز نسخة عمل (draft)
+  // مرتبة من DASHBOARD_WIDGETS بعد تطبيق إعداداته المحفوظة (أو الافتراضي)
+  const openDashboardCustomization = (user) => {
+    setDashboardUser(user);
+    setDashboardWidgetsDraft(getDashboardWidgetConfig(user));
+    setShowDashboardModal(true);
+  };
+
+  const toggleDraftWidget = (id) => {
+    setDashboardWidgetsDraft(prev => prev.map(w => w.id === id ? { ...w, visible: !w.visible } : w));
+  };
+
+  const moveDraftWidget = (id, direction) => {
+    setDashboardWidgetsDraft(prev => {
+      const list = [...prev];
+      const idx = list.findIndex(w => w.id === id);
+      const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (idx === -1 || targetIdx < 0 || targetIdx >= list.length) return prev;
+      [list[idx], list[targetIdx]] = [list[targetIdx], list[idx]];
+      return list;
+    });
+  };
+
+  const handleSaveDashboardConfig = async () => {
+    if (!dashboardUser) return;
+    setGlobalLoading(true);
+    try {
+      const widgets = {};
+      dashboardWidgetsDraft.forEach((w, idx) => {
+        widgets[w.id] = { visible: w.visible, order: idx };
+      });
+      await updateDoc(doc(db, 'employees', dashboardUser.id), {
+        dashboardConfig: { widgets }
+      });
+      await logUserActivity(appUser, 'تخصيص الداشبورد', `تعديل عناصر الداشبورد للمستخدم: ${dashboardUser.name}`);
+      showSuccess("تم حفظ تخصيص الداشبورد بنجاح");
+      setShowDashboardModal(false);
+      setDashboardUser(null);
+    } catch (error) {
+      console.error(error);
+      showError("حدث خطأ أثناء حفظ تخصيص الداشبورد");
+    }
+    setGlobalLoading(false);
+  };
+
+  const resetDraftToDefault = () => {
+    setDashboardWidgetsDraft(DASHBOARD_WIDGETS.map((w, idx) => ({ ...w, visible: true, order: idx })));
   };
 
   const filteredUsers = usersList.filter(user => {
@@ -11714,6 +11954,90 @@ const WARRANTY_PERIODS = [
         </div>
       )}
 
+      {/* 🎛️ مودال تخصيص الداشبورد لكل مستخدم على حدة */}
+      {showDashboardModal && dashboardUser && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex justify-between items-center mb-2 border-b pb-4">
+              <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
+                <LayoutDashboard className="text-indigo-600"/> تخصيص الداشبورد لـ {dashboardUser.name}
+              </h3>
+              <button onClick={() => setShowDashboardModal(false)} className="text-slate-400 hover:text-rose-600">
+                <X size={24}/>
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+              حدد العناصر اللي هتظهر في داشبورد المستخدم ده، ورتّبها بالسهام. العناصر الأولى بتظهر فوق.
+            </p>
+
+            <div className="space-y-2">
+              {dashboardWidgetsDraft.map((w, idx) => (
+                <div
+                  key={w.id}
+                  className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${w.visible ? 'border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 opacity-60'}`}
+                >
+                  <div className="flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() => moveDraftWidget(w.id, 'up')}
+                      disabled={idx === 0}
+                      className="text-slate-400 hover:text-indigo-600 disabled:opacity-20 disabled:cursor-not-allowed"
+                      title="نقل لأعلى"
+                    >
+                      <ArrowUp size={14}/>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveDraftWidget(w.id, 'down')}
+                      disabled={idx === dashboardWidgetsDraft.length - 1}
+                      className="text-slate-400 hover:text-indigo-600 disabled:opacity-20 disabled:cursor-not-allowed"
+                      title="نقل لأسفل"
+                    >
+                      <ArrowDown size={14}/>
+                    </button>
+                  </div>
+
+                  <label className="flex items-center gap-3 flex-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 accent-indigo-600"
+                      checked={w.visible}
+                      onChange={() => toggleDraftWidget(w.id)}
+                    />
+                    <div>
+                      <span className="text-sm font-bold text-slate-800 dark:text-white block">{w.label}</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500">{w.category}</span>
+                    </div>
+                  </label>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t mt-6">
+              <button
+                onClick={handleSaveDashboardConfig}
+                className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700"
+              >
+                حفظ التخصيص
+              </button>
+              <button
+                onClick={resetDraftToDefault}
+                className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-4 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600"
+                title="إرجاع كل العناصر للوضع الافتراضي (ظاهرة، بالترتيب الأصلي)"
+              >
+                رجوع للافتراضي
+              </button>
+              <button
+                onClick={() => setShowDashboardModal(false)}
+                className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* مودال الحذف المجمع */}
       {showBulkDeleteModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
@@ -11815,6 +12139,35 @@ const WARRANTY_PERIODS = [
                  ))}
                </select>
                <button 
+                 onClick={() => {
+                   // 🆕 تصدير Excel للمستخدمين - مش موجود قبل كده خالص
+                   if (filteredUsers.length === 0) {
+                     showError("لا يوجد مستخدمين للتصدير");
+                     return;
+                   }
+                   const exportData = filteredUsers.map(u => ({
+                     'الاسم': u.name || '-',
+                     'البريد الإلكتروني': u.email || '-',
+                     'الهاتف': u.phone || '-',
+                     'الدور الوظيفي': USER_ROLES.find(r => r.key === u.role)?.label || u.role,
+                     'الفرع': warehouses.find(w => w.id === u.assignedWarehouseId)?.name || u.assignedWarehouseId || '-',
+                     'القسم': u.department || '-',
+                     'الوظيفة': u.jobTitle || '-',
+                     'تاريخ التعيين': u.hireDate || '-',
+                     'آخر دخول': u.lastLogin ? formatDate(u.lastLogin) : '-',
+                     'عدد الصلاحيات': Object.values(u.permissions || {}).filter(Boolean).length
+                   }));
+                   if (exportToExcel(exportData, `Users_${new Date().toISOString().split('T')[0]}`, 'المستخدمين')) {
+                     showSuccess("تم تصدير ملف Excel بنجاح");
+                   } else {
+                     showError("حدث خطأ أثناء التصدير");
+                   }
+                 }}
+                 className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 flex items-center gap-2 whitespace-nowrap"
+               >
+                  <Download size={14}/> تصدير Excel
+               </button>
+               <button 
                  onClick={()=>setShowAddModal(true)} 
                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-sm whitespace-nowrap"
                >
@@ -11910,6 +12263,13 @@ const WARRANTY_PERIODS = [
                                 title="إدارة الصلاحيات"
                               >
                                 <Shield size={16}/>
+                              </button>
+                              <button 
+                                onClick={() => openDashboardCustomization(u)} 
+                                className="p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg hover:bg-indigo-600 dark:hover:bg-indigo-700 hover:text-white transition-colors shadow-sm" 
+                                title="تخصيص الداشبورد"
+                              >
+                                <LayoutDashboard size={16}/>
                               </button>
                               <button 
                                 onClick={()=>setEditingUser({...u, permissions: u.permissions || {}})} 
@@ -17880,7 +18240,7 @@ useEffect(() => {
 )}
 
                 {currentView === 'reports' && appUser.permissions?.viewReports && 
-                  <ReportsManager notify={notify} />
+                  <ReportsManager notify={notify} appUser={appUser} />
                 }
                 
                 {currentView === 'lowstock' && appUser.permissions?.viewLowStock && 
