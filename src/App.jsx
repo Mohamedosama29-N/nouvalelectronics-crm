@@ -1663,6 +1663,35 @@ const formatDate = (timestamp) => {
   }
 };
 
+// 🛠️ FIX: formatDate بيحوّل أي قيمة لـ toLocaleString اللي بتضيف وقت دايمًا.
+// لو القيمة تاريخ بس (YYYY-MM-DD من input type="date")، JS بيفسرها كـ UTC
+// منتصف الليل، وبعدين toLocaleString بيحولها للتوقيت المحلي (مصر)، فبتظهر
+// وكأنها الساعة 2 أو 3 صباحًا ثابتة كل مرة - رغم إنه مفيش وقت اتسجل أصلاً.
+// الدالة دي بتاخد التاريخ كـ "محلي" مباشرة من غير أي تحويل UTC، وبتعرض
+// التاريخ لوحده من غير وقت وهمي.
+const formatDateOnly = (dateStr) => {
+  if (!dateStr) return '-';
+  try {
+    const parts = String(dateStr).split('-');
+    if (parts.length === 3) {
+      const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
+      }
+    }
+    return new Date(dateStr).toLocaleDateString('ar-EG');
+  } catch (error) {
+    return '-';
+  }
+};
+
+// 🆕 بيرجع الوقت الفعلي الحالي بصيغة HH:MM عشان نملأه تلقائيًا في خانات
+// الوقت (input type="time") لما المستخدم يختار تاريخ من غير ما يحدد وقت
+const getCurrentTimeHHMM = () => {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+};
+
 const logUserActivity = async (user, action, details) => {
   if (!user) return;
   try {
@@ -8517,6 +8546,8 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const [selectedModelId, setSelectedModelId] = useState('');
   const [selectedMainFaultId, setSelectedMainFaultId] = useState('');
   const [selectedSubFaultId, setSelectedSubFaultId] = useState('');
+  // 🆕 نص البحث في خانة "المنتج" - بقت قابلة للكتابة بدل السكرول في ليستة طويلة
+  const [productSearchInput, setProductSearchInput] = useState('');
   
   const [products, setProducts] = useState([]);
   const [models, setModels] = useState([]);
@@ -8578,6 +8609,7 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   const ticketsPageCursorsRef = useRef({ 1: null });
   const [totalTicketsCount, setTotalTicketsCount] = useState(null);
   const [loadingData, setLoadingData] = useState(false);
+  const [exportingTickets, setExportingTickets] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
   const [showOverdueOnly, setShowOverdueOnly] = useState(false);
@@ -8695,6 +8727,7 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     setSelectedModelId('');
     setSelectedMainFaultId('');
     setSelectedSubFaultId('');
+    setProductSearchInput('');
   };
 
   // ========== جلب العملاء ==========
@@ -8879,6 +8912,147 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     ticketsPageCursorsRef.current = { 1: null };
     loadTickets(1);
   }, [loadTickets]);
+
+  // 🛠️ FIX: بدل ما التصدير ياخد بس الـ 30 تذكرة الظاهرة في الصفحة الحالية،
+  // دلوقتي بيجيب كل التذاكر المطابقة لنفس الفلاتر المطبّقة حاليًا من قاعدة
+  // البيانات مباشرة (مش من الصفحة المعروضة بس)، بنفس منطق الفلترة المستخدم
+  // في loadTickets بالظبط، وبيلف على كل الصفحات لحد ما يجيب الكل.
+  const buildTicketExportRow = (t) => {
+    const sla = getTicketSLAInfo(t, systemSettings?.ticketSLA);
+    const partsWithCost = Array.isArray(t.spareParts)
+      ? t.spareParts.filter(p => Number(p.cost) > 0).map(p => `${p.name || p.itemName || '-'} (${p.cost} ج)`).join(' | ')
+      : (t.sparePartsWithCost || '-');
+    const partsWithoutCost = Array.isArray(t.spareParts)
+      ? t.spareParts.filter(p => !Number(p.cost)).map(p => p.name || p.itemName || '-').join(' | ')
+      : (t.sparePartsWithoutCost || '-');
+    return {
+      'رقم التذكرة': t.ticketNumber || t.id,
+      'اسم العميل': t.customerName || '-',
+      'الهاتف': t.customerPhone || '-',
+      'هاتف إضافي': t.secondPhone || '-',
+      'أرضي': t.landline || '-',
+      'البريد الإلكتروني': t.customerEmail || '-',
+      'المحافظة': t.governorate || '-',
+      'المدينة': t.city || '-',
+      'العنوان': t.customerAddress || '-',
+      'الجهاز': t.device || t.deviceType || '-',
+      'الموديل': t.deviceModel || '-',
+      'السيريال': t.deviceSerial || '-',
+      'كود المنتج': t.productCode || '-',
+      'كود العطل الرئيسي': t.mainFaultCode || '-',
+      'وصف العطل الرئيسي': t.mainFaultDescription || '-',
+      'كود العطل الفرعي': t.subFaultCode || '-',
+      'وصف العطل الفرعي': t.subFaultDescription || '-',
+      'وصف المشكلة': t.issue || '-',
+      'الحالة': TICKET_STATUSES.find(s => s.value === t.status)?.label || t.status,
+      'الأولوية': t.priority === 'high' ? 'عالية' : t.priority === 'medium' ? 'متوسطة' : t.priority === 'low' ? 'منخفضة' : (t.priority || '-'),
+      'نوع التذكرة': t.ticketType || '-',
+      'المصدر': t.source || '-',
+      'أقرب فرع': t.nearestBranch || '-',
+      'حالة الضمان': t.warrantyStatus || '-',
+      'فترة الضمان': WARRANTY_PERIODS?.find?.(w => w.value === t.warrantyPeriod)?.label || t.warrantyPeriod || '-',
+      'الفني المسؤول': t.assignedTechnician || '-',
+      'مركز الصيانة': t.assignedMaintenanceCenter || '-',
+      'الكول سنتر': t.assignedCallCenter || '-',
+      'التكلفة التقديرية': t.estimatedCost || 0,
+      'المدة التقديرية': t.estimatedDuration || '-',
+      'قطع غيار بتكلفة': partsWithCost || '-',
+      'قطع غيار بدون تكلفة': partsWithoutCost || '-',
+      'تاريخ الفاتورة': t.invoiceDate || '-',
+      'تاريخ انتهاء الصيانة': t.maintenanceEndDate || '-',
+      'وقت انتهاء الصيانة': t.maintenanceEndTime || '-',
+      'تاريخ التسليم': t.deliveryDate || '-',
+      'وقت التسليم': t.deliveryTime || '-',
+      'تاريخ الإنشاء': formatDate(t.createdAt),
+      'آخر تحديث': formatDate(t.updatedAt),
+      'حالة SLA': sla ? (sla.level === 'overdue' ? 'متأخرة' : sla.level === 'due_soon' ? 'قريبة من الموعد' : sla.level === 'completed' ? 'منتهية' : 'في الموعد') : '-',
+      'الوقت المستهدف (ساعة)': sla?.targetHours ?? '-',
+      'تقييم: سهولة الوصول': t.followUp?.accessibility || '-',
+      'تقييم: وقت الصيانة': t.followUp?.maintenanceTime || '-',
+      'تقييم: التعامل بالمركز': t.followUp?.centerDealing || '-',
+      'تقييم: إجراءات التسليم': t.followUp?.deliveryProcedures || '-',
+      'الشراء مرة أخرى': t.followUp?.repurchase === 'yes' ? 'نعم' : t.followUp?.repurchase === 'no' ? 'لا' : '-',
+      'ملاحظات المتابعة': t.followUpNotes || '-',
+      'الوسوم': Array.isArray(t.tags) ? t.tags.join(', ') : (t.tags || '-'),
+      'ملاحظات': t.notes || '-'
+    };
+  };
+
+  const handleExportAllFilteredTickets = async () => {
+    setExportingTickets(true);
+    try {
+      const canViewAllTickets = appUser.role === 'admin' || appUser.permissions?.viewAllTickets === true;
+      const ticketQueryTokens = buildQueryTokens(debouncedSearch);
+
+      let allFetched = [];
+      let cursor = null;
+      const BATCH_SIZE = 300;
+      const MAX_BATCHES = 30; // سقف أمان (٩٠٠٠ تذكرة) عشان متعلقش المتصفح لو البيانات ضخمة جدًا
+
+      for (let i = 0; i < MAX_BATCHES; i++) {
+        let constraints = [orderBy('createdAt', 'desc')];
+        if (!canViewAllTickets) {
+          constraints.push(where('assignedCenter', '==', appUser.assignedWarehouseId || 'main'));
+        }
+        if (filterStatus !== 'all') constraints.push(where('status', '==', filterStatus));
+        if (filterPriority !== 'all') constraints.push(where('priority', '==', filterPriority));
+        if (ticketQueryTokens.length > 0) {
+          constraints.push(where('searchTokens', 'array-contains-any', ticketQueryTokens));
+        }
+        if (cursor) constraints.push(startAfter(cursor));
+        constraints.push(limit(BATCH_SIZE));
+
+        const snap = await getDocs(query(collection(db, 'tickets'), ...constraints));
+        const batch = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        allFetched = [...allFetched, ...batch];
+        cursor = snap.docs[snap.docs.length - 1] || null;
+        if (snap.docs.length < BATCH_SIZE) break;
+      }
+
+      // نفس فلاتر البحث والفلاتر المحلية المطبّقة في الجدول بالظبط
+      let filtered = allFetched;
+      if (ticketQueryTokens.length > 0) {
+        filtered = filtered.filter(t => {
+          const haystack = (t.searchTokens && t.searchTokens.length > 0)
+            ? t.searchTokens.join(' ')
+            : normalizeSearch(`${t.customerName || ''} ${t.customerPhone || ''} ${t.ticketNumber || ''} ${t.assignedTechnician || ''} ${t.assignedMaintenanceCenter || ''} ${t.device || ''} ${t.deviceSerial || ''}`);
+          return ticketQueryTokens.every(tok => haystack.includes(tok));
+        });
+      }
+      if (filterWarranty !== 'all') filtered = filtered.filter(t => t.warrantyStatus === filterWarranty);
+      if (filterTicketType !== 'all') filtered = filtered.filter(t => t.ticketType === filterTicketType);
+      if (filterSource !== 'all') filtered = filtered.filter(t => t.source === filterSource);
+      if (filterBranch !== 'all') filtered = filtered.filter(t => t.nearestBranch === filterBranch);
+      if (filterTechnician !== 'all') filtered = filtered.filter(t => t.assignedTechnician === filterTechnician);
+      if (filterMaintenanceCenter !== 'all') filtered = filtered.filter(t => t.assignedMaintenanceCenter === filterMaintenanceCenter);
+      if (showOverdueOnly) {
+        filtered = filtered.filter(t => getTicketSLAInfo(t, systemSettings?.ticketSLA)?.level === 'overdue');
+      }
+      if (dateRange.from) {
+        const fromDate = new Date(dateRange.from); fromDate.setHours(0, 0, 0, 0);
+        filtered = filtered.filter(t => (t.createdAt?.toDate?.() || new Date(t.createdAt)) >= fromDate);
+      }
+      if (dateRange.to) {
+        const toDate = new Date(dateRange.to); toDate.setHours(23, 59, 59, 999);
+        filtered = filtered.filter(t => (t.createdAt?.toDate?.() || new Date(t.createdAt)) <= toDate);
+      }
+
+      if (filtered.length === 0) {
+        showError("لا توجد تذاكر مطابقة للفلاتر الحالية للتصدير");
+      } else {
+        const exportData = filtered.map(buildTicketExportRow);
+        if (exportToExcel(exportData, `Tickets_Detailed_${new Date().toISOString().split('T')[0]}`, 'تذاكر الصيانة')) {
+          showSuccess(`تم تصدير التقرير التفصيلي بنجاح (${exportData.length} تذكرة)`);
+        } else {
+          showError("حدث خطأ أثناء التصدير");
+        }
+      }
+    } catch (e) {
+      console.error("Export all tickets error:", e);
+      showError("حدث خطأ أثناء جلب وتصدير كل التذاكر: " + e.message);
+    }
+    setExportingTickets(false);
+  };
 
   // ========== دوال التحديد ==========
   const toggleSelectItem = (itemId) => {
@@ -9400,6 +9574,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       deviceType: ticket.deviceType || '',
       deviceModel: ticket.deviceModel || '',
       deviceSerial: ticket.deviceSerial || '',
+      productCode: ticket.productCode || '',
       issue: ticket.issue || '',
       status: ticket.status || 'created',
       priority: ticket.priority || 'medium',
@@ -9459,6 +9634,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         deviceType: editFormData.deviceType,
         deviceModel: editFormData.deviceModel,
         deviceSerial: editFormData.deviceSerial,
+        productCode: editFormData.productCode || '',
         issue: editFormData.issue,
         status: editFormData.status,
         priority: editFormData.priority,
@@ -9632,17 +9808,31 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl">
     <div>
       <label className="block text-xs font-bold mb-1 text-indigo-800 dark:text-indigo-300">المنتج</label>
-      <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900" value={selectedProductId} onChange={e => {
-        setSelectedProductId(e.target.value);
-        setSelectedModelId('');
-        setSelectedMainFaultId('');
-        setSelectedSubFaultId('');
-        const product = products.find(p => p.id === e.target.value);
-        setNewTicket(prev => ({ ...prev, device: product?.name || '' }));
-      }}>
-        <option value="">-- اختر المنتج --</option>
-        {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-      </select>
+      {/* 🆕 FIX: تحويل الليستة لخانة قابلة للكتابة (بحث مباشر) بدل السكرول في
+          ليستة طويلة - اكتب أي جزء من اسم المنتج وهيبان في الاقتراحات */}
+      <input
+        list="products-datalist"
+        className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900"
+        placeholder="اكتب اسم المنتج للبحث..."
+        value={productSearchInput}
+        onChange={e => {
+          const typed = e.target.value;
+          setProductSearchInput(typed);
+          const matched = products.find(p => p.name === typed);
+          setSelectedModelId('');
+          setSelectedMainFaultId('');
+          setSelectedSubFaultId('');
+          if (matched) {
+            setSelectedProductId(matched.id);
+            setNewTicket(prev => ({ ...prev, device: matched.name }));
+          } else {
+            setSelectedProductId('');
+          }
+        }}
+      />
+      <datalist id="products-datalist">
+        {products.map(p => <option key={p.id} value={p.name} />)}
+      </datalist>
     </div>
 
     <div>
@@ -9685,6 +9875,13 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   <div>
     <label className="block text-xs font-bold mb-1">السيريال التسلسلي للجهاز</label>
     <input className="w-full border p-3 rounded-xl text-sm font-mono" value={newTicket.deviceSerial} onChange={e => setNewTicket({...newTicket, deviceSerial: e.target.value})} placeholder="السيريال التسلسلي" />
+  </div>
+
+  {/* 🆕 كود المنتج - كان بيتعبى تلقائي بس من شيت أكواد الأعطال ومش ظاهر
+      خالص في التذكرة. دلوقتي ظاهر، اختياري، وقابل للتعديل اليدوي */}
+  <div>
+    <label className="block text-xs font-bold mb-1">كود المنتج <span className="text-slate-400 font-normal">(اختياري)</span></label>
+    <input className="w-full border p-3 rounded-xl text-sm font-mono" value={newTicket.productCode} onChange={e => setNewTicket({...newTicket, productCode: e.target.value})} placeholder="كود المنتج (لو موجود)" />
   </div>
 
   {/* ملاحظات إضافية */}
@@ -9748,23 +9945,52 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   </div>
 
   {/* التواريخ */}
-  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
     <div>
       <label className="block text-xs font-bold mb-1">📅 تاريخ الفاتورة / الضمان</label>
       <input type="date" className="w-full border p-3 rounded-xl text-sm" value={newTicket.invoiceDate} onChange={e => setNewTicket({...newTicket, invoiceDate: e.target.value})} />
     </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">⏰ تاريخ انتهاء الصيانة</label>
-      <input type="date" className="w-full border p-3 rounded-xl text-sm" value={newTicket.maintenanceEndDate} onChange={e => setNewTicket({...newTicket, maintenanceEndDate: e.target.value})} />
+    <div className="grid grid-cols-2 gap-2">
+      <div>
+        <label className="block text-xs font-bold mb-1">⏰ تاريخ انتهاء الصيانة</label>
+        <input
+          type="date"
+          className="w-full border p-3 rounded-xl text-sm"
+          value={newTicket.maintenanceEndDate}
+          onChange={e => setNewTicket(prev => ({
+            ...prev,
+            maintenanceEndDate: e.target.value,
+            // 🆕 لو المستخدم اختار تاريخ ولسه محددش وقت، بنسجل الوقت الفعلي
+            // الحالي تلقائيًا (تقدر تعدّله يدوي بعد كده لو حبيت)
+            maintenanceEndTime: e.target.value && !prev.maintenanceEndTime ? getCurrentTimeHHMM() : prev.maintenanceEndTime
+          }))}
+        />
+      </div>
+      <div>
+        {/* 🆕 توقيت انتهاء الصيانة - كان موجود في البيانات بس مفيش خانة إدخال ليه */}
+        <label className="block text-xs font-bold mb-1">🕐 الوقت</label>
+        <input type="time" className="w-full border p-3 rounded-xl text-sm" value={newTicket.maintenanceEndTime} onChange={e => setNewTicket({...newTicket, maintenanceEndTime: e.target.value})} />
+      </div>
     </div>
-    <div>
-      {/* 🆕 توقيت انتهاء الصيانة - كان موجود في البيانات بس مفيش خانة إدخال ليه */}
-      <label className="block text-xs font-bold mb-1">🕐 توقيت انتهاء الصيانة</label>
-      <input type="time" className="w-full border p-3 rounded-xl text-sm" value={newTicket.maintenanceEndTime} onChange={e => setNewTicket({...newTicket, maintenanceEndTime: e.target.value})} />
-    </div>
-    <div>
-      <label className="block text-xs font-bold mb-1">📦 تاريخ تسليم العميل</label>
-      <input type="date" className="w-full border p-3 rounded-xl text-sm" value={newTicket.deliveryDate} onChange={e => setNewTicket({...newTicket, deliveryDate: e.target.value})} />
+    <div className="grid grid-cols-2 gap-2">
+      <div>
+        <label className="block text-xs font-bold mb-1">📦 تاريخ تسليم العميل</label>
+        <input
+          type="date"
+          className="w-full border p-3 rounded-xl text-sm"
+          value={newTicket.deliveryDate}
+          onChange={e => setNewTicket(prev => ({
+            ...prev,
+            deliveryDate: e.target.value,
+            deliveryTime: e.target.value && !prev.deliveryTime ? getCurrentTimeHHMM() : prev.deliveryTime
+          }))}
+        />
+      </div>
+      <div>
+        {/* 🆕 توقيت تسليم العميل - كان موجود في البيانات بس مفيش خانة إدخال ليه */}
+        <label className="block text-xs font-bold mb-1">🕐 الوقت</label>
+        <input type="time" className="w-full border p-3 rounded-xl text-sm" value={newTicket.deliveryTime} onChange={e => setNewTicket({...newTicket, deliveryTime: e.target.value})} />
+      </div>
     </div>
   </div>
 
@@ -10093,6 +10319,12 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       <label className="text-xs text-slate-500 block mb-1">الضمان</label>
       <p className="font-bold">{WARRANTY_OPTIONS.find(w => w.value === fullTicketView.warrantyStatus)?.label || '-'}</p>
     </div>
+    {fullTicketView.productCode && (
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+        <label className="text-xs text-slate-500 block mb-1">كود المنتج</label>
+        <p className="font-bold font-mono">{fullTicketView.productCode}</p>
+      </div>
+    )}
   </div>
 
   {/* النوع والمصدر والفرع */}
@@ -10181,22 +10413,25 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     {fullTicketView.invoiceDate && (
       <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
         <label className="text-xs text-slate-500 block mb-1 font-bold">📅 تاريخ الفاتورة</label>
-        <p className="font-bold">{formatDate(fullTicketView.invoiceDate)}</p>
+        <p className="font-bold">{formatDateOnly(fullTicketView.invoiceDate)}</p>
       </div>
     )}
     {(fullTicketView.maintenanceEndDate || fullTicketView.maintenanceEndTime) && (
       <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
         <label className="text-xs text-slate-500 block mb-1 font-bold">⏰ توقيت انتهاء الصيانة</label>
         <p className="font-bold">
-          {fullTicketView.maintenanceEndDate ? formatDate(fullTicketView.maintenanceEndDate) : '-'}
+          {fullTicketView.maintenanceEndDate ? formatDateOnly(fullTicketView.maintenanceEndDate) : '-'}
           {fullTicketView.maintenanceEndTime ? ` - ${fullTicketView.maintenanceEndTime}` : ''}
         </p>
       </div>
     )}
-    {fullTicketView.deliveryDate && (
+    {(fullTicketView.deliveryDate || fullTicketView.deliveryTime) && (
       <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-        <label className="text-xs text-slate-500 block mb-1 font-bold">📦 تاريخ تسليم العميل</label>
-        <p className="font-bold">{formatDate(fullTicketView.deliveryDate)}</p>
+        <label className="text-xs text-slate-500 block mb-1 font-bold">📦 توقيت تسليم العميل</label>
+        <p className="font-bold">
+          {fullTicketView.deliveryDate ? formatDateOnly(fullTicketView.deliveryDate) : '-'}
+          {fullTicketView.deliveryTime ? ` - ${fullTicketView.deliveryTime}` : ''}
+        </p>
       </div>
     )}
   </div>
@@ -10633,7 +10868,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                   <h4 className="font-black text-sm text-amber-700 dark:text-amber-300">بيانات الجهاز والعطل</h4>
                 </div>
                 <div className="p-5 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">الجهاز</label>
                       <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-amber-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.device} onChange={e => setEditFormData({ ...editFormData, device: e.target.value })} />
@@ -10645,6 +10880,12 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                     <div>
                       <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">السيريال</label>
                       <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold font-mono outline-none focus:border-amber-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.deviceSerial} onChange={e => setEditFormData({ ...editFormData, deviceSerial: e.target.value })} />
+                    </div>
+                    <div>
+                      {/* 🆕 كود المنتج - كان بيتعبى من شيت أكواد الأعطال بس مش ظاهر
+                          في التذكرة، اختياري وقابل للتعديل اليدوي دلوقتي */}
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">كود المنتج <span className="text-slate-400 font-normal">(اختياري)</span></label>
+                      <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold font-mono outline-none focus:border-amber-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.productCode || ''} onChange={e => setEditFormData({ ...editFormData, productCode: e.target.value })} />
                     </div>
                   </div>
                   <div>
@@ -10678,23 +10919,51 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                   <CalendarDays size={16} className="text-sky-600 dark:text-sky-400" />
                   <h4 className="font-black text-sm text-sky-700 dark:text-sky-300">التواريخ</h4>
                 </div>
-                <div className="p-5 grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">📅 تاريخ الفاتورة</label>
                     <input type="date" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-sky-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.invoiceDate} onChange={e => setEditFormData({...editFormData, invoiceDate: e.target.value})} />
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">⏰ تاريخ انتهاء الصيانة</label>
-                    <input type="date" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-sky-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.maintenanceEndDate} onChange={e => setEditFormData({...editFormData, maintenanceEndDate: e.target.value})} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">⏰ انتهاء الصيانة</label>
+                      <input
+                        type="date"
+                        className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-sky-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                        value={editFormData.maintenanceEndDate}
+                        onChange={e => setEditFormData(prev => ({
+                          ...prev,
+                          maintenanceEndDate: e.target.value,
+                          // 🆕 لو مفيش وقت متسجل، بنسجل الوقت الفعلي الحالي تلقائيًا (قابل للتعديل)
+                          maintenanceEndTime: e.target.value && !prev.maintenanceEndTime ? getCurrentTimeHHMM() : prev.maintenanceEndTime
+                        }))}
+                      />
+                    </div>
+                    <div>
+                      {/* 🆕 توقيت انتهاء الصيانة - كان موجود في البيانات بس مفيش خانة إدخال ليه */}
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">🕐 الوقت</label>
+                      <input type="time" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-sky-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.maintenanceEndTime} onChange={e => setEditFormData({...editFormData, maintenanceEndTime: e.target.value})} />
+                    </div>
                   </div>
-                  <div>
-                    {/* 🆕 توقيت انتهاء الصيانة - كان موجود في البيانات بس مفيش خانة إدخال ليه */}
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">🕐 توقيت انتهاء الصيانة</label>
-                    <input type="time" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-sky-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.maintenanceEndTime} onChange={e => setEditFormData({...editFormData, maintenanceEndTime: e.target.value})} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">📦 تاريخ تسليم العميل</label>
-                    <input type="date" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-sky-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.deliveryDate} onChange={e => setEditFormData({...editFormData, deliveryDate: e.target.value})} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">📦 تسليم العميل</label>
+                      <input
+                        type="date"
+                        className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-sky-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                        value={editFormData.deliveryDate}
+                        onChange={e => setEditFormData(prev => ({
+                          ...prev,
+                          deliveryDate: e.target.value,
+                          deliveryTime: e.target.value && !prev.deliveryTime ? getCurrentTimeHHMM() : prev.deliveryTime
+                        }))}
+                      />
+                    </div>
+                    <div>
+                      {/* 🆕 توقيت تسليم العميل - كان موجود في البيانات بس مفيش خانة إدخال ليه */}
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">🕐 الوقت</label>
+                      <input type="time" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-sky-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.deliveryTime} onChange={e => setEditFormData({...editFormData, deliveryTime: e.target.value})} />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -11107,91 +11376,13 @@ const loadTickets = useCallback(async (targetPage = 1) => {
           </select>
           
           <button 
-            onClick={() => {
-              // 🆕 تقرير تفصيلي شامل للتذاكر (كل الحقول تقريبًا، مش بس الأساسيات)
-              if (displayedTickets.length === 0) {
-                showError("لا توجد تذاكر للتصدير");
-                return;
-              }
-              const exportData = displayedTickets.map(t => {
-                const sla = getTicketSLAInfo(t, systemSettings?.ticketSLA);
-                const partsWithCost = Array.isArray(t.spareParts)
-                  ? t.spareParts.filter(p => Number(p.cost) > 0).map(p => `${p.name || p.itemName || '-'} (${p.cost} ج)`).join(' | ')
-                  : (t.sparePartsWithCost || '-');
-                const partsWithoutCost = Array.isArray(t.spareParts)
-                  ? t.spareParts.filter(p => !Number(p.cost)).map(p => p.name || p.itemName || '-').join(' | ')
-                  : (t.sparePartsWithoutCost || '-');
-                return {
-                  'رقم التذكرة': t.ticketNumber || t.id,
-                  // بيانات العميل
-                  'اسم العميل': t.customerName || '-',
-                  'الهاتف': t.customerPhone || '-',
-                  'هاتف إضافي': t.secondPhone || '-',
-                  'أرضي': t.landline || '-',
-                  'البريد الإلكتروني': t.customerEmail || '-',
-                  'المحافظة': t.governorate || '-',
-                  'المدينة': t.city || '-',
-                  'العنوان': t.customerAddress || '-',
-                  // بيانات الجهاز والعطل
-                  'الجهاز': t.device || t.deviceType || '-',
-                  'الموديل': t.deviceModel || '-',
-                  'السيريال': t.deviceSerial || '-',
-                  'كود المنتج': t.productCode || '-',
-                  'كود العطل الرئيسي': t.mainFaultCode || '-',
-                  'وصف العطل الرئيسي': t.mainFaultDescription || '-',
-                  'كود العطل الفرعي': t.subFaultCode || '-',
-                  'وصف العطل الفرعي': t.subFaultDescription || '-',
-                  'وصف المشكلة': t.issue || '-',
-                  // الحالة والتصنيف
-                  'الحالة': TICKET_STATUSES.find(s => s.value === t.status)?.label || t.status,
-                  'الأولوية': t.priority === 'high' ? 'عالية' : t.priority === 'medium' ? 'متوسطة' : t.priority === 'low' ? 'منخفضة' : (t.priority || '-'),
-                  'نوع التذكرة': t.ticketType || '-',
-                  'المصدر': t.source || '-',
-                  'أقرب فرع': t.nearestBranch || '-',
-                  'حالة الضمان': t.warrantyStatus || '-',
-                  'فترة الضمان': WARRANTY_PERIODS?.find?.(w => w.value === t.warrantyPeriod)?.label || t.warrantyPeriod || '-',
-                  // التعيين
-                  'الفني المسؤول': t.assignedTechnician || '-',
-                  'مركز الصيانة': t.assignedMaintenanceCenter || '-',
-                  'الكول سنتر': t.assignedCallCenter || '-',
-                  // التكلفة وقطع الغيار
-                  'التكلفة التقديرية': t.estimatedCost || 0,
-                  'المدة التقديرية': t.estimatedDuration || '-',
-                  'قطع غيار بتكلفة': partsWithCost || '-',
-                  'قطع غيار بدون تكلفة': partsWithoutCost || '-',
-                  // التواريخ
-                  'تاريخ الفاتورة': t.invoiceDate || '-',
-                  'تاريخ انتهاء الصيانة': t.maintenanceEndDate || '-',
-                  'وقت انتهاء الصيانة': t.maintenanceEndTime || '-',
-                  'تاريخ التسليم': t.deliveryDate || '-',
-                  'وقت التسليم': t.deliveryTime || '-',
-                  'تاريخ الإنشاء': formatDate(t.createdAt),
-                  'آخر تحديث': formatDate(t.updatedAt),
-                  // SLA
-                  'حالة SLA': sla ? (sla.level === 'overdue' ? 'متأخرة' : sla.level === 'due_soon' ? 'قريبة من الموعد' : sla.level === 'completed' ? 'منتهية' : 'في الموعد') : '-',
-                  'الوقت المستهدف (ساعة)': sla?.targetHours ?? '-',
-                  // تقييم المتابعة (لو موجود)
-                  'تقييم: سهولة الوصول': t.followUp?.accessibility || '-',
-                  'تقييم: وقت الصيانة': t.followUp?.maintenanceTime || '-',
-                  'تقييم: التعامل بالمركز': t.followUp?.centerDealing || '-',
-                  'تقييم: إجراءات التسليم': t.followUp?.deliveryProcedures || '-',
-                  'الشراء مرة أخرى': t.followUp?.repurchase === 'yes' ? 'نعم' : t.followUp?.repurchase === 'no' ? 'لا' : '-',
-                  'ملاحظات المتابعة': t.followUpNotes || '-',
-                  // ملاحظات ووسوم
-                  'الوسوم': Array.isArray(t.tags) ? t.tags.join(', ') : (t.tags || '-'),
-                  'ملاحظات': t.notes || '-'
-                };
-              });
-              if (exportToExcel(exportData, `Tickets_Detailed_${new Date().toISOString().split('T')[0]}`, 'تذاكر الصيانة')) {
-                showSuccess(`تم تصدير التقرير التفصيلي بنجاح (${exportData.length} تذكرة)`);
-              } else {
-                showError("حدث خطأ أثناء التصدير");
-              }
-            }}
-            className="px-3 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 flex items-center gap-2"
-            title="تصدير تقرير تفصيلي شامل لكل بيانات التذاكر الظاهرة حاليًا"
+            onClick={handleExportAllFilteredTickets}
+            disabled={exportingTickets}
+            className="px-3 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 flex items-center gap-2 disabled:opacity-50"
+            title="تصدير تقرير تفصيلي شامل لكل التذاكر المطابقة للفلاتر الحالية (مش بس الصفحة الظاهرة)"
           >
-            <Download size={14}/> تصدير تقرير تفصيلي
+            {exportingTickets ? <Loader2 size={14} className="animate-spin"/> : <Download size={14}/>}
+            {exportingTickets ? 'جاري التصدير...' : 'تصدير تقرير تفصيلي'}
           </button>
 
           <button onClick={resetFilters} className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs font-bold">
