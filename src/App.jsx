@@ -901,6 +901,9 @@ const USER_ROLES = [
   { key: 'warehouse_manager', label: 'مسؤول مخزن', level: 80, icon: Shield, color: 'blue' },
   { key: 'accountant', label: 'محاسب', level: 60, icon: Calculator, color: 'emerald' },
   { key: 'maintenance_center', label: 'مركز صيانة', level: 50, icon: Wrench, color: 'orange' },
+  // 🆕 دور جديد: استقبال مركز - لموظف الاستقبال اللي بيستلم الأجهزة والتذاكر
+  // في مركز الصيانة، من غير صلاحيات تعديل الفني/التكلفة زي مركز الصيانة نفسه
+  { key: 'center_reception', label: 'استقبال مركز', level: 45, icon: Headphones, color: 'teal' },
   { key: 'technician', label: 'فني صيانة', level: 40, icon: HardHat, color: 'amber' },
   { key: 'call_center', label: 'كول سنتر', level: 30, icon: Headphones, color: 'cyan' },
   { key: 'sales', label: 'موظف مبيعات', level: 20, icon: User, color: 'slate' }
@@ -1181,6 +1184,43 @@ const ROLE_DEFAULT_PERMISSIONS = {
   manageReturns: false,
   viewAllTickets: false
 
+  },
+  
+  // 🆕 استقبال مركز: بيستلم الأجهزة ويفتح تذاكر ويتابع حالتها، من غير صلاحيات
+  // تعيين فني/تكلفة أو إدارة إعدادات (دي مسؤولية "مركز صيانة" نفسه)
+  center_reception: {
+    viewDashboard: true,
+    viewCustomers: true,
+    addCustomer: true,
+    editCustomer: true,
+    manageTickets: true,
+    addTicket: true,
+    editTicket: true,
+    changeTicketStatus: true,
+    assignTechnician: false,
+    assignMaintenanceCenter: true,
+    assignCallCenter: false,
+    viewTransfers: false,
+    viewReports: false,
+    viewCharts: false,
+
+    viewSettings: false,
+    editSystemSettings: false,
+    editInvoiceTemplate: false,
+    manageTechniciansList: false,
+    manageFeesAndCategories: false,
+    manageProductModels: false,
+    manageFaultCodes: false,
+    manageMaintenanceCenters: false,
+    manageBranchesList: false,
+    viewAllWarehouses: false,
+    viewReturnsWarehouse: false,
+    manageReturnsWarehouse: false,
+    viewInvoices: false,
+    viewAllInvoices: false,
+    viewReturns: false,
+    manageReturns: false,
+    viewAllTickets: false
   },
   
   call_center: {
@@ -8529,8 +8569,14 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
 });
   
 
+  const TICKETS_PAGE_SIZE = 30;
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
+  // 🆕 ترقيم صفحات حقيقي بدل "تحميل المزيد" - بنخزن مؤشر (cursor) لكل صفحة
+  // زرناها عشان نقدر نرجع لأي صفحة سابقة بسرعة من غير ما نعيد تحميلها من الأول
+  const [currentTicketsPage, setCurrentTicketsPage] = useState(1);
+  const ticketsPageCursorsRef = useRef({ 1: null });
+  const [totalTicketsCount, setTotalTicketsCount] = useState(null);
   const [loadingData, setLoadingData] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
@@ -8719,8 +8765,11 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   // ========== تحميل التذاكر ==========
   // ==========================================================================
 // 📦 تحميل التذاكر مع صلاحيات متقدمة وفلتر مركز الصيانة
+// 🆕 FIX: بدل "تحميل المزيد" اللي بتراكم كل التذاكر في الذاكرة، دلوقتي
+// بنحمّل صفحة واحدة بس (30 تذكرة) في كل مرة، ونحتفظ بمؤشر (cursor) لكل
+// صفحة اتزارت عشان المستخدم يقدر يتنقل بين الصفحات (التالي/السابق) بسرعة
 // ==========================================================================
-const loadTickets = useCallback(async (isNextPage = false) => {
+const loadTickets = useCallback(async (targetPage = 1) => {
   setLoadingData(true);
   try {
     let constraints = [orderBy('createdAt', 'desc')];
@@ -8747,8 +8796,9 @@ const loadTickets = useCallback(async (isNextPage = false) => {
       constraints.push(where('searchTokens', 'array-contains-any', ticketQueryTokens));
     }
 
-    if (isNextPage && lastDoc) constraints.push(startAfter(lastDoc));
-    constraints.push(limit(30));
+    const cursorForPage = ticketsPageCursorsRef.current[targetPage];
+    if (targetPage > 1 && cursorForPage) constraints.push(startAfter(cursorForPage));
+    constraints.push(limit(TICKETS_PAGE_SIZE));
 
     let q = query(collection(db, 'tickets'), ...constraints);
     const snap = await getDocs(q);
@@ -8805,24 +8855,29 @@ const loadTickets = useCallback(async (isNextPage = false) => {
       });
     }
 
-    if (isNextPage) {
-      setTickets(prev => [...prev, ...fetched]);
-    } else {
-      setTickets(fetched);
+    // ✅ كل صفحة بتستبدل التذاكر المعروضة بدل ما تتراكم فوق بعض
+    setTickets(fetched);
+    setCurrentTicketsPage(targetPage);
+
+    const lastVisible = snap.docs[snap.docs.length - 1] || null;
+    setLastDoc(lastVisible);
+    setHasMore(snap.docs.length === TICKETS_PAGE_SIZE);
+    // نخزّن مؤشر بداية الصفحة الجاية عشان نقدر نروح لها لاحقًا (ref مش state
+    // عشان منعملش recreate لـ loadTickets نفسها كل مرة، ده كان ممكن يسبب loop)
+    if (snap.docs.length === TICKETS_PAGE_SIZE) {
+      ticketsPageCursorsRef.current[targetPage + 1] = lastVisible;
     }
-    
-    setLastDoc(snap.docs[snap.docs.length - 1] || null);
-    setHasMore(snap.docs.length === 30);
   } catch (e) {
     console.error(e);
     showError("فشل جلب التذاكر: " + e.message);
   }
   setLoadingData(false);
 }, [appUser, debouncedSearch, filterStatus, filterPriority, filterWarranty, 
-    filterTicketType, filterSource, filterBranch, filterTechnician, filterMaintenanceCenter, lastDoc, dateRange]);
+    filterTicketType, filterSource, filterBranch, filterTechnician, filterMaintenanceCenter, dateRange]);
 
   useEffect(() => {
-    loadTickets(false);
+    ticketsPageCursorsRef.current = { 1: null };
+    loadTickets(1);
   }, [loadTickets]);
 
   // ========== دوال التحديد ==========
@@ -9034,7 +9089,7 @@ const loadTickets = useCallback(async (isNextPage = false) => {
       resetNewTicket();
       resetSelections();
       setLastDoc(null);
-      loadTickets(false);
+      loadTickets(currentTicketsPage);
     } catch (error) {
       console.error(error);
       showError("حصل خطأ أثناء إنشاء التذكرة: " + error.message);
@@ -9312,7 +9367,7 @@ const loadTickets = useCallback(async (isNextPage = false) => {
       setShowBulkDeleteModal(false);
       setBulkDeleteConfirm('');
       setLastDoc(null);
-      loadTickets(false);
+      loadTickets(currentTicketsPage);
     } catch(e) {
       showError("فشل الحذف: " + e.message);
     }
@@ -9455,7 +9510,7 @@ const loadTickets = useCallback(async (isNextPage = false) => {
       
       setEditingTicket(null);
       setEditFormData({});
-      loadTickets(false);
+      loadTickets(currentTicketsPage);
       
       if (fullTicketView?.id === editingTicket.id) {
         setFullTicketView({ ...fullTicketView, ...updateData });
@@ -9693,7 +9748,7 @@ const loadTickets = useCallback(async (isNextPage = false) => {
   </div>
 
   {/* التواريخ */}
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
     <div>
       <label className="block text-xs font-bold mb-1">📅 تاريخ الفاتورة / الضمان</label>
       <input type="date" className="w-full border p-3 rounded-xl text-sm" value={newTicket.invoiceDate} onChange={e => setNewTicket({...newTicket, invoiceDate: e.target.value})} />
@@ -9701,6 +9756,11 @@ const loadTickets = useCallback(async (isNextPage = false) => {
     <div>
       <label className="block text-xs font-bold mb-1">⏰ تاريخ انتهاء الصيانة</label>
       <input type="date" className="w-full border p-3 rounded-xl text-sm" value={newTicket.maintenanceEndDate} onChange={e => setNewTicket({...newTicket, maintenanceEndDate: e.target.value})} />
+    </div>
+    <div>
+      {/* 🆕 توقيت انتهاء الصيانة - كان موجود في البيانات بس مفيش خانة إدخال ليه */}
+      <label className="block text-xs font-bold mb-1">🕐 توقيت انتهاء الصيانة</label>
+      <input type="time" className="w-full border p-3 rounded-xl text-sm" value={newTicket.maintenanceEndTime} onChange={e => setNewTicket({...newTicket, maintenanceEndTime: e.target.value})} />
     </div>
     <div>
       <label className="block text-xs font-bold mb-1">📦 تاريخ تسليم العميل</label>
@@ -10117,17 +10177,20 @@ const loadTickets = useCallback(async (isNextPage = false) => {
   </div>
 
   {/* التواريخ */}
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
     {fullTicketView.invoiceDate && (
       <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
         <label className="text-xs text-slate-500 block mb-1 font-bold">📅 تاريخ الفاتورة</label>
         <p className="font-bold">{formatDate(fullTicketView.invoiceDate)}</p>
       </div>
     )}
-    {fullTicketView.maintenanceEndDate && (
+    {(fullTicketView.maintenanceEndDate || fullTicketView.maintenanceEndTime) && (
       <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-        <label className="text-xs text-slate-500 block mb-1 font-bold">⏰ تاريخ انتهاء الصيانة</label>
-        <p className="font-bold">{formatDate(fullTicketView.maintenanceEndDate)}</p>
+        <label className="text-xs text-slate-500 block mb-1 font-bold">⏰ توقيت انتهاء الصيانة</label>
+        <p className="font-bold">
+          {fullTicketView.maintenanceEndDate ? formatDate(fullTicketView.maintenanceEndDate) : '-'}
+          {fullTicketView.maintenanceEndTime ? ` - ${fullTicketView.maintenanceEndTime}` : ''}
+        </p>
       </div>
     )}
     {fullTicketView.deliveryDate && (
@@ -10615,7 +10678,7 @@ const loadTickets = useCallback(async (isNextPage = false) => {
                   <CalendarDays size={16} className="text-sky-600 dark:text-sky-400" />
                   <h4 className="font-black text-sm text-sky-700 dark:text-sky-300">التواريخ</h4>
                 </div>
-                <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-5 grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">📅 تاريخ الفاتورة</label>
                     <input type="date" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-sky-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.invoiceDate} onChange={e => setEditFormData({...editFormData, invoiceDate: e.target.value})} />
@@ -10623,6 +10686,11 @@ const loadTickets = useCallback(async (isNextPage = false) => {
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">⏰ تاريخ انتهاء الصيانة</label>
                     <input type="date" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-sky-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.maintenanceEndDate} onChange={e => setEditFormData({...editFormData, maintenanceEndDate: e.target.value})} />
+                  </div>
+                  <div>
+                    {/* 🆕 توقيت انتهاء الصيانة - كان موجود في البيانات بس مفيش خانة إدخال ليه */}
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">🕐 توقيت انتهاء الصيانة</label>
+                    <input type="time" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-sky-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.maintenanceEndTime} onChange={e => setEditFormData({...editFormData, maintenanceEndTime: e.target.value})} />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">📦 تاريخ تسليم العميل</label>
@@ -11250,11 +11318,31 @@ const loadTickets = useCallback(async (isNextPage = false) => {
           </tbody>
         </table>
         
-        {hasMore && !loadingData && tickets.length >= 30 && (
-          <div className="p-4 text-center bg-slate-50 dark:bg-slate-900/50 border-t">
-            <button onClick={() => loadTickets(true)} className="text-indigo-600 font-bold text-xs hover:underline flex items-center justify-center gap-1 mx-auto">
-              تحميل المزيد <ChevronDown size={14}/>
+        {/* 🆕 ترقيم صفحات حقيقي بدل "تحميل المزيد" */}
+        {!loadingData && (tickets.length > 0 || currentTicketsPage > 1) && (
+          <div className="p-4 flex items-center justify-center gap-3 bg-slate-50 dark:bg-slate-900/50 border-t">
+            <button
+              onClick={() => loadTickets(currentTicketsPage - 1)}
+              disabled={currentTicketsPage <= 1}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+            >
+              <ChevronRight size={14}/> السابق
             </button>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 px-2">
+              صفحة {currentTicketsPage}
+            </span>
+            <button
+              onClick={() => loadTickets(currentTicketsPage + 1)}
+              disabled={!hasMore}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+            >
+              التالي <ChevronLeft size={14}/>
+            </button>
+          </div>
+        )}
+        {loadingData && tickets.length > 0 && (
+          <div className="p-4 text-center text-xs text-slate-400">
+            <Loader2 size={16} className="animate-spin inline-block"/>
           </div>
         )}
       </div>
@@ -11298,7 +11386,7 @@ function EnhancedUserManagement({ appUser, warehouses, notify, setGlobalLoading,
   const [showDashboardModal, setShowDashboardModal] = useState(false);
   const [dashboardUser, setDashboardUser] = useState(null);
   const [dashboardWidgetsDraft, setDashboardWidgetsDraft] = useState([]);
-  const [departments] = useState(['المبيعات', 'المخزون', 'الصيانة', 'المحاسبة', 'الإدارة', 'الكول سنتر']);
+  const [departments] = useState(['المبيعات', 'المخزون', 'الصيانة', 'المحاسبة', 'الإدارة', 'الكول سنتر', 'استقبال مركز']);
 
   
   // خيارات فترات الضمان
