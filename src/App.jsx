@@ -1692,6 +1692,22 @@ const getCurrentTimeHHMM = () => {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 };
 
+// 🆕 FIX: رقم التذكرة كان بيتولد من آخر 8 أرقام في التوقيت الحالي
+// (Date.now())، فكان بيبان عشوائي تمامًا. دلوقتي رقم تسلسلي حقيقي بيتولد
+// من عداد واحد في قاعدة البيانات (counters/tickets) جوه transaction، عشان
+// لو تذكرتين اتعملوا في نفس اللحظة بالظبط من جهازين مختلفين، الرقمين
+// يفضلوا مختلفين عن بعض (مفيش تكرار أو تعارض)
+const getNextTicketNumber = async () => {
+  const counterRef = doc(db, 'counters', 'tickets');
+  const nextValue = await runTransaction(db, async (transaction) => {
+    const counterDoc = await transaction.get(counterRef);
+    const next = counterDoc.exists() ? (counterDoc.data().value || 0) + 1 : 1;
+    transaction.set(counterRef, { value: next }, { merge: true });
+    return next;
+  });
+  return `TKT-${String(nextValue).padStart(6, '0')}`;
+};
+
 const logUserActivity = async (user, action, details) => {
   if (!user) return;
   try {
@@ -2626,7 +2642,10 @@ function InvoiceRenderer({ data, systemSettings, onBack }) {
             <div className="flex justify-between"><span>العميل:</span><span>{data.customerName}</span></div>
             <div className="flex justify-between"><span>الهاتف:</span><span dir="ltr">{data.phone || '-'}</span></div>
             {data.technicianName && <div className="flex justify-between"><span>الفني المختص:</span><span>{data.technicianName}</span></div>}
-            {data.ticketId && <div className="flex justify-between"><span>رقم التذكرة:</span><span>{data.ticketId}</span></div>}
+            {/* 🛠️ FIX: كان بيعرض data.ticketId وهو الـ Firestore document ID
+                الخام (سلسلة عشوائية طويلة زي مشفّرة)، بدل رقم التذكرة
+                الحقيقي المقروء (TKT-000123) الموجود في data.ticketNumber */}
+            {(data.ticketNumber || data.ticketId) && <div className="flex justify-between"><span>رقم التذكرة:</span><span>{data.ticketNumber || data.ticketId}</span></div>}
             <div className="flex justify-between text-gray-600 dark:text-gray-400"><span>الكاشير:</span><span>{data.operator}</span></div>
             {data.notes && <div className="text-[9px] text-gray-500 dark:text-gray-500 mt-2">{data.notes}</div>}
           </div>
@@ -6613,8 +6632,14 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
   const [maintenanceCenters, setMaintenanceCenters] = useState([]);
   const [callCenters, setCallCenters] = useState([]);
   
+  const CUSTOMERS_PAGE_SIZE = 30;
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
+  // 🆕 ترقيم صفحات حقيقي + تحديث لحظي (onSnapshot) بدل "تحميل المزيد" مع
+  // getDocs مرة واحدة - عشان أي تغيير في العملاء (حتى لو حصل من مكان تاني
+  // في التطبيق زي إنشاء تذكرة لعميل جديد) يبان هنا فورًا من غير ما تعمل رفريش
+  const [currentCustomersPage, setCurrentCustomersPage] = useState(1);
+  const customersPageCursorsRef = useRef({ 1: null });
   const [loadingData, setLoadingData] = useState(false);
   
   const [customerTickets, setCustomerTickets] = useState([]);
@@ -6654,17 +6679,18 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
     loadTags();
   }, []);
 
-  const loadCustomers = useCallback(async (isNextPage = false) => {
-  setLoadingData(true);
-  try {
-    let q = collection(db, 'customers');
+  // 🛠️ FIX: كان بيستخدم getDocs (تحميل مرة واحدة بس)، فأي تعديل/إضافة/حذف
+  // عميل من مكان تاني (زي تسجيل عميل جديد أثناء عمل تذكرة) كان مش بيبان هنا
+  // إلا لو عملت رفريش يدوي للصفحة. onSnapshot بيخلي القائمة تتحدث لحظيًا.
+  useEffect(() => {
+    setLoadingData(true);
     let constraints = [];
-    
+
     // ✅ التحكم في البيانات حسب صلاحيات المستخدم
     if (appUser.role !== 'admin' && !appUser.permissions?.viewAllWarehouses) {
       constraints.push(where('warehouseId', '==', appUser.assignedWarehouseId || 'main'));
     }
-    
+
     const custQueryTokens = buildQueryTokens(debouncedSearch);
     if (custQueryTokens.length > 0) {
       constraints.push(where('searchTokens', 'array-contains-any', custQueryTokens));
@@ -6672,61 +6698,53 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
       constraints.push(orderBy("name"));
     }
 
-    if (isNextPage && lastDoc) {
-      constraints.push(startAfter(lastDoc));
-    }
-    constraints.push(limit(30));
+    const cursor = customersPageCursorsRef.current[currentCustomersPage];
+    if (currentCustomersPage > 1 && cursor) constraints.push(startAfter(cursor));
+    constraints.push(limit(CUSTOMERS_PAGE_SIZE));
 
-    q = query(q, ...constraints);
-    const snap = await getDocs(q);
-    let fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const q = query(collection(db, 'customers'), ...constraints);
+    const unsub = onSnapshot(q, (snap) => {
+      let fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    // تدقيق محلي: array-contains-any بيرجع تطابق "أي" كلمة (OR)، فهنا بنتأكد
-    // إن كل كلمات البحث موجودة فعلاً (AND)، ومع دعم العملاء القدام اللي
-    // معندهمش searchTokens لسه (رجوع لـ searchKey القديم كحل احتياطي)
-    if (custQueryTokens.length > 0) {
-      fetched = fetched.filter(c => {
-        const haystack = (c.searchTokens && c.searchTokens.length > 0)
-          ? c.searchTokens.join(' ')
-          : normalizeSearch(c.searchKey || `${c.name || ''} ${c.phone || ''} ${c.email || ''}`);
-        return custQueryTokens.every(tok => haystack.includes(tok));
-      });
-    }
+      // تدقيق محلي: array-contains-any بيرجع تطابق "أي" كلمة (OR)، فهنا بنتأكد
+      // إن كل كلمات البحث موجودة فعلاً (AND)، ومع دعم العملاء القدام اللي
+      // معندهمش searchTokens لسه (رجوع لـ searchKey القديم كحل احتياطي)
+      if (custQueryTokens.length > 0) {
+        fetched = fetched.filter(c => {
+          const haystack = (c.searchTokens && c.searchTokens.length > 0)
+            ? c.searchTokens.join(' ')
+            : normalizeSearch(c.searchKey || `${c.name || ''} ${c.phone || ''} ${c.email || ''}`);
+          return custQueryTokens.every(tok => haystack.includes(tok));
+        });
+      }
 
-    // الفلاتر المحلية
-    if (filterGovernorate) {
-      fetched = fetched.filter(c => c.governorate === filterGovernorate);
-    }
-    if (filterCity) {
-      fetched = fetched.filter(c => c.city?.includes(filterCity));
-    }
-    if (filterTechnician) {
-      fetched = fetched.filter(c => c.assignedTechnician === filterTechnician);
-    }
-    if (filterTag) {
-      fetched = fetched.filter(c => c.tags?.includes(filterTag));
-    }
+      // الفلاتر المحلية
+      if (filterGovernorate) fetched = fetched.filter(c => c.governorate === filterGovernorate);
+      if (filterCity) fetched = fetched.filter(c => c.city?.includes(filterCity));
+      if (filterTechnician) fetched = fetched.filter(c => c.assignedTechnician === filterTechnician);
+      if (filterTag) fetched = fetched.filter(c => c.tags?.includes(filterTag));
 
-    if (isNextPage) {
-      setCustomers(prev => [...prev, ...fetched]);
-    } else {
       setCustomers(fetched);
-    }
-    
-    setLastDoc(snap.docs[snap.docs.length - 1] || null);
-    setHasMore(snap.docs.length === 30);
-  } catch (e) {
-    console.error(e);
-    showError("فشل جلب العملاء: " + e.message);
-  }
-  setLoadingData(false);
-}, [appUser, debouncedSearch, lastDoc, filterGovernorate, filterCity, filterTechnician, filterTag]);
+      setHasMore(snap.docs.length === CUSTOMERS_PAGE_SIZE);
+      const lastVisible = snap.docs[snap.docs.length - 1] || null;
+      setLastDoc(lastVisible);
+      if (snap.docs.length === CUSTOMERS_PAGE_SIZE) {
+        customersPageCursorsRef.current[currentCustomersPage + 1] = lastVisible;
+      }
+      setLoadingData(false);
+    }, (error) => {
+      console.error(error);
+      showError("فشل جلب العملاء: " + error.message);
+      setLoadingData(false);
+    });
 
+    return () => unsub();
+  }, [appUser, debouncedSearch, filterGovernorate, filterCity, filterTechnician, filterTag, currentCustomersPage]);
 
-
+  // أي تغيير في الفلاتر أو البحث يرجّعنا لأول صفحة
   useEffect(() => {
-    setLastDoc(null);
-    loadCustomers(false);
+    customersPageCursorsRef.current = { 1: null };
+    setCurrentCustomersPage(1);
   }, [debouncedSearch, filterGovernorate, filterCity, filterTechnician, filterTag]);
 
   const toggleSelectItem = (itemId) => {
@@ -6795,8 +6813,9 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
       setSelectedItems(new Set());
       setShowBulkDeleteModal(false);
       setBulkDeleteConfirm('');
-      setLastDoc(null);
-      loadCustomers(false);
+      // 🆕 مفيش داعي لإعادة تحميل يدوي بعد كده - الـ onSnapshot الحي هيحدّث القائمة تلقائيًا
+      customersPageCursorsRef.current = { 1: null };
+      setCurrentCustomersPage(1);
       
     } catch (error) {
       console.error("Bulk delete error:", error);
@@ -6859,7 +6878,9 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
           assignedCallCenter: '', birthDate: '', idNumber: '', tags: []
         });
         setLastDoc(null);
-        loadCustomers(false); 
+        // 🆕 مفيش داعي لإعادة تحميل يدوي - الـ onSnapshot الحي هيضيف العميل الجديد تلقائيًا
+        customersPageCursorsRef.current = { 1: null };
+        setCurrentCustomersPage(1);
      } catch(err) {
         console.error(err);
         if (err.code === 'permission-denied') {
@@ -6941,7 +6962,9 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
 
         showSuccess(`تم استيراد ${success} عميل بنجاح، فشل ${failed}`);
         setLastDoc(null);
-        loadCustomers(false);
+        // 🆕 مفيش داعي لإعادة تحميل يدوي - الـ onSnapshot الحي هيحدّث القائمة تلقائيًا
+        customersPageCursorsRef.current = { 1: null };
+        setCurrentCustomersPage(1);
       } catch (error) {
         console.error("Import error:", error);
         showError("خطأ في قراءة الملف");
@@ -7497,13 +7520,25 @@ function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, app
                }
             </tbody>
          </table>
-         {hasMore && !loadingData && customers.length >= 30 && (
-             <div className="p-4 text-center bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700">
-                <button 
-                  onClick={() => loadCustomers(true)} 
-                  className="text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:underline flex items-center justify-center gap-1 mx-auto"
+         {/* 🆕 ترقيم صفحات حقيقي بدل "تحميل المزيد" */}
+         {!loadingData && (customers.length > 0 || currentCustomersPage > 1) && (
+             <div className="p-4 flex items-center justify-center gap-3 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700">
+                <button
+                  onClick={() => setCurrentCustomersPage(p => Math.max(1, p - 1))}
+                  disabled={currentCustomersPage <= 1}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
                 >
-                   تحميل المزيد <ChevronDown size={14}/>
+                  <ChevronRight size={14}/> السابق
+                </button>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 px-2">
+                  صفحة {currentCustomersPage}
+                </span>
+                <button
+                  onClick={() => setCurrentCustomersPage(p => p + 1)}
+                  disabled={!hasMore}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  التالي <ChevronLeft size={14}/>
                 </button>
              </div>
          )}
@@ -7553,6 +7588,75 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
     } catch (e) {
       showError('فشل تحديث الحالة: ' + e.message);
     }
+  };
+
+  // 🛠️ FIX: أزرار "عرض" و"تعديل" في كارت التذكرة هنا كانت onView={() => {}}
+  // (مش بتعمل حاجة) و onEdit={(t)=>setEditingTicket(t)} كانت بتستدعي state
+  // مش موجود أصلًا في المكوّن ده (setEditingTicket معرّف في مكوّن تاني
+  // تمامًا هو EnhancedTicketManager)، يعني كانت بترمي خطأ لو حد ضغط عليها.
+  // دلوقتي فيهم modal حقيقي للعرض والتعديل من نفس صفحة العميل.
+  const [viewingCustomerTicket, setViewingCustomerTicket] = useState(null);
+  const [editingCustomerTicket, setEditingCustomerTicket] = useState(null);
+  const [editCustomerTicketData, setEditCustomerTicketData] = useState({});
+
+  const openEditCustomerTicket = (ticket) => {
+    setEditingCustomerTicket(ticket);
+    setEditCustomerTicketData({
+      status: ticket.status || 'created',
+      priority: ticket.priority || 'medium',
+      warrantyStatus: ticket.warrantyStatus || '',
+      assignedTechnician: ticket.assignedTechnician || '',
+      notes: ticket.notes || ''
+    });
+  };
+
+  const handleSaveCustomerTicketEdit = async () => {
+    if (!editingCustomerTicket) return;
+    setGlobalLoading(true);
+    try {
+      const ticketRef = doc(db, 'tickets', editingCustomerTicket.id);
+      const changedFields = [];
+      if (editCustomerTicketData.status !== editingCustomerTicket.status) {
+        changedFields.push(`الحالة: "${TICKET_STATUSES.find(s => s.value === editingCustomerTicket.status)?.label || editingCustomerTicket.status}" ← "${TICKET_STATUSES.find(s => s.value === editCustomerTicketData.status)?.label || editCustomerTicketData.status}"`);
+      }
+      if (editCustomerTicketData.priority !== editingCustomerTicket.priority) {
+        changedFields.push(`الأولوية: "${editingCustomerTicket.priority || '-'}" ← "${editCustomerTicketData.priority}"`);
+      }
+      if (editCustomerTicketData.warrantyStatus !== (editingCustomerTicket.warrantyStatus || '')) {
+        changedFields.push(`حالة الضمان: "${editingCustomerTicket.warrantyStatus || '-'}" ← "${editCustomerTicketData.warrantyStatus || '-'}"`);
+      }
+      if (editCustomerTicketData.assignedTechnician !== (editingCustomerTicket.assignedTechnician || '')) {
+        changedFields.push(`الفني المسؤول: "${editingCustomerTicket.assignedTechnician || '-'}" ← "${editCustomerTicketData.assignedTechnician || '-'}"`);
+      }
+      if (editCustomerTicketData.notes !== (editingCustomerTicket.notes || '')) {
+        changedFields.push(`الملاحظات اتعدّلت`);
+      }
+
+      const updatePayload = {
+        status: editCustomerTicketData.status,
+        priority: editCustomerTicketData.priority,
+        warrantyStatus: editCustomerTicketData.warrantyStatus,
+        assignedTechnician: editCustomerTicketData.assignedTechnician,
+        notes: editCustomerTicketData.notes,
+        updatedAt: serverTimestamp()
+      };
+      if (changedFields.length > 0) {
+        updatePayload.history = arrayUnion({
+          action: 'تعديل بيانات التذكرة (من صفحة العميل)',
+          timestamp: new Date().toISOString(),
+          by: appUser?.name || '-',
+          details: changedFields.join(' | ')
+        });
+      }
+
+      await updateDoc(ticketRef, updatePayload);
+      setTickets(prev => prev.map(t => t.id === editingCustomerTicket.id ? { ...t, ...updatePayload } : t));
+      showSuccess('تم تحديث التذكرة بنجاح');
+      setEditingCustomerTicket(null);
+    } catch (e) {
+      showError('فشل تحديث التذكرة: ' + e.message);
+    }
+    setGlobalLoading(false);
   };
 
   const [cart, setCart] = useState([]);
@@ -8284,8 +8388,8 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
                           ticket={ticket}
                           systemSettings={systemSettings}
                           onStatusChange={handleTicketStatusChange}
-                          onView={() => {}}
-                          onEdit={(t)=>setEditingTicket(t)}
+                          onView={(t) => setViewingCustomerTicket(t)}
+                          onEdit={(t) => openEditCustomerTicket(t)}
                         />
                       ))
                     )}
@@ -8322,6 +8426,127 @@ function CustomerProfileView({ customer, onClose, systemSettings, notify, setGlo
                 </div>
               )}
           </div>
+
+      {/* 🆕 مودال عرض تفاصيل التذكرة من صفحة العميل */}
+      {viewingCustomerTicket && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div className="flex justify-between items-center mb-4 border-b pb-3">
+              <h3 className="font-black text-lg flex items-center gap-2">
+                <Eye className="text-indigo-600" size={20}/> تذكرة #{viewingCustomerTicket.ticketNumber}
+              </h3>
+              <button onClick={() => setViewingCustomerTicket(null)} className="text-slate-400 hover:text-rose-600"><X size={22}/></button>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+                  <p className="text-xs text-slate-500 mb-1">الحالة</p>
+                  <p className="font-bold">{TICKET_STATUSES.find(s => s.value === viewingCustomerTicket.status)?.label || viewingCustomerTicket.status}</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+                  <p className="text-xs text-slate-500 mb-1">الأولوية</p>
+                  <p className="font-bold">{viewingCustomerTicket.priority === 'high' ? 'عالية' : viewingCustomerTicket.priority === 'medium' ? 'متوسطة' : 'منخفضة'}</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+                  <p className="text-xs text-slate-500 mb-1">الجهاز / الموديل</p>
+                  <p className="font-bold">{viewingCustomerTicket.deviceModel || viewingCustomerTicket.device || '-'}</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+                  <p className="text-xs text-slate-500 mb-1">حالة الضمان</p>
+                  <p className="font-bold">{viewingCustomerTicket.warrantyStatus || '-'}</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+                  <p className="text-xs text-slate-500 mb-1">الفني المسؤول</p>
+                  <p className="font-bold">{viewingCustomerTicket.assignedTechnician || '-'}</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+                  <p className="text-xs text-slate-500 mb-1">تاريخ الإنشاء</p>
+                  <p className="font-bold">{formatDate(viewingCustomerTicket.createdAt)}</p>
+                </div>
+              </div>
+              {viewingCustomerTicket.issue && (
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+                  <p className="text-xs text-slate-500 mb-1">وصف المشكلة</p>
+                  <p className="font-bold">{viewingCustomerTicket.issue}</p>
+                </div>
+              )}
+              {viewingCustomerTicket.notes && (
+                <div className="bg-amber-50/50 dark:bg-amber-900/10 p-3 rounded-xl border border-amber-200 dark:border-amber-800">
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mb-1">ملاحظات</p>
+                  <p className="font-bold">{viewingCustomerTicket.notes}</p>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => { setViewingCustomerTicket(null); openEditCustomerTicket(viewingCustomerTicket); }}
+              className="w-full mt-4 bg-indigo-600 text-white py-2.5 rounded-xl font-bold hover:bg-indigo-700 flex items-center justify-center gap-2"
+            >
+              <Edit size={16}/> تعديل التذكرة
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 مودال تعديل سريع للتذكرة من صفحة العميل (بدون الحاجة للخروج
+          للصفحة الرئيسية لإدارة التذاكر) */}
+      {editingCustomerTicket && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div className="flex justify-between items-center mb-4 border-b pb-3">
+              <h3 className="font-black text-lg flex items-center gap-2">
+                <Edit className="text-emerald-600" size={20}/> تعديل تذكرة #{editingCustomerTicket.ticketNumber}
+              </h3>
+              <button onClick={() => setEditingCustomerTicket(null)} className="text-slate-400 hover:text-rose-600"><X size={22}/></button>
+            </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold mb-1">الحالة</label>
+                  <select className="w-full border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900" value={editCustomerTicketData.status} onChange={e => setEditCustomerTicketData({...editCustomerTicketData, status: e.target.value})}>
+                    {TICKET_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1">الأولوية</label>
+                  <select className="w-full border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900" value={editCustomerTicketData.priority} onChange={e => setEditCustomerTicketData({...editCustomerTicketData, priority: e.target.value})}>
+                    <option value="low">منخفضة</option>
+                    <option value="medium">متوسطة</option>
+                    <option value="high">عالية</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1">حالة الضمان</label>
+                  <select className="w-full border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900" value={editCustomerTicketData.warrantyStatus} onChange={e => setEditCustomerTicketData({...editCustomerTicketData, warrantyStatus: e.target.value})}>
+                    <option value="">-- اختر --</option>
+                    <option value="in_warranty">✅ داخل الضمان</option>
+                    <option value="out_of_warranty">❌ خارج الضمان</option>
+                    <option value="unidentified">❔ غير معرف</option>
+                    <option value="repair_invoice">🧾 فاتورة اصلاح</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1">الفني المسؤول</label>
+                  <select className="w-full border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900" value={editCustomerTicketData.assignedTechnician} onChange={e => setEditCustomerTicketData({...editCustomerTicketData, assignedTechnician: e.target.value})}>
+                    <option value="">-- غير محدد --</option>
+                    {(systemSettings?.technicians || []).map((tech, idx) => <option key={idx} value={tech}>{tech}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold mb-1">ملاحظات</label>
+                <textarea rows="3" className="w-full border p-2.5 rounded-xl text-sm resize-none bg-white dark:bg-slate-900" value={editCustomerTicketData.notes} onChange={e => setEditCustomerTicketData({...editCustomerTicketData, notes: e.target.value})} />
+              </div>
+              <p className="text-xs text-slate-400">
+                لتعديل بيانات أوسع (الجهاز، قطع الغيار، التكلفة...) استخدم صفحة "تذاكر الصيانة" الرئيسية.
+              </p>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={handleSaveCustomerTicketEdit} className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700">حفظ التعديلات</button>
+              <button onClick={() => setEditingCustomerTicket(null)} className="flex-1 bg-slate-100 dark:bg-slate-700 py-2.5 rounded-xl font-bold">إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
   );
 }
@@ -8577,6 +8802,9 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
     device: '', deviceType: '', deviceModel: '', deviceSerial: '',
     mainFaultCode: '', mainFaultDescription: '',
     subFaultCode: '', subFaultDescription: '',
+    // 🆕 إمكانية إضافة أكتر من كود عطل رئيسي/فرعي لنفس التذكرة - الأول
+    // بيتسجل في mainFaultCode/subFaultCode (زي القديم)، والباقي هنا
+    additionalFaults: [],
     productCode: '',
     issue: '', status: 'created', priority: 'medium',
     warrantyStatus: '', warrantyPeriod: '', ticketType: '', source: '', nearestBranch: '',
@@ -8648,7 +8876,8 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
   ];
 
   const WARRANTY_OPTIONS = [
-    { value: 'in_warranty', label: 'داخل الضمان' }, { value: 'out_of_warranty', label: 'خارج الضمان' }
+    { value: 'in_warranty', label: 'داخل الضمان' }, { value: 'out_of_warranty', label: 'خارج الضمان' },
+    { value: 'unidentified', label: 'غير معرف' }, { value: 'repair_invoice', label: 'فاتورة اصلاح' }
   ];
 
   const BRANCH_OPTIONS = systemSettings?.branches || [{ value: 'main', label: 'الفرع الرئيسي' }];
@@ -8720,6 +8949,50 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
         issue: `${selected.code} - ${selected.description}`
       }));
     }
+  };
+
+  // 🆕 إضافة كود عطل رئيسي/فرعي إضافي لنفس التذكرة (ممكن يكون فيها أكتر
+  // من عطل واحد)، بدون ما نفقد اختيار العطل الأول اللي اتسجل في الحقول
+  // الأساسية mainFaultCode/subFaultCode
+  const handleAddAnotherFault = () => {
+    if (!selectedSubFaultId) {
+      showError('اختار كود عطل فرعي الأول');
+      return;
+    }
+    const selected = subFaults.find(f => f.id === selectedSubFaultId);
+    const mainFault = mainFaults.find(m => m.id === selectedMainFaultId);
+    if (!selected || !mainFault) return;
+
+    const newFault = {
+      mainFaultCode: mainFault.code,
+      mainFaultDescription: mainFault.description,
+      subFaultCode: selected.code,
+      subFaultDescription: selected.description
+    };
+
+    setNewTicket(prev => {
+      // لو الحقول الأساسية فاضية، سجّل العطل ده فيها بدل ما يتحط في القائمة
+      if (!prev.mainFaultCode) {
+        return { ...prev, ...newFault, productCode: selected.productCode || prev.productCode };
+      }
+      // لو مكرر (نفس الكود الفرعي) متضيفوش تاني
+      if (prev.additionalFaults.some(f => f.subFaultCode === newFault.subFaultCode)) {
+        showError('كود العطل ده مضاف بالفعل');
+        return prev;
+      }
+      return { ...prev, additionalFaults: [...prev.additionalFaults, newFault] };
+    });
+
+    // نصفّي اختيار الكود الفرعي بس (نسيب المنتج/الموديل عشان يقدر يختار عطل تاني بسهولة)
+    setSelectedMainFaultId('');
+    setSelectedSubFaultId('');
+  };
+
+  const handleRemoveAdditionalFault = (subFaultCode) => {
+    setNewTicket(prev => ({
+      ...prev,
+      additionalFaults: prev.additionalFaults.filter(f => f.subFaultCode !== subFaultCode)
+    }));
   };
 
   const resetSelections = () => {
@@ -8805,7 +9078,7 @@ function EnhancedTicketManager({ systemSettings, notify, setGlobalLoading, appUs
 const loadTickets = useCallback(async (targetPage = 1) => {
   setLoadingData(true);
   try {
-    let constraints = [orderBy('createdAt', 'desc')];
+    let constraints = [orderBy('updatedAt', 'desc')];
 
     // ✅ التحكم في البيانات حسب صلاحيات المستخدم
     // إذا كان المستخدم لديه صلاحية viewAllTickets أو هو أدمن، يرى كل التذاكر
@@ -8843,7 +9116,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       fetched = fetched.filter(t => {
         const haystack = (t.searchTokens && t.searchTokens.length > 0)
           ? t.searchTokens.join(' ')
-          : normalizeSearch(`${t.customerName || ''} ${t.customerPhone || ''} ${t.ticketNumber || ''} ${t.assignedTechnician || ''} ${t.assignedMaintenanceCenter || ''} ${t.device || ''} ${t.deviceSerial || ''}`);
+          : normalizeSearch(`${t.customerName || ''} ${t.customerPhone || ''} ${t.ticketNumber || ''} ${t.assignedTechnician || ''} ${t.assignedMaintenanceCenter || ''} ${t.device || ''} ${t.deviceSerial || ''} ${t.deviceModel || ''} ${t.productCode || ''} ${t.issue || ''} ${t.notes || ''}`);
         return ticketQueryTokens.every(tok => haystack.includes(tok));
       });
     }
@@ -8943,6 +9216,8 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       'وصف العطل الرئيسي': t.mainFaultDescription || '-',
       'كود العطل الفرعي': t.subFaultCode || '-',
       'وصف العطل الفرعي': t.subFaultDescription || '-',
+      // 🆕 أكواد الأعطال الإضافية (لو التذكرة فيها أكتر من عطل واحد)
+      'أكواد أعطال إضافية': (t.additionalFaults || []).map(f => `${f.mainFaultCode}-${f.subFaultCode}`).join(' | ') || '-',
       'وصف المشكلة': t.issue || '-',
       'الحالة': TICKET_STATUSES.find(s => s.value === t.status)?.label || t.status,
       'الأولوية': t.priority === 'high' ? 'عالية' : t.priority === 'medium' ? 'متوسطة' : t.priority === 'low' ? 'منخفضة' : (t.priority || '-'),
@@ -8990,7 +9265,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       const MAX_BATCHES = 30; // سقف أمان (٩٠٠٠ تذكرة) عشان متعلقش المتصفح لو البيانات ضخمة جدًا
 
       for (let i = 0; i < MAX_BATCHES; i++) {
-        let constraints = [orderBy('createdAt', 'desc')];
+        let constraints = [orderBy('updatedAt', 'desc')];
         if (!canViewAllTickets) {
           constraints.push(where('assignedCenter', '==', appUser.assignedWarehouseId || 'main'));
         }
@@ -9015,7 +9290,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         filtered = filtered.filter(t => {
           const haystack = (t.searchTokens && t.searchTokens.length > 0)
             ? t.searchTokens.join(' ')
-            : normalizeSearch(`${t.customerName || ''} ${t.customerPhone || ''} ${t.ticketNumber || ''} ${t.assignedTechnician || ''} ${t.assignedMaintenanceCenter || ''} ${t.device || ''} ${t.deviceSerial || ''}`);
+            : normalizeSearch(`${t.customerName || ''} ${t.customerPhone || ''} ${t.ticketNumber || ''} ${t.assignedTechnician || ''} ${t.assignedMaintenanceCenter || ''} ${t.device || ''} ${t.deviceSerial || ''} ${t.deviceModel || ''} ${t.productCode || ''} ${t.issue || ''} ${t.notes || ''}`);
           return ticketQueryTokens.every(tok => haystack.includes(tok));
         });
       }
@@ -9209,17 +9484,22 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       const fullIssue = newTicket.issue || 
         (newTicket.subFaultCode ? `${newTicket.subFaultCode} - ${newTicket.subFaultDescription}` : '');
 
-      const generatedTicketNumber = 'TKT-' + Date.now().toString().slice(-8);
+      const generatedTicketNumber = await getNextTicketNumber();
 
       const ticketData = {
         ...newTicket,
         customerId,
         issue: fullIssue,
         ticketNumber: generatedTicketNumber,
+        // 🛠️ FIX: البحث كان بيغطي بس اسم العميل/الهاتف/رقم التذكرة/الفني/
+        // المركز/الجهاز/السيريال. أي بحث بكود المنتج أو الموديل أو وصف
+        // العطل أو الملاحظات كان مش بيلاقي حاجة رغم إنها موجودة فعليًا.
         searchTokens: buildSearchTokens(
           newTicket.customerName, newTicket.customerPhone, generatedTicketNumber,
           newTicket.assignedTechnician, newTicket.assignedMaintenanceCenter,
-          newTicket.device, newTicket.deviceSerial
+          newTicket.device, newTicket.deviceSerial, newTicket.deviceModel,
+          newTicket.productCode, newTicket.mainFaultCode, newTicket.mainFaultDescription,
+          newTicket.subFaultCode, newTicket.subFaultDescription, fullIssue, newTicket.notes
         ),
         assignedCenter: appUser?.assignedWarehouseId || "main",
         spareParts: [],
@@ -9279,6 +9559,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       device: '', deviceType: '', deviceModel: '', deviceSerial: '',
       mainFaultCode: '', mainFaultDescription: '',
       subFaultCode: '', subFaultDescription: '',
+      additionalFaults: [],
       productCode: '', issue: '',
       status: 'created', priority: 'medium',
       warrantyStatus: '', warrantyPeriod: '', ticketType: '', source: '', nearestBranch: '',
@@ -9308,7 +9589,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       }];
       
       const history = [...(current.history || []), {
-        action: `تغيير الحالة إلى ${TICKET_STATUSES.find(s => s.value === newStatus)?.label || newStatus}`,
+        action: `تغيير الحالة من "${TICKET_STATUSES.find(s => s.value === current.status)?.label || current.status || '-'}" إلى "${TICKET_STATUSES.find(s => s.value === newStatus)?.label || newStatus}"`,
         timestamp: new Date().toISOString(),
         by: appUser.name
       }];
@@ -9648,6 +9929,15 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         estimatedDuration: editFormData.estimatedDuration,
         notes: editFormData.notes,
         tags: editFormData.tags,
+        // 🛠️ FIX: كان مش بيتعمل rebuild لـ searchTokens عند التعديل، فلو
+        // غيرت الموديل أو كود المنتج أو وصف العطل بعد إنشاء التذكرة، البحث
+        // كان بيفضل شغال بالبيانات القديمة (أو مش بيلاقيها خالص)
+        searchTokens: buildSearchTokens(
+          editFormData.customerName, editFormData.customerPhone, editFormData.ticketNumber,
+          editFormData.assignedTechnician, editFormData.assignedMaintenanceCenter,
+          editFormData.device, editFormData.deviceSerial, editFormData.deviceModel,
+          editFormData.productCode, editFormData.issue, editFormData.notes
+        ),
         sparePartsWithCost: editFormData.sparePartsWithCost || '',
         sparePartsWithoutCost: editFormData.sparePartsWithoutCost || '',
         invoiceDate: editFormData.invoiceDate || '',
@@ -9672,13 +9962,37 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       };
       
       const snap = await getDoc(ticketRef);
-      const currentHistory = snap.data()?.history || [];
-      const history = [...currentHistory, {
-        action: 'تعديل بيانات التذكرة',
-        timestamp: new Date().toISOString(),
-        by: appUser.name,
-        details: 'تم تعديل بيانات التذكرة من قبل المستخدم'
-      }];
+      const beforeData = snap.data() || {};
+      const currentHistory = beforeData.history || [];
+
+      // 🛠️ FIX: كان بيتسجل سطر عام "تم تعديل بيانات التذكرة من قبل المستخدم"
+      // من غير أي تفاصيل عن اللي اتغير فعليًا. دلوقتي بنقارن كل حقل قبل
+      // وبعد الحفظ، ونسجل بالظبط "الحقل الفلاني اتغير من كذا لكذا"
+      const FIELD_LABELS_FOR_HISTORY = {
+        customerName: 'اسم العميل', customerPhone: 'هاتف العميل', warrantyStatus: 'حالة الضمان',
+        warrantyPeriod: 'فترة الضمان', device: 'الجهاز', deviceModel: 'الموديل', deviceSerial: 'السيريال',
+        productCode: 'كود المنتج', issue: 'وصف المشكلة', status: 'الحالة', priority: 'الأولوية',
+        ticketType: 'نوع التذكرة', source: 'المصدر', assignedTechnician: 'الفني المسؤول',
+        assignedMaintenanceCenter: 'مركز الصيانة', assignedCallCenter: 'الكول سنتر',
+        estimatedCost: 'التكلفة التقديرية', estimatedDuration: 'المدة التقديرية', notes: 'الملاحظات',
+        maintenanceEndDate: 'تاريخ انتهاء الصيانة', deliveryDate: 'تاريخ التسليم'
+      };
+      const displayVal = (key, val) => {
+        if (key === 'status') return TICKET_STATUSES.find(s => s.value === val)?.label || val || '-';
+        return (val === '' || val === undefined || val === null) ? '-' : String(val);
+      };
+      const changeLines = Object.keys(FIELD_LABELS_FOR_HISTORY)
+        .filter(key => String(beforeData[key] ?? '') !== String(updateData[key] ?? ''))
+        .map(key => `${FIELD_LABELS_FOR_HISTORY[key]}: "${displayVal(key, beforeData[key])}" ← "${displayVal(key, updateData[key])}"`);
+
+      const history = changeLines.length > 0
+        ? [...currentHistory, {
+            action: 'تعديل بيانات التذكرة',
+            timestamp: new Date().toISOString(),
+            by: appUser.name,
+            details: changeLines.join(' | ')
+          }]
+        : currentHistory;
       updateData.history = history;
       
       await updateDoc(ticketRef, updateData);
@@ -9871,6 +10185,36 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     </div>
   </div>
 
+  {/* 🆕 إمكانية إضافة أكتر من كود عطل رئيسي/فرعي لنفس التذكرة */}
+  {(newTicket.mainFaultCode || selectedSubFaultId) && (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={handleAddAnotherFault}
+        className="self-start text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+      >
+        <Plus size={14}/> إضافة كود عطل تاني لنفس التذكرة
+      </button>
+      {newTicket.mainFaultCode && (
+        <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-2 text-xs">
+          <span className="font-bold">العطل الأساسي:</span> {newTicket.mainFaultCode} - {newTicket.subFaultCode} ({newTicket.subFaultDescription})
+        </div>
+      )}
+      {newTicket.additionalFaults.length > 0 && (
+        <div className="space-y-1.5">
+          {newTicket.additionalFaults.map((f, idx) => (
+            <div key={idx} className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs">
+              <span>{f.mainFaultCode} - {f.subFaultCode} ({f.subFaultDescription})</span>
+              <button type="button" onClick={() => handleRemoveAdditionalFault(f.subFaultCode)} className="text-rose-500 hover:text-rose-700">
+                <X size={14}/>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )}
+
   {/* السيريال */}
   <div>
     <label className="block text-xs font-bold mb-1">السيريال التسلسلي للجهاز</label>
@@ -9896,8 +10240,10 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       <label className="block text-xs font-bold mb-1">حالة الضمان</label>
       <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.warrantyStatus || ''} onChange={e => {
         const newStatus = e.target.value;
-        if (newStatus === 'out_of_warranty') {
-          setNewTicket({ ...newTicket, warrantyStatus: newStatus, warrantyPeriod: 'out_of_warranty' });
+        // 🆕 "غير معرف" يكمل على طول من غير خانة مدة، و"فاتورة اصلاح" بتظهر
+        // لها خانة اختيار المدة زي "داخل الضمان" بالظبط
+        if (newStatus === 'out_of_warranty' || newStatus === 'unidentified') {
+          setNewTicket({ ...newTicket, warrantyStatus: newStatus, warrantyPeriod: newStatus });
         } else {
           setNewTicket({ ...newTicket, warrantyStatus: newStatus, warrantyPeriod: '' });
         }
@@ -9905,9 +10251,11 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         <option value="">-- اختر --</option>
         <option value="in_warranty">✅ داخل الضمان</option>
         <option value="out_of_warranty">❌ خارج الضمان</option>
+        <option value="unidentified">❔ غير معرف</option>
+        <option value="repair_invoice">🧾 فاتورة اصلاح</option>
       </select>
     </div>
-    {newTicket.warrantyStatus === 'in_warranty' && (
+    {(newTicket.warrantyStatus === 'in_warranty' || newTicket.warrantyStatus === 'repair_invoice') && (
       <div>
         <label className="block text-xs font-bold mb-1">📅 فترة الضمان</label>
         <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.warrantyPeriod || ''} onChange={e => setNewTicket({...newTicket, warrantyPeriod: e.target.value})}>
@@ -9994,13 +10342,13 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     </div>
   </div>
 
-  {/* الفرع والأولوية والتكلفة */}
+  {/* الحالة والأولوية والتكلفة */}
   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
     <div>
-      <label className="block text-xs font-bold mb-1">أقرب فرع</label>
-      <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.nearestBranch} onChange={e => setNewTicket({...newTicket, nearestBranch: e.target.value})}>
-        <option value="">-- اختر --</option>
-        {BRANCH_OPTIONS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+      {/* 🆕 إمكانية اختيار الحالة عند الإنشاء - كانت دايمًا "إنشاء" تلقائي */}
+      <label className="block text-xs font-bold mb-1">الحالة</label>
+      <select className="w-full border p-3 rounded-xl text-sm" value={newTicket.status} onChange={e => setNewTicket({...newTicket, status: e.target.value})}>
+        {TICKET_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
       </select>
     </div>
     <div>
@@ -10337,10 +10685,6 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       <label className="text-xs text-slate-500 block mb-1">المصدر</label>
       <p className="font-bold">{TICKET_SOURCES.find(s => s.value === fullTicketView.source)?.label || '-'}</p>
     </div>
-    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-      <label className="text-xs text-slate-500 block mb-1">أقرب فرع</label>
-      <p className="font-bold">{BRANCH_OPTIONS.find(b => b.value === fullTicketView.nearestBranch)?.label || '-'}</p>
-    </div>
   </div>
 
   {/* العنوان والمشكلة */}
@@ -10355,6 +10699,25 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     <label className="text-xs text-slate-500 block mb-1">المشكلة</label>
     <p className="font-bold">{fullTicketView.issue || '-'}</p>
   </div>
+
+  {/* 🆕 أكواد الأعطال (الأساسي + الإضافية لو موجودة) */}
+  {(fullTicketView.mainFaultCode || (fullTicketView.additionalFaults || []).length > 0) && (
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-2">أكواد الأعطال</label>
+      <div className="space-y-1.5">
+        {fullTicketView.mainFaultCode && (
+          <div className="text-sm font-bold bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-2">
+            {fullTicketView.mainFaultCode} - {fullTicketView.subFaultCode} ({fullTicketView.subFaultDescription})
+          </div>
+        )}
+        {(fullTicketView.additionalFaults || []).map((f, idx) => (
+          <div key={idx} className="text-sm font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2">
+            {f.mainFaultCode} - {f.subFaultCode} ({f.subFaultDescription})
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
 
   {/* المسؤولون */}
   <div className="grid grid-cols-3 gap-3">
@@ -10551,6 +10914,16 @@ const loadTickets = useCallback(async (targetPage = 1) => {
           </div>
         )}
       </div>
+    </div>
+  )}
+
+  {/* 🆕 الملاحظات العامة - كانت موجودة بس مش ظاهرة إلا لو فتحت وضع التعديل */}
+  {fullTicketView.notes && (
+    <div className="border rounded-xl p-4 bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800">
+      <h3 className="font-bold mb-2 flex items-center gap-2 text-amber-800 dark:text-amber-300">
+        <FileTextIcon size={18}/> ملاحظات
+      </h3>
+      <p className="text-sm whitespace-pre-wrap">{fullTicketView.notes}</p>
     </div>
   )}
 
@@ -10996,7 +11369,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">نوع التذكرة</label>
                       <select className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-purple-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.ticketType} onChange={e => setEditFormData({ ...editFormData, ticketType: e.target.value })}>
@@ -11011,13 +11384,45 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                         {TICKET_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                       </select>
                     </div>
+                  </div>
+
+                  {/* 🆕 حالة الضمان بقت قابلة للتعديل بعد حفظ التذكرة (كانت
+                      مش موجودة كخانة إدخال في فورم التعديل خالص) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">أقرب فرع</label>
-                      <select className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-purple-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.nearestBranch} onChange={e => setEditFormData({ ...editFormData, nearestBranch: e.target.value })}>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">حالة الضمان</label>
+                      <select
+                        className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-purple-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                        value={editFormData.warrantyStatus || ''}
+                        onChange={e => {
+                          const newStatus = e.target.value;
+                          if (newStatus === 'out_of_warranty' || newStatus === 'unidentified') {
+                            setEditFormData({ ...editFormData, warrantyStatus: newStatus, warrantyPeriod: newStatus });
+                          } else {
+                            setEditFormData({ ...editFormData, warrantyStatus: newStatus, warrantyPeriod: editFormData.warrantyPeriod || '' });
+                          }
+                        }}
+                      >
                         <option value="">-- اختر --</option>
-                        {BRANCH_OPTIONS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+                        <option value="in_warranty">✅ داخل الضمان</option>
+                        <option value="out_of_warranty">❌ خارج الضمان</option>
+                        <option value="unidentified">❔ غير معرف</option>
+                        <option value="repair_invoice">🧾 فاتورة اصلاح</option>
                       </select>
                     </div>
+                    {(editFormData.warrantyStatus === 'in_warranty' || editFormData.warrantyStatus === 'repair_invoice') && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">📅 فترة الضمان</label>
+                        <select
+                          className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-purple-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                          value={editFormData.warrantyPeriod || ''}
+                          onChange={e => setEditFormData({ ...editFormData, warrantyPeriod: e.target.value })}
+                        >
+                          <option value="">-- اختر الفترة --</option>
+                          {WARRANTY_PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                        </select>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -11411,7 +11816,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
               <th className="p-3">رقم التذكرة</th>
               <th className="p-3">العميل</th>
               <th className="p-3">الهاتف</th>
-              <th className="p-3">الجهاز</th>
+              <th className="p-3">الموديل</th>
               <th className="p-3">النوع</th>
               <th className="p-3">الحالة</th>
               <th className="p-3">الأولوية</th>
@@ -11453,7 +11858,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                   <td className="p-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">{t.ticketNumber || t.id.slice(0,8)}</td>
                   <td className="p-3 font-bold">{t.customerName}</td>
                   <td className="p-3 font-mono" dir="ltr">{t.customerPhone}</td>
-                  <td className="p-3">{t.device || t.deviceType || '-'}</td>
+                  <td className="p-3">{t.deviceModel || t.device || '-'}</td>
                   <td className="p-3">{TICKET_TYPES.find(tt => tt.value === t.ticketType)?.label || '-'}</td>
                   <td className="p-3" onClick={e => e.stopPropagation()}>
                     <StatusSelectComp value={t.status} onChange={handleUpdateStatus} ticketId={t.id} />
