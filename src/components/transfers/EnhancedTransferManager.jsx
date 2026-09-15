@@ -21,6 +21,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
   const [activeTab, setActiveTab] = useState('pending');
   const [transfers, setTransfers] = useState([]);
   const [inventory, setInventory] = useState([]);
+  const [mainInventory, setMainInventory] = useState([]);
   
   const [searchProduct, setSearchProduct] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -69,7 +70,18 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
       setInventory(snap.docs.map(d => ({id: d.id, ...d.data()})));
     });
 
-    return () => { unsub(); invUnsub(); };
+    // 🆕 لو المستخدم مش في المخزن الرئيسي، محتاج يقدر يدوّر على أي صنف
+    // موجود في المخزن الرئيسي (حتى لو مش عنده هو أصلًا) عشان يطلبه منه -
+    // مش بس الأصناف الموجودة في مخزنه هو.
+    let mainInvUnsub = () => {};
+    if (!isMainWarehouse) {
+      mainInvUnsub = onSnapshot(
+        query(collection(db, 'inventory'), where('warehouseId', '==', 'main'), where('isDeleted', '==', false), limit(1000)),
+        snap => setMainInventory(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      );
+    }
+
+    return () => { unsub(); invUnsub(); mainInvUnsub(); };
   }, [appUser, currentWarehouseId, isMainWarehouse]);
 
   useEffect(() => {
@@ -82,43 +94,60 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
     }
   }, [transfers, selectedWarehouse]);
 
+  // 🆕 مصدر البحث يختلف حسب دور المستخدم:
+  // - مستخدم فرع عادي: بيدوّر في مخزون المخزن الرئيسي (عشان يقدر يطلب
+  //   صنف مش عنده هو أصلًا، والمخزن الرئيسي يوافق ويحوّله له).
+  // - مستخدم المخزن الرئيسي: بيدوّر في مخزون المخزن الرئيسي نفسه (عشان
+  //   يختار صنف يبعته بنفسه لفرع معين - تحويل بالدفع مش بالطلب).
+  const searchSource = isMainWarehouse ? inventory : mainInventory;
+
   const handleSearchProduct = (e) => {
     e.preventDefault();
-    if (!searchProduct.trim() || inventory.length === 0) return;
-    
     const term = normalizeSearch(searchProduct);
-    const found = inventory.find(i => 
+    if (!term) {
+      showError("اكتب اسم أو سيريال المنتج الأول");
+      return;
+    }
+
+    const found = searchSource.find(i => 
       normalizeSearch(i.serialNumber).includes(term) || 
       normalizeSearch(i.name).includes(term)
     );
     
     if (found) {
       if (found.quantity <= 0) {
-        showError("المنتج غير متوفر بالكمية المطلوبة في مخزنك");
+        showError(isMainWarehouse ? "المنتج غير متوفر بالكمية المطلوبة في مخزنك" : "المنتج غير متوفر حاليًا في المخزن الرئيسي");
         return;
       }
       setSelectedProduct(found);
       setSearchProduct('');
       setReqQty(1);
     } else {
-      showError("لم يتم العثور على المنتج في مخزنك");
+      showError(isMainWarehouse ? "لم يتم العثور على المنتج في مخزنك" : "لم يتم العثور على المنتج في المخزن الرئيسي");
     }
   };
 
   const handleSubmitRequest = async () => {
     if (!selectedProduct) return showError("اختر منتجاً أولاً");
-    if (!toWarehouseId) return showError("اختر المخزن المرسل إليه");
+    if (isMainWarehouse && !toWarehouseId) return showError("اختر المخزن المرسل إليه");
     if (reqQty <= 0) return showError("الكمية غير صالحة");
-    if (reqQty > selectedProduct.quantity) return showError("الكمية المطلوبة أكبر من المتاح في مخزنك!");
-    
+    if (reqQty > selectedProduct.quantity) {
+      return showError(isMainWarehouse ? "الكمية المطلوبة أكبر من المتاح في مخزنك!" : "الكمية المطلوبة أكبر من المتاح في المخزن الرئيسي!");
+    }
+
+    // 🆕 فرع عادي: بيطلب من المخزن الرئيسي لنفسه (fromWarehouseId='main').
+    // المخزن الرئيسي: بيبعت من مخزنه هو لأي فرع يختاره (زي ما كان قبل كده).
+    const fromWarehouseId = isMainWarehouse ? currentWarehouseId : 'main';
+    const destinationWarehouseId = isMainWarehouse ? toWarehouseId : currentWarehouseId;
+
     setGlobalLoading(true);
     try {
       const transferData = {
         serialNumber: selectedProduct.serialNumber,
         itemName: selectedProduct.name,
         requestedQty: Number(reqQty),
-        fromWarehouseId: currentWarehouseId,
-        toWarehouseId: toWarehouseId,
+        fromWarehouseId,
+        toWarehouseId: destinationWarehouseId,
         status: 'pending',
         priority,
         createdAt: serverTimestamp(),
@@ -129,13 +158,13 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
           action: 'إنشاء طلب تحويل',
           timestamp: new Date().toISOString(),
           by: appUser.name,
-          details: `طلب تحويل ${reqQty} قطعة من ${selectedProduct.name} إلى ${warehouseMap[toWarehouseId]}`
+          details: `طلب تحويل ${reqQty} قطعة من ${selectedProduct.name} إلى ${warehouseMap[destinationWarehouseId]}`
         }]
       };
       
       await addDoc(collection(db, 'transfers'), transferData);
       
-      await logUserActivity(appUser, 'طلب تحويل مخزني', `طلب تحويل ${reqQty} قطعة من ${selectedProduct.name} إلى ${warehouseMap[toWarehouseId]}`);
+      await logUserActivity(appUser, 'طلب تحويل مخزني', `طلب تحويل ${reqQty} قطعة من ${selectedProduct.name} إلى ${warehouseMap[destinationWarehouseId]}`);
       showSuccess("تم إرسال طلب التحويل بنجاح");
       setSelectedProduct(null);
       setSearchProduct('');
@@ -422,13 +451,15 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
         {activeTab === 'new' && (
           <div className="max-w-xl mx-auto space-y-6">
             <div className="bg-teal-50 dark:bg-teal-900/30 p-5 rounded-2xl border border-teal-100 dark:border-teal-800 text-teal-800 dark:text-teal-300 font-bold text-sm leading-relaxed shadow-sm">
-              ابحث عن المنتج في مخزنك واختر الكمية والمخزن المرسل إليه. المخزن الرئيسي يمكنه الموافقة أو رفض الطلب.
+              {isMainWarehouse
+                ? 'ابحث عن المنتج في مخزنك واختر الكمية والفرع المرسل إليه.'
+                : 'ابحث عن أي منتج موجود في المخزن الرئيسي حتى لو مش موجود عندك، وهيتحول لمخزنك بعد موافقة المخزن الرئيسي - سواء كصنف جديد أو زيادة في الكمية الموجودة.'}
             </div>
             
             <form onSubmit={handleSearchProduct} className="flex gap-3">
               <input 
                 className="flex-1 border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold text-right bg-white dark:bg-slate-900 focus:border-teal-500" 
-                placeholder="ابحث بالاسم أو السيريال..." 
+                placeholder={isMainWarehouse ? "ابحث بالاسم أو السيريال..." : "ابحث بالاسم أو السيريال في المخزن الرئيسي..."} 
                 value={searchProduct} 
                 onChange={e=>setSearchProduct(e.target.value)} 
               />
@@ -448,14 +479,24 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
                 <p className="text-slate-500 dark:text-slate-400 font-mono text-sm">{selectedProduct.serialNumber}</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-4 py-2 rounded-xl font-bold text-sm">
-                    المتاح في مخزنك: {selectedProduct.quantity}
+                    {isMainWarehouse ? 'المتاح في مخزنك' : 'المتاح في المخزن الرئيسي'}: {selectedProduct.quantity}
                   </div>
                   <div className="bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-4 py-2 rounded-xl font-bold text-sm">
                     السعر: {selectedProduct.price} ج
                   </div>
                 </div>
+                {!isMainWarehouse && (() => {
+                  const ownQty = inventory.find(i => i.serialNumber === selectedProduct.serialNumber)?.quantity;
+                  return (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {ownQty
+                        ? `عندك حاليًا ${ownQty} قطعة من الصنف ده - الكمية المطلوبة هتُضاف عليها بعد الموافقة.`
+                        : 'الصنف ده مش موجود عندك حاليًا - هيتضاف كصنف جديد في مخزنك بعد الموافقة.'}
+                    </p>
+                  );
+                })()}
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className={isMainWarehouse ? "grid grid-cols-2 gap-4" : ""}>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الكمية المطلوبة</label>
                     <input 
@@ -467,21 +508,23 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
                       onChange={e=>setReqQty(Number(e.target.value))} 
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">المخزن المرسل إليه</label>
-                    <select 
-                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900"
-                      value={toWarehouseId}
-                      onChange={e => setToWarehouseId(e.target.value)}
-                    >
-                      <option value="">-- اختر --</option>
-                      {Object.entries(warehouseMap)
-                        .filter(([id]) => id !== currentWarehouseId)
-                        .map(([id, name]) => (
-                          <option key={id} value={id}>{name}</option>
-                        ))}
-                    </select>
-                  </div>
+                  {isMainWarehouse && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">المخزن المرسل إليه</label>
+                      <select 
+                        className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900"
+                        value={toWarehouseId}
+                        onChange={e => setToWarehouseId(e.target.value)}
+                      >
+                        <option value="">-- اختر --</option>
+                        {Object.entries(warehouseMap)
+                          .filter(([id]) => id !== currentWarehouseId)
+                          .map(([id, name]) => (
+                            <option key={id} value={id}>{name}</option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 <div>
