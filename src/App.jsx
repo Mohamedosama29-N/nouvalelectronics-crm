@@ -31,7 +31,6 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { LoginScreen } from './components/auth/LoginScreen';
-const ResetPasswordScreen = lazyPage(() => import('./components/auth/ResetPasswordScreen'), 'ResetPasswordScreen');
 import { ThemeProvider } from './components/common/ThemeProvider';
 import { USER_ROLES } from './constants/roles';
 import { auth, db } from './firebase/config';
@@ -66,6 +65,7 @@ const SettingsManager = lazyPage(() => import('./components/settings/SettingsMan
 const EnhancedWarehouseManager = lazyPage(() => import('./components/warehouses/EnhancedWarehouseManager'), 'EnhancedWarehouseManager');
 const EnhancedUserManagement = lazyPage(() => import('./components/users/EnhancedUserManagement'), 'EnhancedUserManagement');
 const EmployeeProfileView = lazyPage(() => import('./components/users/EmployeeProfileView'), 'EmployeeProfileView');
+const ResetPasswordScreen = lazyPage(() => import('./components/auth/ResetPasswordScreen'), 'ResetPasswordScreen');
 
 function PageLoadingFallback() {
   return (
