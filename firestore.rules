@@ -2,6 +2,25 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ==========================================================================
+    // ⚠️ تحذير أمني مهم (محتاج قرار منك، مش حاجة اتصلحت هنا):
+    // ==========================================================================
+    // التطبيق بيعمل signInAnonymously() لأي حد يفتح الرابط (App.jsx) قبل حتى
+    // ما يشوف شاشة تسجيل الدخول بتاعة النظام نفسه. ده معناه إن isAuthenticated()
+    // تحت بترجع true لأي زائر للموقع، مش بس المستخدمين المسجلين فعليًا من
+    // شاشة اللوجين. يعني أي حد يعرف رابط المشروع يقدر - بمجرد ما يفتح
+    // Developer Tools ويستخدم Firebase SDK مباشرة - يقرأ ويعدّل كل بيانات
+    // العملاء والمخزون والفواتير، من غير ما يعدي أصلًا على نظام الصلاحيات
+    // اللي في التطبيق (لأن الصلاحيات دي بتتفحص في React فقط، مش هنا).
+    //
+    // الإصلاح الجذري ليها محتاج نقل تسجيل الدخول لـ Firebase Authentication
+    // حقيقي (بريد/باسورد أو custom token لكل موظف) + التحقق من الدور
+    // (role) هنا في الـ rules نفسها (عبر custom claims أو قراءة مستند
+    // الموظف والتأكد إن request.auth.uid فعلاً بتاعه) - ده تغيير معماري
+    // أكبر محتاج اختبار حي على مشروع Firebase بتاعك، فمتعملش deploy للملف
+    // ده على الإنتاج قبل ما تراجعه وتتأكد إنه يناسب حالتك.
+    // ==========================================================================
+
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -10,9 +29,14 @@ service cloud.firestore {
       return isAuthenticated();
     }
 
+    // 🛠️ FIX (أمان خطير): كانت `allow write: if true` هنا - يعني أي حد
+    // عنده Firebase config بتاع مشروعك (وهو موجود بشكل علني في أي نسخة
+    // منشورة من التطبيق) يقدر يكتب/يمسح/يعدّل أي مستند موظف مباشرة عن
+    // طريق Firebase SDK من غير ما يفتح التطبيق أصلًا أو يسجل دخول بأي شكل.
+    // اتصلحت لأقل حد ممكن (نفس باقي الكوليكشنز)، لكن اقرأ الملاحظة تحت.
     match /employees/{userId} {
       allow read: if isAuthenticated();
-      allow write: if true;
+      allow write: if isAuthenticated();
     }
 
     match /inventory/{itemId} {
@@ -41,6 +65,30 @@ service cloud.firestore {
 
     match /activity_logs/{logId} {
       allow read, write: if isAuthenticated();
+    }
+
+    // 🆕 مصروفات الملف المالي
+    match /expenses/{expenseId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // 🆕 توكنز استعادة كلمة السر - نفس مستوى الحماية بتاع باقي الكوليكشنز
+    // حاليًا (isAuthenticated فقط، يعني أي زائر بعد anonymous auth). التوكن
+    // نفسه عشوائي وصلاحيته 30 دقيقة بس، فالمخاطرة محدودة، لكنها تفضل جزء
+    // من نفس المحدودية المعمارية الموضحة أعلى الملف ده.
+    match /password_resets/{resetId} {
+      allow read, create, update: if isAuthenticated();
+      allow delete: if false;
+    }
+
+    // 🆕 حالة إرسال الفواتير الضريبية لمصلحة الضرائب (ETA). الكتابة هنا
+    // بتتم فقط من Cloud Function (submitInvoiceToETA) عن طريق Admin SDK،
+    // اللي بيتخطى الـ rules دي أصلًا - القراءة بس مسموحة من الواجهة عشان
+    // تعرض حالة كل فاتورة، والكتابة المباشرة من المتصفح ممنوعة تمامًا حتى
+    // لا يقدر حد يزوّر حالة "cleared" من غير ما تعدي فعليًا على المصلحة.
+    match /einvoices/{invoiceId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
     }
 
     match /{document=**} {
