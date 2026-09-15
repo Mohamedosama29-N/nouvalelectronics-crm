@@ -410,7 +410,7 @@ const WARRANTY_PERIODS = [
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 w-full max-w-5xl shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="flex justify-between items-center mb-6 border-b pb-4">
               <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
-                <UserCog className="text-indigo-600"/> إعدادات الموظف
+                <UserCog className="text-teal-600"/> إعدادات الموظف
               </h3>
               <button onClick={() => setEditingUser(null)} className="text-slate-400 hover:text-rose-600">
                 <X size={24}/>
@@ -422,7 +422,7 @@ const WARRANTY_PERIODS = [
                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">اسم الموظف</label>
                      <input 
                        required 
-                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                        value={editingUser.name} 
                        onChange={e=>setEditingUser({...editingUser, name:e.target.value})} 
                      />
@@ -431,7 +431,7 @@ const WARRANTY_PERIODS = [
                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">البريد الإلكتروني</label>
                      <input 
                        type="email"
-                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                        value={editingUser.email} 
                        disabled
                      />
@@ -439,7 +439,7 @@ const WARRANTY_PERIODS = [
                   <div>
                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">رقم الهاتف</label>
                      <input 
-                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold font-mono bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold font-mono bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                        value={editingUser.phone || ''} 
                        onChange={e=>setEditingUser({...editingUser, phone:e.target.value})} 
                        dir="ltr" 
@@ -451,7 +451,7 @@ const WARRANTY_PERIODS = [
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الرتبة</label>
                     <select 
-                      className="w-full border p-3 rounded-xl font-bold bg-white dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                      className="w-full border p-3 rounded-xl font-bold bg-white dark:bg-slate-900 outline-none focus:border-teal-500" 
                       value={editingUser.role} 
                       onChange={e => {
                         const newRole = e.target.value;
@@ -471,7 +471,7 @@ const WARRANTY_PERIODS = [
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الفرع المخصص</label>
                     <select 
-                      className="w-full border p-3 rounded-xl font-bold bg-white dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                      className="w-full border p-3 rounded-xl font-bold bg-white dark:bg-slate-900 outline-none focus:border-teal-500" 
                       value={editingUser.assignedWarehouseId} 
                       onChange={e=>setEditingUser({...editingUser, assignedWarehouseId:e.target.value})}
                     >
@@ -481,7 +481,7 @@ const WARRANTY_PERIODS = [
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">القسم</label>
                     <select 
-                      className="w-full border p-3 rounded-xl font-bold bg-white dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                      className="w-full border p-3 rounded-xl font-bold bg-white dark:bg-slate-900 outline-none focus:border-teal-500" 
                       value={editingUser.department || ''} 
                       onChange={e=>setEditingUser({...editingUser, department: e.target.value})}
                     >
@@ -495,7 +495,7 @@ const WARRANTY_PERIODS = [
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">المسمى الوظيفي</label>
                     <input 
-                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                       value={editingUser.jobTitle || ''} 
                       onChange={e=>setEditingUser({...editingUser, jobTitle: e.target.value})} 
                     />
@@ -504,7 +504,7 @@ const WARRANTY_PERIODS = [
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">تاريخ التعيين</label>
                     <input 
                       type="date"
-                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                       value={editingUser.hireDate || ''} 
                       onChange={e=>setEditingUser({...editingUser, hireDate: e.target.value})} 
                     />
@@ -513,7 +513,7 @@ const WARRANTY_PERIODS = [
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الراتب</label>
                     <input 
                       type="number"
-                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                       value={editingUser.salary || 0} 
                       onChange={e=>setEditingUser({...editingUser, salary: Number(e.target.value)})} 
                     />
@@ -524,7 +524,7 @@ const WARRANTY_PERIODS = [
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ملاحظات</label>
                   <textarea
                     rows="2"
-                    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500"
+                    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500"
                     value={editingUser.notes || ''}
                     onChange={e=>setEditingUser({...editingUser, notes: e.target.value})}
                   />
@@ -542,7 +542,7 @@ const WARRANTY_PERIODS = [
                </div>
 
                <div className="flex gap-3 pt-4 border-t">
-                 <button type="submit" className="flex-1 bg-slate-900 dark:bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-black dark:hover:bg-indigo-700 transition-colors">حفظ التعديلات</button>
+                 <button type="submit" className="flex-1 bg-slate-900 dark:bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-black dark:hover:bg-teal-700 transition-colors">حفظ التعديلات</button>
                  <button type="button" onClick={()=>setEditingUser(null)} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">إلغاء</button>
                </div>
             </form>
@@ -556,7 +556,7 @@ const WARRANTY_PERIODS = [
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 w-full max-w-3xl shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="flex justify-between items-center mb-6 border-b pb-4">
               <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
-                <UserPlus className="text-indigo-600"/> إضافة مستخدم جديد
+                <UserPlus className="text-teal-600"/> إضافة مستخدم جديد
               </h3>
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-rose-600">
                 <X size={24}/>
@@ -568,7 +568,7 @@ const WARRANTY_PERIODS = [
                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">اسم الموظف *</label>
                      <input 
                        required 
-                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                        value={newUser.name} 
                        onChange={e=>setNewUser({...newUser, name:e.target.value})} 
                        placeholder="الاسم بالكامل" 
@@ -577,7 +577,7 @@ const WARRANTY_PERIODS = [
                   <div>
                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">رقم الهاتف</label>
                      <input 
-                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold font-mono bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold font-mono bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                        value={newUser.phone} 
                        onChange={e=>setNewUser({...newUser, phone:e.target.value})} 
                        placeholder="01XXXXXXXXX" 
@@ -589,7 +589,7 @@ const WARRANTY_PERIODS = [
                      <input 
                        type="email" 
                        required 
-                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold font-mono bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold font-mono bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                        value={newUser.email} 
                        onChange={e=>setNewUser({...newUser, email:e.target.value})} 
                        placeholder="employee@domain.com" 
@@ -601,7 +601,7 @@ const WARRANTY_PERIODS = [
                      <input 
                        type="text" 
                        required 
-                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold font-mono bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold font-mono bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                        value={newUser.pass} 
                        onChange={e=>setNewUser({...newUser, pass:e.target.value})} 
                        placeholder="كلمة المرور للدخول" 
@@ -611,7 +611,7 @@ const WARRANTY_PERIODS = [
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الرتبة</label>
                     <select 
-                      className="w-full border p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                      className="w-full border p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                       value={newUser.role} 
                       onChange={e=>setNewUser({...newUser, role:e.target.value})}>
                        {USER_ROLES.map(role => (
@@ -622,7 +622,7 @@ const WARRANTY_PERIODS = [
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">القسم</label>
                     <select 
-                      className="w-full border p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                      className="w-full border p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                       value={newUser.department} 
                       onChange={e=>setNewUser({...newUser, department:e.target.value})}>
                        <option value="">-- اختر القسم --</option>
@@ -632,7 +632,7 @@ const WARRANTY_PERIODS = [
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الفرع المخصص</label>
                     <select 
-                      className="w-full border p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                      className="w-full border p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                       value={newUser.assignedWarehouseId} 
                       onChange={e=>setNewUser({...newUser, assignedWarehouseId:e.target.value})}>
                        {warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
@@ -641,7 +641,7 @@ const WARRANTY_PERIODS = [
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">المسمى الوظيفي</label>
                     <input 
-                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                       value={newUser.jobTitle} 
                       onChange={e=>setNewUser({...newUser, jobTitle:e.target.value})} 
                     />
@@ -653,7 +653,7 @@ const WARRANTY_PERIODS = [
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">تاريخ التعيين</label>
                     <input 
                       type="date"
-                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                       value={newUser.hireDate} 
                       onChange={e=>setNewUser({...newUser, hireDate:e.target.value})} 
                     />
@@ -662,7 +662,7 @@ const WARRANTY_PERIODS = [
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الراتب</label>
                     <input 
                       type="number"
-                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500" 
+                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
                       value={newUser.salary} 
                       onChange={e=>setNewUser({...newUser, salary: Number(e.target.value)})} 
                     />
@@ -673,20 +673,20 @@ const WARRANTY_PERIODS = [
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ملاحظات</label>
                   <textarea
                     rows="2"
-                    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500"
+                    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500"
                     value={newUser.notes}
                     onChange={e=>setNewUser({...newUser, notes:e.target.value})}
                   />
                </div>
                
-               <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800">
-                 <p className="text-xs text-indigo-800 dark:text-indigo-300 font-bold">
+               <div className="bg-teal-50 dark:bg-teal-900/30 p-4 rounded-xl border border-teal-100 dark:border-teal-800">
+                 <p className="text-xs text-teal-800 dark:text-teal-300 font-bold">
                    سيتم منح المستخدم الصلاحيات الافتراضية حسب الدور المختار، ويمكنك تعديلها لاحقاً من صفحة تعديل المستخدم.
                  </p>
                </div>
 
                <div className="flex gap-3 pt-4 border-t">
-                 <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-md transition-colors flex justify-center items-center gap-2">
+                 <button type="submit" className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700 shadow-md transition-colors flex justify-center items-center gap-2">
                    <Plus size={18}/> إنشاء الحساب
                  </button>
                  <button type="button" onClick={()=>setShowAddModal(false)} className="px-6 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">إلغاء</button>
@@ -702,7 +702,7 @@ const WARRANTY_PERIODS = [
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 w-full max-w-5xl shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="flex justify-between items-center mb-6 border-b pb-4">
               <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
-                <Shield className="text-indigo-600"/> إدارة صلاحيات {permissionsUser.name}
+                <Shield className="text-teal-600"/> إدارة صلاحيات {permissionsUser.name}
               </h3>
               <button onClick={() => setShowPermissionsModal(false)} className="text-slate-400 hover:text-rose-600">
                 <X size={24}/>
@@ -713,7 +713,7 @@ const WARRANTY_PERIODS = [
               {Object.entries(permissionsByCategory).map(([category, perms]) => (
                 <div key={category} className="mb-6 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-3 pb-2 border-b">
-                    <h5 className="font-bold text-indigo-700 dark:text-indigo-400">{category}</h5>
+                    <h5 className="font-bold text-teal-700 dark:text-teal-400">{category}</h5>
                     <div className="flex gap-3">
                       <button
                         type="button"
@@ -724,7 +724,7 @@ const WARRANTY_PERIODS = [
                           });
                           setPermissionsUser({ ...permissionsUser, permissions: newPermissions });
                         }}
-                        className="text-xs text-indigo-600 hover:text-indigo-800 font-bold"
+                        className="text-xs text-teal-600 hover:text-teal-800 font-bold"
                       >
                         تحديد الكل
                       </button>
@@ -747,12 +747,12 @@ const WARRANTY_PERIODS = [
                      {perms.map(p => (
                         <label 
                           key={p.key} 
-                          className={`flex items-center gap-3 p-3 rounded-xl border transition-colors cursor-pointer ${permissionsUser.permissions?.[p.key] ? 'border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-600'}`}
+                          className={`flex items-center gap-3 p-3 rounded-xl border transition-colors cursor-pointer ${permissionsUser.permissions?.[p.key] ? 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/30' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-600'}`}
                           title={p.label}
                         >
                            <input 
                              type="checkbox" 
-                             className="w-4 h-4 accent-indigo-600" 
+                             className="w-4 h-4 accent-teal-600" 
                              checked={permissionsUser.permissions?.[p.key] || false} 
                              onChange={e => setPermissionsUser({
                                ...permissionsUser, 
@@ -773,7 +773,7 @@ const WARRANTY_PERIODS = [
             <div className="flex gap-3 pt-4 border-t mt-6">
               <button
                 onClick={handleSavePermissions}
-                className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700"
+                className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700"
               >
                 حفظ الصلاحيات
               </button>
@@ -794,7 +794,7 @@ const WARRANTY_PERIODS = [
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="flex justify-between items-center mb-2 border-b pb-4">
               <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
-                <LayoutDashboard className="text-indigo-600"/> تخصيص الداشبورد لـ {dashboardUser.name}
+                <LayoutDashboard className="text-teal-600"/> تخصيص الداشبورد لـ {dashboardUser.name}
               </h3>
               <button onClick={() => setShowDashboardModal(false)} className="text-slate-400 hover:text-rose-600">
                 <X size={24}/>
@@ -808,14 +808,14 @@ const WARRANTY_PERIODS = [
               {dashboardWidgetsDraft.map((w, idx) => (
                 <div
                   key={w.id}
-                  className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${w.visible ? 'border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 opacity-60'}`}
+                  className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${w.visible ? 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 opacity-60'}`}
                 >
                   <div className="flex flex-col">
                     <button
                       type="button"
                       onClick={() => moveDraftWidget(w.id, 'up')}
                       disabled={idx === 0}
-                      className="text-slate-400 hover:text-indigo-600 disabled:opacity-20 disabled:cursor-not-allowed"
+                      className="text-slate-400 hover:text-teal-600 disabled:opacity-20 disabled:cursor-not-allowed"
                       title="نقل لأعلى"
                     >
                       <ArrowUp size={14}/>
@@ -824,7 +824,7 @@ const WARRANTY_PERIODS = [
                       type="button"
                       onClick={() => moveDraftWidget(w.id, 'down')}
                       disabled={idx === dashboardWidgetsDraft.length - 1}
-                      className="text-slate-400 hover:text-indigo-600 disabled:opacity-20 disabled:cursor-not-allowed"
+                      className="text-slate-400 hover:text-teal-600 disabled:opacity-20 disabled:cursor-not-allowed"
                       title="نقل لأسفل"
                     >
                       <ArrowDown size={14}/>
@@ -834,7 +834,7 @@ const WARRANTY_PERIODS = [
                   <label className="flex items-center gap-3 flex-1 cursor-pointer">
                     <input
                       type="checkbox"
-                      className="w-4 h-4 accent-indigo-600"
+                      className="w-4 h-4 accent-teal-600"
                       checked={w.visible}
                       onChange={() => toggleDraftWidget(w.id)}
                     />
@@ -850,7 +850,7 @@ const WARRANTY_PERIODS = [
             <div className="flex gap-3 pt-4 border-t mt-6">
               <button
                 onClick={handleSaveDashboardConfig}
-                className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700"
+                className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700"
               >
                 حفظ التخصيص
               </button>
@@ -920,9 +920,9 @@ const WARRANTY_PERIODS = [
           <div className="p-6 border-b bg-slate-50 dark:bg-slate-900/50 flex flex-wrap justify-between items-center gap-4">
              <div className="flex items-center gap-3">
                 <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
-                  <Shield className="text-indigo-600" size={20}/> فريق العمل والصلاحيات
+                  <Shield className="text-teal-600" size={20}/> فريق العمل والصلاحيات
                 </h3>
-                <div className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-4 py-1.5 rounded-lg font-bold text-xs">{usersList.length} مستخدم</div>
+                <div className="bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-4 py-1.5 rounded-lg font-bold text-xs">{usersList.length} مستخدم</div>
              </div>
              
              <div className="flex flex-wrap gap-2">
@@ -1003,7 +1003,7 @@ const WARRANTY_PERIODS = [
                </button>
                <button 
                  onClick={()=>setShowAddModal(true)} 
-                 className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-sm whitespace-nowrap"
+                 className="bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-teal-700 flex items-center gap-2 shadow-sm whitespace-nowrap"
                >
                   <Plus size={14}/> إضافة مستخدم
                </button>
@@ -1017,7 +1017,7 @@ const WARRANTY_PERIODS = [
                       <th className="p-5 w-10">
                         <input 
                           type="checkbox" 
-                          className="w-4 h-4 accent-indigo-600"
+                          className="w-4 h-4 accent-teal-600"
                           checked={selectedItems.size === filteredUsers.length && filteredUsers.length > 0}
                           onChange={toggleSelectAll}
                         />
@@ -1042,7 +1042,7 @@ const WARRANTY_PERIODS = [
                           <td className="p-5">
                             <input 
                               type="checkbox" 
-                              className="w-4 h-4 accent-indigo-600"
+                              className="w-4 h-4 accent-teal-600"
                               checked={selectedItems.has(u.id)}
                               onChange={() => toggleSelectItem(u.id)}
                             />
@@ -1054,11 +1054,11 @@ const WARRANTY_PERIODS = [
                                 <p className="text-slate-800 dark:text-white font-bold">{u.name || 'مستخدم جديد'}</p>
                                 <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-1" dir="ltr">{u.email}</p>
                                 {u.phone && <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-0.5">{u.phone}</p>}
-                                {u.jobTitle && <p className="text-[9px] text-indigo-400">{u.jobTitle}</p>}
+                                {u.jobTitle && <p className="text-[9px] text-teal-400">{u.jobTitle}</p>}
                               </div>
                             </div>
                           </td>
-                          <td className="p-5 text-center font-bold text-indigo-600 dark:text-indigo-400 text-xs">
+                          <td className="p-5 text-center font-bold text-teal-600 dark:text-teal-400 text-xs">
                             {warehouses.find(w=>w.id===u.assignedWarehouseId)?.name || 'الرئيسي'}
                           </td>
                           <td className="p-5 text-center text-slate-600 dark:text-slate-400 text-xs">
@@ -1079,7 +1079,7 @@ const WARRANTY_PERIODS = [
                             {u.lastLogin ? formatDate(u.lastLogin) : '-'}
                           </td>
                           <td className="p-5 text-center font-bold">
-                            <span className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-2 py-1 rounded-lg text-xs">
+                            <span className="bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-2 py-1 rounded-lg text-xs">
                               {permissionsCount} / {ALL_PERMISSIONS.length}
                             </span>
                           </td>
@@ -1100,14 +1100,14 @@ const WARRANTY_PERIODS = [
                               </button>
                               <button 
                                 onClick={() => openDashboardCustomization(u)} 
-                                className="p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg hover:bg-indigo-600 dark:hover:bg-indigo-700 hover:text-white transition-colors shadow-sm" 
+                                className="p-2 bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 rounded-lg hover:bg-teal-600 dark:hover:bg-teal-700 hover:text-white transition-colors shadow-sm" 
                                 title="تخصيص الداشبورد"
                               >
                                 <LayoutDashboard size={16}/>
                               </button>
                               <button 
                                 onClick={()=>setEditingUser({...u, permissions: u.permissions || {}})} 
-                                className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-indigo-600 dark:hover:bg-indigo-700 hover:text-white transition-colors shadow-sm" 
+                                className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-teal-600 dark:hover:bg-teal-700 hover:text-white transition-colors shadow-sm" 
                                 title="تعديل البيانات"
                               >
                                 <Edit size={16}/>

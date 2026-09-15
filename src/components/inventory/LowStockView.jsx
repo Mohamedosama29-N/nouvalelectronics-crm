@@ -317,7 +317,7 @@ export function LowStockView({ lowStockItems = [], appUser, warehouseMap, system
                     {item.name}
                   </td>
 
-                  <td className="p-4 text-center text-indigo-600 font-bold">
+                  <td className="p-4 text-center text-teal-600 font-bold">
                     {warehouseMap[item.warehouseId] || item.warehouseId}
                   </td>
 

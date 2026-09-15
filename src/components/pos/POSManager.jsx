@@ -615,9 +615,9 @@ const handleCheckout = async () => {
             <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white border-b pb-3">إتمام الدفع</h3>
             
             <div className="space-y-4">
-              <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl">
+              <div className="bg-teal-50 dark:bg-teal-900/30 p-4 rounded-xl">
                 <p className="text-sm text-slate-600 dark:text-slate-400">المطلوب</p>
-                <p className="text-3xl font-black text-indigo-600 dark:text-indigo-400">{calculations.finalTotal} ج</p>
+                <p className="text-3xl font-black text-teal-600 dark:text-teal-400">{calculations.finalTotal} ج</p>
               </div>
 
               {invoice.paymentMethod === 'cash' && (
@@ -696,28 +696,28 @@ const handleCheckout = async () => {
               <input
                 type="text"
                 placeholder="اسم العميل *"
-                className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                 value={newCustomer.name}
                 onChange={e => setNewCustomer({...newCustomer, name: e.target.value})}
               />
               <input
                 type="text"
                 placeholder="رقم الهاتف *"
-                className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                 value={newCustomer.phone}
                 onChange={e => setNewCustomer({...newCustomer, phone: e.target.value})}
               />
               <input
                 type="email"
                 placeholder="البريد الإلكتروني"
-                className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                 value={newCustomer.email}
                 onChange={e => setNewCustomer({...newCustomer, email: e.target.value})}
               />
               <div className="flex gap-2 pt-4">
                 <button
                   onClick={handleAddNewCustomer}
-                  className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700"
+                  className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700"
                 >
                   حفظ وإضافة
                 </button>
@@ -754,14 +754,14 @@ const handleCheckout = async () => {
       {/* ===== واجهة POS الرئيسية ===== */}
       <div className="bg-white dark:bg-slate-800 p-8 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700">
         <h2 className="text-2xl font-black mb-8 flex items-center gap-3 text-slate-800 dark:text-white">
-          <Receipt className="text-indigo-600" size={26}/> نقطة البيع POS
+          <Receipt className="text-teal-600" size={26}/> نقطة البيع POS
         </h2>
 
         {/* ✨ ميزة جديدة: تنبيه إن الفاتورة دي مرتبطة بتذكرة صيانة */}
         {invoice.ticketId && (
-          <div className="mb-6 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded-xl p-3 flex items-center gap-2 text-sm">
-            <LinkIcon size={16} className="text-indigo-600 dark:text-indigo-400 shrink-0"/>
-            <span className="text-indigo-700 dark:text-indigo-300 font-bold">
+          <div className="mb-6 bg-teal-50 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-800 rounded-xl p-3 flex items-center gap-2 text-sm">
+            <LinkIcon size={16} className="text-teal-600 dark:text-teal-400 shrink-0"/>
+            <span className="text-teal-700 dark:text-teal-300 font-bold">
               هذه الفاتورة مرتبطة بتذكرة الصيانة #{invoice.ticketNumber}
             </span>
           </div>
@@ -785,7 +785,7 @@ const handleCheckout = async () => {
           />
           <button 
             type="submit" 
-            className="bg-indigo-600 text-white px-8 rounded-lg font-bold text-sm shadow-sm hover:bg-indigo-700 transition-colors flex items-center gap-2"
+            className="bg-teal-600 text-white px-8 rounded-lg font-bold text-sm shadow-sm hover:bg-teal-700 transition-colors flex items-center gap-2"
           >
             <Search size={18}/> إضافة
           </button>
@@ -851,7 +851,7 @@ const handleCheckout = async () => {
                         <span className="text-[9px] text-slate-400">شهر ضمان</span>
                       </div>
                     )}
-                    <span className={`font-black ${item.underWarranty ? 'text-emerald-500 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                    <span className={`font-black ${item.underWarranty ? 'text-emerald-500 dark:text-emerald-400' : 'text-teal-600 dark:text-teal-400'}`}>
                       {item.underWarranty ? '0 ج' : `${(item.price * item.quantity).toLocaleString()} ج`}
                     </span>
                     <button
@@ -875,7 +875,7 @@ const handleCheckout = async () => {
               <div className="flex-1 relative">
                 <User className="absolute right-3 top-3 text-slate-400" size={18}/>
                 <input 
-                  className="w-full border border-slate-200 dark:border-slate-700 pr-10 p-3 rounded-xl font-bold focus:border-indigo-500 outline-none text-sm bg-white dark:bg-slate-900" 
+                  className="w-full border border-slate-200 dark:border-slate-700 pr-10 p-3 rounded-xl font-bold focus:border-teal-500 outline-none text-sm bg-white dark:bg-slate-900" 
                   placeholder="اسم العميل" 
                   value={invoice.customerName} 
                   onChange={e => {
@@ -904,7 +904,7 @@ const handleCheckout = async () => {
                             type="button"
                             key={c.id}
                             onClick={() => { handleSelectCustomer(c); setShowCustomerSuggestions(false); }}
-                            className="w-full text-right px-3 py-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 flex items-center justify-between gap-2 border-b border-slate-50 dark:border-slate-700/50 last:border-0"
+                            className="w-full text-right px-3 py-2 hover:bg-teal-50 dark:hover:bg-teal-900/30 flex items-center justify-between gap-2 border-b border-slate-50 dark:border-slate-700/50 last:border-0"
                           >
                             <span className="font-bold text-sm">{c.name}</span>
                             <span className="text-xs text-slate-400 font-mono" dir="ltr">{c.phone}</span>
@@ -921,7 +921,7 @@ const handleCheckout = async () => {
               </div>
               <button
                 onClick={() => setShowCustomerModal(true)}
-                className="px-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/50"
+                className="px-3 bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 rounded-xl hover:bg-teal-100 dark:hover:bg-teal-900/50"
                 title="إضافة عميل جديد"
               >
                 <UserPlus size={18}/>
@@ -935,7 +935,7 @@ const handleCheckout = async () => {
                   <button
                     key={c.id}
                     onClick={() => handleSelectCustomer(c)}
-                    className="text-[9px] bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/50"
+                    className="text-[9px] bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded hover:bg-teal-100 dark:hover:bg-teal-900/50"
                   >
                     {c.name}
                   </button>
@@ -948,7 +948,7 @@ const handleCheckout = async () => {
             <div className="relative">
               <Phone className="absolute right-3 top-3 text-slate-400" size={18}/>
               <input 
-                className="w-full border border-slate-200 dark:border-slate-700 pr-10 p-3 rounded-xl font-bold font-mono focus:border-indigo-500 outline-none text-sm bg-white dark:bg-slate-900" 
+                className="w-full border border-slate-200 dark:border-slate-700 pr-10 p-3 rounded-xl font-bold font-mono focus:border-teal-500 outline-none text-sm bg-white dark:bg-slate-900" 
                 placeholder="01XXXXXXXXX" 
                 value={invoice.phone} 
                 onChange={e => setInvoice({...invoice, phone: e.target.value})} 
@@ -960,9 +960,9 @@ const handleCheckout = async () => {
         {/* ===== خيارات الفاتورة ===== */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 mb-6">
           <div>
-            <label className="block text-xs font-bold text-indigo-900 dark:text-indigo-300 mb-1">الفني</label>
+            <label className="block text-xs font-bold text-teal-900 dark:text-teal-300 mb-1">الفني</label>
             <select 
-              className="w-full p-2.5 border border-indigo-100 dark:border-indigo-800 rounded-xl bg-white dark:bg-slate-900 font-bold text-xs outline-none focus:border-indigo-500" 
+              className="w-full p-2.5 border border-teal-100 dark:border-teal-800 rounded-xl bg-white dark:bg-slate-900 font-bold text-xs outline-none focus:border-teal-500" 
               value={invoice.technicianName} 
               onChange={e => setInvoice({...invoice, technicianName: e.target.value})}
             >
@@ -971,8 +971,8 @@ const handleCheckout = async () => {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-indigo-900 dark:text-indigo-300 mb-1">الخصم</label>
-            <div className="flex bg-white dark:bg-slate-900 rounded-xl border border-indigo-100 dark:border-indigo-800 overflow-hidden">
+            <label className="block text-xs font-bold text-teal-900 dark:text-teal-300 mb-1">الخصم</label>
+            <div className="flex bg-white dark:bg-slate-900 rounded-xl border border-teal-100 dark:border-teal-800 overflow-hidden">
               <input 
                 type="number" 
                 className="flex-1 p-2.5 outline-none font-bold text-center text-rose-600 dark:text-rose-400 text-sm bg-transparent" 
@@ -993,9 +993,9 @@ const handleCheckout = async () => {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-bold text-indigo-900 dark:text-indigo-300 mb-1">الرسوم</label>
+            <label className="block text-xs font-bold text-teal-900 dark:text-teal-300 mb-1">الرسوم</label>
             <select 
-              className="w-full p-2.5 border border-indigo-100 dark:border-indigo-800 rounded-xl bg-white dark:bg-slate-900 font-bold text-xs outline-none focus:border-indigo-500" 
+              className="w-full p-2.5 border border-teal-100 dark:border-teal-800 rounded-xl bg-white dark:bg-slate-900 font-bold text-xs outline-none focus:border-teal-500" 
               value={invoice.installationFeeId} 
               onChange={e => setInvoice({...invoice, installationFeeId: e.target.value})}
             >
@@ -1004,9 +1004,9 @@ const handleCheckout = async () => {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-indigo-900 dark:text-indigo-300 mb-1">طريقة الدفع</label>
+            <label className="block text-xs font-bold text-teal-900 dark:text-teal-300 mb-1">طريقة الدفع</label>
             <select 
-              className="w-full p-2.5 border border-indigo-100 dark:border-indigo-800 rounded-xl bg-white dark:bg-slate-900 font-bold text-xs outline-none focus:border-indigo-500" 
+              className="w-full p-2.5 border border-teal-100 dark:border-teal-800 rounded-xl bg-white dark:bg-slate-900 font-bold text-xs outline-none focus:border-teal-500" 
               value={invoice.paymentMethod}
               onChange={e => setInvoice({...invoice, paymentMethod: e.target.value})}
             >
@@ -1016,11 +1016,11 @@ const handleCheckout = async () => {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-indigo-900 dark:text-indigo-300 mb-1">الضريبة</label>
+            <label className="block text-xs font-bold text-teal-900 dark:text-teal-300 mb-1">الضريبة</label>
             <button 
               type="button" 
               onClick={() => setInvoice({...invoice, taxEnabled: !invoice.taxEnabled})} 
-              className={`w-full p-2.5 rounded-xl font-bold text-xs transition-all border ${invoice.taxEnabled ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`}
+              className={`w-full p-2.5 rounded-xl font-bold text-xs transition-all border ${invoice.taxEnabled ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`}
             >
               {invoice.taxEnabled ? 'مطبقة' : 'غير مطبقة'}
             </button>
@@ -1028,8 +1028,8 @@ const handleCheckout = async () => {
         </div>
 
         {/* ===== عرض الإجماليات ===== */}
-        <div className="bg-gradient-to-l from-indigo-900 to-purple-900 text-white p-8 rounded-2xl shadow-lg flex flex-col md:flex-row justify-between items-center border-t-4 border-emerald-500 mb-6">
-          <div className="text-right text-xs font-bold text-indigo-100 space-y-1.5">
+        <div className="bg-teal-900 text-white p-8 rounded-2xl shadow-lg flex flex-col md:flex-row justify-between items-center border-t-4 border-emerald-500 mb-6">
+          <div className="text-right text-xs font-bold text-teal-100 space-y-1.5">
             <p>المجموع الفرعي: <span className="text-white mr-2">{calculations.subtotal}</span></p>
             {calculations.discountAmount > 0 && 
               <p className="text-rose-300">الخصم: <span className="mr-2">-{calculations.discountAmount.toFixed(1)}</span></p>
@@ -1043,7 +1043,7 @@ const handleCheckout = async () => {
             }
           </div>
           <div className="text-center md:text-left w-full md:w-auto">
-            <p className="text-[10px] text-indigo-200 mb-0.5">الصافي للدفع</p>
+            <p className="text-[10px] text-teal-200 mb-0.5">الصافي للدفع</p>
             <span className="text-5xl font-black text-emerald-400 tracking-tighter">
               {calculations.finalTotal.toLocaleString()} <span className="text-sm font-normal">ج.م</span>
             </span>
@@ -1062,7 +1062,7 @@ const handleCheckout = async () => {
           <button 
             onClick={handleGenerateQR}
             disabled={calculations.finalTotal === 0}
-            className="px-6 bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg shadow-md hover:bg-indigo-700 transition-colors disabled:opacity-50"
+            className="px-6 bg-teal-600 text-white py-4 rounded-xl font-bold text-lg shadow-md hover:bg-teal-700 transition-colors disabled:opacity-50"
           >
             <ImageIcon size={24}/>
           </button>

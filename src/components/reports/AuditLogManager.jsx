@@ -178,7 +178,7 @@ export function AuditLogManager() {
                 <td className="p-3 font-bold">{log.userName || '-'}</td>
                 <td className="p-3">{log.userRole || '-'}</td>
                 <td className="p-3">
-                  <span className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-2 py-1 rounded-lg text-xs font-bold">
+                  <span className="bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 px-2 py-1 rounded-lg text-xs font-bold">
                     {log.action || '-'}
                   </span>
                 </td>
@@ -197,7 +197,7 @@ export function AuditLogManager() {
           <button
             onClick={() => loadLogs(true)}
             disabled={loading}
-            className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50"
+            className="bg-teal-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-teal-700 disabled:opacity-50"
           >
             {loading ? 'جاري التحميل...' : 'تحميل المزيد'}
           </button>

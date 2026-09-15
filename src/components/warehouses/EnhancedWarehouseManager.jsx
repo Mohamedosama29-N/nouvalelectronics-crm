@@ -421,7 +421,7 @@ for (const item of itemsToTransfer) {
              <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
                <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white">نقل الأصناف إلى فرع آخر</h3>
                <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-                 تم تحديد <span className="font-bold text-indigo-600">{selectedItems.size}</span> صنف للنقل
+                 تم تحديد <span className="font-bold text-teal-600">{selectedItems.size}</span> صنف للنقل
                </p>
                
                <div className="space-y-4">
@@ -444,7 +444,7 @@ for (const item of itemsToTransfer) {
                  <div className="flex gap-2 pt-4">
                    <button
                      onClick={handleTransferItems}
-                     className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700"
+                     className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700"
                    >
                      تأكيد النقل
                    </button>
@@ -509,55 +509,55 @@ for (const item of itemsToTransfer) {
 
          <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
             <h3 className="font-black text-xl mb-6 flex items-center gap-2 text-slate-800 dark:text-white">
-              <Store className="text-indigo-600"/> إضافة فرع جديد
+              <Store className="text-teal-600"/> إضافة فرع جديد
             </h3>
             <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-3 gap-3">
                <input 
                  required 
-                 className="border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold focus:border-indigo-500 bg-slate-50 dark:bg-slate-900 text-sm" 
+                 className="border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold focus:border-teal-500 bg-slate-50 dark:bg-slate-900 text-sm" 
                  placeholder="اسم الفرع *" 
                  value={name} 
                  onChange={e=>setName(e.target.value)} 
                />
                <input 
-                 className="border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold focus:border-indigo-500 bg-slate-50 dark:bg-slate-900 text-sm" 
+                 className="border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold focus:border-teal-500 bg-slate-50 dark:bg-slate-900 text-sm" 
                  placeholder="الموقع" 
                  value={location} 
                  onChange={e=>setLocation(e.target.value)} 
                />
                <input 
-                 className="border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold focus:border-indigo-500 bg-slate-50 dark:bg-slate-900 text-sm" 
+                 className="border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold focus:border-teal-500 bg-slate-50 dark:bg-slate-900 text-sm" 
                  placeholder="رقم الهاتف" 
                  value={phone} 
                  onChange={e=>setPhone(e.target.value)} 
                />
                <input 
-                 className="border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold focus:border-indigo-500 bg-slate-50 dark:bg-slate-900 text-sm" 
+                 className="border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold focus:border-teal-500 bg-slate-50 dark:bg-slate-900 text-sm" 
                  placeholder="مدير الفرع" 
                  value={manager} 
                  onChange={e=>setManager(e.target.value)} 
                />
                <input 
-                 className="border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold focus:border-indigo-500 bg-slate-50 dark:bg-slate-900 text-sm" 
+                 className="border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold focus:border-teal-500 bg-slate-50 dark:bg-slate-900 text-sm" 
                  placeholder="البريد الإلكتروني" 
                  type="email"
                  value={email} 
                  onChange={e=>setEmail(e.target.value)} 
                />
                <input 
-                 className="border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold focus:border-indigo-500 bg-slate-50 dark:bg-slate-900 text-sm" 
+                 className="border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold focus:border-teal-500 bg-slate-50 dark:bg-slate-900 text-sm" 
                  placeholder="ساعات العمل" 
                  value={workingHours} 
                  onChange={e=>setWorkingHours(e.target.value)} 
                />
                <textarea 
-                 className="md:col-span-3 border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold focus:border-indigo-500 bg-slate-50 dark:bg-slate-900 text-sm" 
+                 className="md:col-span-3 border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold focus:border-teal-500 bg-slate-50 dark:bg-slate-900 text-sm" 
                  placeholder="العنوان بالتفصيل" 
                  value={address} 
                  onChange={e=>setAddress(e.target.value)} 
                  rows="2"
                />
-               <button className="md:col-span-3 bg-slate-900 dark:bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-md hover:bg-black dark:hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2">
+               <button className="md:col-span-3 bg-slate-900 dark:bg-teal-600 text-white py-3 rounded-xl font-bold shadow-md hover:bg-black dark:hover:bg-teal-700 transition-colors flex items-center justify-center gap-2">
                  <Plus size={18}/> إضافة فرع
                </button>
             </form>
@@ -573,14 +573,14 @@ for (const item of itemsToTransfer) {
                      <button
                        key={w.id}
                        onClick={() => setSelectedWarehouse(w)}
-                       className={`w-full p-4 text-right hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors flex justify-between items-center ${selectedWarehouse?.id === w.id ? 'bg-indigo-50 dark:bg-indigo-900/30 border-r-4 border-indigo-600' : ''}`}
+                       className={`w-full p-4 text-right hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors flex justify-between items-center ${selectedWarehouse?.id === w.id ? 'bg-teal-50 dark:bg-teal-900/30 border-r-4 border-teal-600' : ''}`}
                      >
                         <div className="flex items-center gap-3">
-                           <MapPin size={18} className={selectedWarehouse?.id === w.id ? 'text-indigo-600' : 'text-slate-400'}/>
+                           <MapPin size={18} className={selectedWarehouse?.id === w.id ? 'text-teal-600' : 'text-slate-400'}/>
                            <div className="text-right">
                              <span className="font-bold text-slate-800 dark:text-white block">{w.name}</span>
                              {w.location && <span className="text-[10px] text-slate-500 dark:text-slate-400">{w.location}</span>}
-                             {w.manager && <span className="text-[10px] text-indigo-400 block">مدير: {w.manager}</span>}
+                             {w.manager && <span className="text-[10px] text-teal-400 block">مدير: {w.manager}</span>}
                            </div>
                         </div>
                         {w.id === 'main' && (
@@ -598,7 +598,7 @@ for (const item of itemsToTransfer) {
                         <div>
                            <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">{selectedWarehouse.name}</h3>
                            {selectedWarehouse.manager && (
-                             <p className="text-sm text-indigo-600 dark:text-indigo-400 mb-1">مدير الفرع: {selectedWarehouse.manager}</p>
+                             <p className="text-sm text-teal-600 dark:text-teal-400 mb-1">مدير الفرع: {selectedWarehouse.manager}</p>
                            )}
                            {selectedWarehouse.location && <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">{selectedWarehouse.location}</p>}
                            {selectedWarehouse.phone && <p className="text-sm text-slate-600 dark:text-slate-400 mb-1" dir="ltr">{selectedWarehouse.phone}</p>}
@@ -611,7 +611,7 @@ for (const item of itemsToTransfer) {
                           <div className="flex gap-2">
                              <button
                                onClick={() => setEditingWarehouse(selectedWarehouse)}
-                               className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-indigo-600 dark:hover:bg-indigo-700 hover:text-white transition-colors"
+                               className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-teal-600 dark:hover:bg-teal-700 hover:text-white transition-colors"
                                title="تعديل بيانات الفرع"
                              >
                                 <Edit size={16}/>
@@ -630,9 +630,9 @@ for (const item of itemsToTransfer) {
                      </div>
 
                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-                        <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-xl text-center">
-                           <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-1">إجمالي القطع</p>
-                           <p className="text-lg font-black text-indigo-800 dark:text-indigo-300">{warehouseStats.totalItems}</p>
+                        <div className="bg-teal-50 dark:bg-teal-900/30 p-3 rounded-xl text-center">
+                           <p className="text-xs text-teal-600 dark:text-teal-400 mb-1">إجمالي القطع</p>
+                           <p className="text-lg font-black text-teal-800 dark:text-teal-300">{warehouseStats.totalItems}</p>
                         </div>
                         <div className="bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-xl text-center">
                            <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-1">قيمة المخزون</p>
@@ -653,56 +653,56 @@ for (const item of itemsToTransfer) {
                      </div>
 
                      {editingWarehouse && editingWarehouse.id === selectedWarehouse.id && (
-                       <div className="mb-6 p-4 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl border border-indigo-100 dark:border-indigo-800">
-                         <h4 className="font-bold text-sm text-indigo-900 dark:text-indigo-300 mb-3">تعديل بيانات الفرع</h4>
+                       <div className="mb-6 p-4 bg-teal-50 dark:bg-teal-900/30 rounded-xl border border-teal-100 dark:border-teal-800">
+                         <h4 className="font-bold text-sm text-teal-900 dark:text-teal-300 mb-3">تعديل بيانات الفرع</h4>
                          <div className="space-y-3">
                            <input
-                             className="w-full border border-indigo-200 dark:border-indigo-800 p-2.5 rounded-lg font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                             className="w-full border border-teal-200 dark:border-teal-800 p-2.5 rounded-lg font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                              value={editingWarehouse.name}
                              onChange={e => setEditingWarehouse({...editingWarehouse, name: e.target.value})}
                              placeholder="اسم الفرع"
                            />
                            <input
-                             className="w-full border border-indigo-200 dark:border-indigo-800 p-2.5 rounded-lg font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                             className="w-full border border-teal-200 dark:border-teal-800 p-2.5 rounded-lg font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                              value={editingWarehouse.location || ''}
                              onChange={e => setEditingWarehouse({...editingWarehouse, location: e.target.value})}
                              placeholder="الموقع"
                            />
                            <input
-                             className="w-full border border-indigo-200 dark:border-indigo-800 p-2.5 rounded-lg font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                             className="w-full border border-teal-200 dark:border-teal-800 p-2.5 rounded-lg font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                              value={editingWarehouse.phone || ''}
                              onChange={e => setEditingWarehouse({...editingWarehouse, phone: e.target.value})}
                              placeholder="رقم الهاتف"
                              dir="ltr"
                            />
                            <input
-                             className="w-full border border-indigo-200 dark:border-indigo-800 p-2.5 rounded-lg font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                             className="w-full border border-teal-200 dark:border-teal-800 p-2.5 rounded-lg font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                              value={editingWarehouse.email || ''}
                              onChange={e => setEditingWarehouse({...editingWarehouse, email: e.target.value})}
                              placeholder="البريد الإلكتروني"
                              type="email"
                            />
                            <input
-                             className="w-full border border-indigo-200 dark:border-indigo-800 p-2.5 rounded-lg font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                             className="w-full border border-teal-200 dark:border-teal-800 p-2.5 rounded-lg font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                              value={editingWarehouse.manager || ''}
                              onChange={e => setEditingWarehouse({...editingWarehouse, manager: e.target.value})}
                              placeholder="مدير الفرع"
                            />
                            <input
-                             className="w-full border border-indigo-200 dark:border-indigo-800 p-2.5 rounded-lg font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                             className="w-full border border-teal-200 dark:border-teal-800 p-2.5 rounded-lg font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                              value={editingWarehouse.workingHours || ''}
                              onChange={e => setEditingWarehouse({...editingWarehouse, workingHours: e.target.value})}
                              placeholder="ساعات العمل"
                            />
                            <textarea
-                             className="w-full border border-indigo-200 dark:border-indigo-800 p-2.5 rounded-lg font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900 resize-none"
+                             className="w-full border border-teal-200 dark:border-teal-800 p-2.5 rounded-lg font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900 resize-none"
                              value={editingWarehouse.address || ''}
                              onChange={e => setEditingWarehouse({...editingWarehouse, address: e.target.value})}
                              placeholder="العنوان"
                              rows="2"
                            />
                            <div className="flex gap-2">
-                             <button onClick={handleUpdateWarehouse} className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-indigo-700">
+                             <button onClick={handleUpdateWarehouse} className="flex-1 bg-teal-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-teal-700">
                                 <Save size={16}/> حفظ
                              </button>
                              <button onClick={() => setEditingWarehouse(null)} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-lg font-bold text-sm hover:bg-slate-200 dark:hover:bg-slate-600">
@@ -716,13 +716,13 @@ for (const item of itemsToTransfer) {
                      <div className="flex border-b mb-4">
                         <button 
                           onClick={() => setShowInventory(false)}
-                          className={`px-4 py-2 text-sm font-bold ${!showInventory ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}
+                          className={`px-4 py-2 text-sm font-bold ${!showInventory ? 'text-teal-600 dark:text-teal-400 border-b-2 border-teal-600' : 'text-slate-500 dark:text-slate-400'}`}
                         >
                           المستخدمون ({assignedUsers.length})
                         </button>
                         <button 
                           onClick={() => setShowInventory(true)}
-                          className={`px-4 py-2 text-sm font-bold ${showInventory ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400'}`}
+                          className={`px-4 py-2 text-sm font-bold ${showInventory ? 'text-teal-600 dark:text-teal-400 border-b-2 border-teal-600' : 'text-slate-500 dark:text-slate-400'}`}
                         >
                           المخزون ({inventory.length})
                         </button>
@@ -741,7 +741,7 @@ for (const item of itemsToTransfer) {
                           </div>
 
                           <h4 className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                            <Users size={18} className="text-indigo-600"/>
+                            <Users size={18} className="text-teal-600"/>
                             المستخدمون الحاليون
                           </h4>
 
@@ -756,7 +756,7 @@ for (const item of itemsToTransfer) {
                                       <div>
                                         <p className="font-bold text-slate-800 dark:text-white">{user.name}</p>
                                         <p className="text-[10px] text-slate-500 dark:text-slate-400">{user.email}</p>
-                                        {user.jobTitle && <p className="text-[9px] text-indigo-400">{user.jobTitle}</p>}
+                                        {user.jobTitle && <p className="text-[9px] text-teal-400">{user.jobTitle}</p>}
                                       </div>
                                     </div>
                                     {appUser.role === 'admin' && (
@@ -787,7 +787,7 @@ for (const item of itemsToTransfer) {
                                   .map(user => {
                                     const RoleIcon = getRoleIcon(user.role);
                                     return (
-                                      <div key={user.id} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl hover:border-indigo-200 dark:hover:border-indigo-800 transition-colors">
+                                      <div key={user.id} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl hover:border-teal-200 dark:hover:border-teal-800 transition-colors">
                                         <div className="flex items-center gap-3">
                                           <RoleIcon size={16} className={`text-${getRoleColor(user.role)}-600`}/>
                                           <div>
@@ -797,7 +797,7 @@ for (const item of itemsToTransfer) {
                                         </div>
                                         <button
                                           onClick={() => handleAssignUser(user.id, true)}
-                                          className="text-indigo-600 hover:text-indigo-800 p-1.5"
+                                          className="text-teal-600 hover:text-teal-800 p-1.5"
                                           title="تعيين للفرع"
                                         >
                                           <UserPlus size={16}/>
@@ -813,7 +813,7 @@ for (const item of itemsToTransfer) {
                        <div className="space-y-4">
                           <div className="flex justify-between items-center">
                             <h4 className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                              <Package size={18} className="text-indigo-600"/>
+                              <Package size={18} className="text-teal-600"/>
                               مخزون الفرع
                             </h4>
                             <div className="flex gap-2">
@@ -821,7 +821,7 @@ for (const item of itemsToTransfer) {
                                 <>
                                   <button
                                     onClick={() => setShowTransferModal(true)}
-                                    className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 flex items-center gap-2"
+                                    className="bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-teal-100 dark:hover:bg-teal-900/50 flex items-center gap-2"
                                   >
                                     <ArrowRightLeft size={14}/> نقل {selectedItems.size}
                                   </button>
@@ -844,7 +844,7 @@ for (const item of itemsToTransfer) {
                                     <th className="p-2 w-10">
                                       <input 
                                         type="checkbox" 
-                                        className="w-4 h-4 accent-indigo-600"
+                                        className="w-4 h-4 accent-teal-600"
                                         checked={selectedItems.size === inventory.length && inventory.length > 0}
                                         onChange={toggleSelectAll}
                                       />
@@ -863,7 +863,7 @@ for (const item of itemsToTransfer) {
                                       <td className="p-2">
                                         <input 
                                           type="checkbox" 
-                                          className="w-4 h-4 accent-indigo-600"
+                                          className="w-4 h-4 accent-teal-600"
                                           checked={selectedItems.has(item.id)}
                                           onChange={() => toggleSelectItem(item.id)}
                                         />
@@ -873,7 +873,7 @@ for (const item of itemsToTransfer) {
                                       <td className="p-2 text-slate-600 dark:text-slate-400">{item.category || 'عام'}</td>
                                       <td className="p-2 text-center">{item.quantity}</td>
                                       <td className="p-2 text-center">{item.price * item.quantity} ج</td>
-                                      <td className="p-2 text-center font-black text-indigo-600 dark:text-indigo-400">{(item.quantity * item.price).toLocaleString()} ج</td>
+                                      <td className="p-2 text-center font-black text-teal-600 dark:text-teal-400">{(item.quantity * item.price).toLocaleString()} ج</td>
                                     </tr>
                                   ))}
                                 </tbody>

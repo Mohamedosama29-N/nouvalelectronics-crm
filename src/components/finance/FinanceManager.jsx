@@ -190,7 +190,7 @@ export function FinanceManager({ appUser }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-3">
-          <Wallet className="text-indigo-600" /> الملف المالي
+          <Wallet className="text-teal-600" /> الملف المالي
         </h2>
         <div className="flex gap-2 items-center">
           <select
@@ -219,7 +219,7 @@ export function FinanceManager({ appUser }) {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-indigo-600" size={32}/></div>
+        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-teal-600" size={32}/></div>
       ) : (
         <>
           {/* بطاقات الملخص */}
@@ -236,8 +236,8 @@ export function FinanceManager({ appUser }) {
               <div className="flex items-center gap-2 text-rose-600 mb-2"><DollarSign size={18}/> <span className="text-xs font-bold">المصروفات</span></div>
               <p className="text-2xl font-black text-slate-800 dark:text-white">{totalExpenses.toLocaleString()} ج</p>
             </div>
-            <div className={`p-5 rounded-2xl border ${netProfit >= 0 ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-100 dark:border-indigo-800' : 'bg-rose-50 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800'}`}>
-              <div className={`flex items-center gap-2 mb-2 ${netProfit >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}><Wallet size={18}/> <span className="text-xs font-bold">صافي الربح</span></div>
+            <div className={`p-5 rounded-2xl border ${netProfit >= 0 ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-100 dark:border-teal-800' : 'bg-rose-50 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800'}`}>
+              <div className={`flex items-center gap-2 mb-2 ${netProfit >= 0 ? 'text-teal-600' : 'text-rose-600'}`}><Wallet size={18}/> <span className="text-xs font-bold">صافي الربح</span></div>
               <p className="text-2xl font-black text-slate-800 dark:text-white">{netProfit.toLocaleString()} ج</p>
             </div>
           </div>
@@ -261,7 +261,7 @@ export function FinanceManager({ appUser }) {
               {canManage && (
                 <button
                   onClick={() => setShowAddExpense(true)}
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-indigo-700"
+                  className="bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-teal-700"
                 >
                   <Plus size={14}/> إضافة مصروف
                 </button>
@@ -340,7 +340,7 @@ export function FinanceManager({ appUser }) {
               <button type="button" onClick={() => setShowAddExpense(false)} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white py-2.5 rounded-xl font-bold text-sm">
                 إلغاء
               </button>
-              <button type="submit" disabled={saving} className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl font-bold text-sm disabled:opacity-60 flex items-center justify-center gap-2">
+              <button type="submit" disabled={saving} className="flex-1 bg-teal-600 text-white py-2.5 rounded-xl font-bold text-sm disabled:opacity-60 flex items-center justify-center gap-2">
                 {saving ? <Loader2 size={16} className="animate-spin"/> : null} حفظ
               </button>
             </div>

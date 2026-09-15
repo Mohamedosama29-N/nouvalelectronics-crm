@@ -270,7 +270,7 @@ export function ReportsManager({ appUser }) {
   };
 
   const exportCenterPanel = (
-    <div className="bg-gradient-to-l from-indigo-600 to-purple-600 rounded-2xl shadow-sm p-5 text-white mb-6">
+    <div className="bg-teal-600 rounded-2xl shadow-sm p-5 text-white mb-6">
       <h2 className="text-lg font-black flex items-center gap-2 mb-1">
         <FileSpreadsheetIcon size={20}/> مركز التصدير
       </h2>
@@ -288,7 +288,7 @@ export function ReportsManager({ appUser }) {
         <button
           onClick={handleExportCenter}
           disabled={exportingCenter || availableExportSources.length === 0}
-          className="bg-white text-indigo-700 px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-indigo-50 disabled:opacity-50 flex items-center gap-2"
+          className="bg-white text-teal-700 px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-teal-50 disabled:opacity-50 flex items-center gap-2"
         >
           {exportingCenter ? <Loader2 size={16} className="animate-spin"/> : <Download size={16}/>}
           {exportingCenter ? 'جاري التصدير...' : 'تصدير Excel'}
@@ -312,7 +312,7 @@ export function ReportsManager({ appUser }) {
     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden text-right" dir="rtl">
        <div className="p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
          <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
-           <History className="text-indigo-600" size={20}/> سجل المبيعات والتقارير
+           <History className="text-teal-600" size={20}/> سجل المبيعات والتقارير
          </h2>
          <div className="flex flex-wrap items-center gap-3">
              <select
@@ -380,7 +380,7 @@ export function ReportsManager({ appUser }) {
              <button 
                onClick={handlePrint} 
                disabled={transactions.length === 0}
-               className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 px-4 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+               className="flex items-center gap-2 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/50 px-4 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
              >
                  <Printer size={14} /> طباعة
              </button>
@@ -395,10 +395,10 @@ export function ReportsManager({ appUser }) {
        )}
        
        {transactions.length > 0 && (
-         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-4 bg-gradient-to-l from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 border-b">
+         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-4 bg-gradient-to-l bg-teal-50 dark:bg-teal-900/30 border-b">
            <div className="bg-white dark:bg-slate-900 p-3 rounded-xl text-center">
              <p className="text-[9px] text-slate-500 dark:text-slate-400 mb-1">إجمالي المبيعات</p>
-             <p className="text-lg font-black text-indigo-600 dark:text-indigo-400">{summary.total.toLocaleString()} ج</p>
+             <p className="text-lg font-black text-teal-600 dark:text-teal-400">{summary.total.toLocaleString()} ج</p>
            </div>
            <div className="bg-white dark:bg-slate-900 p-3 rounded-xl text-center">
              <p className="text-[9px] text-slate-500 dark:text-slate-400 mb-1">عدد المعاملات</p>
@@ -449,7 +449,7 @@ export function ReportsManager({ appUser }) {
                 <tr><td colSpan="8" className="p-8 text-center text-slate-400">لا توجد حركات</td></tr> :
                 transactions.map(t => (
                   <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
-                    <td className="p-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">{t.invoiceNumber || t.id.slice(0,6)}</td>
+                    <td className="p-4 font-mono font-bold text-teal-600 dark:text-teal-400">{t.invoiceNumber || t.id.slice(0,6)}</td>
                     <td className="p-4">
                       <span className={`px-2 py-1 rounded-full text-[9px] font-bold ${
                         t.type === 'sell' 
@@ -467,7 +467,7 @@ export function ReportsManager({ appUser }) {
                     </td>
                     <td className="p-4 text-center">
                        <p className="font-bold text-slate-700 dark:text-slate-300">{t.customerName}</p>
-                       {t.technicianName && <p className="text-[9px] text-indigo-500 dark:text-indigo-400 mt-1">م: {t.technicianName}</p>}
+                       {t.technicianName && <p className="text-[9px] text-teal-500 dark:text-teal-400 mt-1">م: {t.technicianName}</p>}
                     </td>
                     <td className="p-4 text-center font-black text-emerald-600 dark:text-emerald-400">{Number(t.finalTotal || t.total || 0).toLocaleString()} ج</td>
                     <td className="p-4 text-slate-500 dark:text-slate-400 text-[10px]">{formatDate(t.timestamp)}</td>
@@ -482,7 +482,7 @@ export function ReportsManager({ appUser }) {
              <div className="p-4 text-center bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700">
                 <button 
                   onClick={() => loadReports(true)} 
-                  className="text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:underline flex items-center justify-center gap-1 mx-auto"
+                  className="text-teal-600 dark:text-teal-400 font-bold text-xs hover:underline flex items-center justify-center gap-1 mx-auto"
                 >
                    تحميل المزيد <ChevronDown size={14}/>
                 </button>

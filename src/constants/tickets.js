@@ -15,7 +15,7 @@ export const TICKET_STATUSES = [
   { value: 'rejected_and_delivered', label: 'مرفوض وتم التسليم', color: 'red' },
   { value: 'customer_approved_cost', label: 'العميل موافق على التكلفة', color: 'green' },
   { value: 'contacted_customer', label: 'تم التواصل مع العميل لاستلام الجهاز', color: 'blue' },
-  { value: 'shipped_asc', label: 'تم الشحن ASC', color: 'indigo' },
+  { value: 'shipped_asc', label: 'تم الشحن ASC', color: 'sky' },
   { value: 'delivered_asc', label: 'تم التسليم ASC', color: 'green' },
   { value: 'damaged_disposed', label: 'اتلاف و اهلاك', color: 'gray' },
   { value: 'waiting_shipping_company', label: 'انتظار ارسال شركة الشحن', color: 'yellow' }

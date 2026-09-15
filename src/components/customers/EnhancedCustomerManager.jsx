@@ -483,7 +483,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-4xl shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="flex justify-between items-center mb-6 border-b pb-4">
               <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
-                <UserCog className="text-indigo-600"/> تسجيل بيانات عميل جديد
+                <UserCog className="text-teal-600"/> تسجيل بيانات عميل جديد
               </h3>
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-rose-600">
                 <X size={24}/>
@@ -495,7 +495,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">اسم العميل *</label>
                      <input 
                        required 
-                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" 
+                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-teal-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" 
                        value={newCust.name} 
                        onChange={e=>setNewCust({...newCust, name:e.target.value})} 
                        placeholder="الاسم بالكامل" 
@@ -505,7 +505,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">رقم الهاتف *</label>
                      <input 
                        required 
-                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold font-mono" 
+                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-teal-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold font-mono" 
                        value={newCust.phone} 
                        onChange={e=>setNewCust({...newCust, phone:e.target.value})} 
                        placeholder="01XXXXXXXXX" 
@@ -515,7 +515,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">البريد الإلكتروني</label>
                      <input 
                        type="email"
-                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" 
+                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-teal-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" 
                        value={newCust.email} 
                        onChange={e=>setNewCust({...newCust, email:e.target.value})} 
                        placeholder="example@domain.com" 
@@ -531,7 +531,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                      <div>
                         <label className="block text-xs font-bold text-sky-800 dark:text-sky-400 mb-1">المحافظة</label>
                         <select 
-                          className="w-full border border-sky-200 dark:border-sky-800 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold"
+                          className="w-full border border-sky-200 dark:border-sky-800 p-3 rounded-xl focus:border-teal-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold"
                           value={newCust.governorate}
                           onChange={e => setNewCust({...newCust, governorate: e.target.value})}
                         >
@@ -544,7 +544,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                      <div>
                         <label className="block text-xs font-bold text-sky-800 dark:text-sky-400 mb-1">المدينة / المركز</label>
                         <input 
-                          className="w-full border border-sky-200 dark:border-sky-800 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold" 
+                          className="w-full border border-sky-200 dark:border-sky-800 p-3 rounded-xl focus:border-teal-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold" 
                           value={newCust.city} 
                           onChange={e=>setNewCust({...newCust, city:e.target.value})} 
                           placeholder="مثال: مدينة نصر" 
@@ -553,7 +553,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                      <div>
                         <label className="block text-xs font-bold text-sky-800 dark:text-sky-400 mb-1">العنوان بالتفصيل</label>
                         <input 
-                          className="w-full border border-sky-200 dark:border-sky-800 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold" 
+                          className="w-full border border-sky-200 dark:border-sky-800 p-3 rounded-xl focus:border-teal-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold" 
                           value={newCust.address} 
                           onChange={e=>setNewCust({...newCust, address:e.target.value})} 
                           placeholder="الشارع - العمارة - الشقة" 
@@ -562,11 +562,11 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                   </div>
                </div>
 
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-teal-50 dark:bg-teal-900/30 p-4 rounded-xl border border-teal-100 dark:border-teal-800">
                   <div>
-                     <label className="block text-xs font-bold text-indigo-900 dark:text-indigo-300 mb-1">المنتج (التصنيف)</label>
+                     <label className="block text-xs font-bold text-teal-900 dark:text-teal-300 mb-1">المنتج (التصنيف)</label>
                      <select 
-                       className="w-full border border-indigo-100 dark:border-indigo-800 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold" 
+                       className="w-full border border-teal-100 dark:border-teal-800 p-3 rounded-xl focus:border-teal-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold" 
                        value={newCust.productCategory} 
                        onChange={e=>setNewCust({...newCust, productCategory: e.target.value, productModel: ''})}
                      >
@@ -577,10 +577,10 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                      </select>
                   </div>
                   <div>
-                     <label className="block text-xs font-bold text-indigo-900 dark:text-indigo-300 mb-1">الموديل</label>
+                     <label className="block text-xs font-bold text-teal-900 dark:text-teal-300 mb-1">الموديل</label>
                      <select 
                        disabled={!newCust.productCategory} 
-                       className="w-full border border-indigo-100 dark:border-indigo-800 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:opacity-60" 
+                       className="w-full border border-teal-100 dark:border-teal-800 p-3 rounded-xl focus:border-teal-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:opacity-60" 
                        value={newCust.productModel} 
                        onChange={e=>setNewCust({...newCust, productModel: e.target.value})}
                      >
@@ -602,7 +602,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
     <div>
       <label className="block text-xs font-bold text-emerald-800 dark:text-emerald-400 mb-1">الفني المختص</label>
       <select 
-        className="w-full border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold"
+        className="w-full border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl focus:border-teal-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold"
         value={newCust.assignedTechnician}
         onChange={e => setNewCust({...newCust, assignedTechnician: e.target.value})}
       >
@@ -618,7 +618,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
     <div>
       <label className="block text-xs font-bold text-emerald-800 dark:text-emerald-400 mb-1">مركز الصيانة</label>
       <select 
-        className="w-full border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold"
+        className="w-full border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl focus:border-teal-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold"
         value={newCust.assignedMaintenanceCenter}
         onChange={e => setNewCust({...newCust, assignedMaintenanceCenter: e.target.value})}
       >
@@ -635,7 +635,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
     <div>
       <label className="block text-xs font-bold text-emerald-800 dark:text-emerald-400 mb-1">الكول سنتر</label>
       <select 
-        className="w-full border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold"
+        className="w-full border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl focus:border-teal-500 outline-none bg-white dark:bg-slate-900 text-sm font-bold"
         value={newCust.assignedCallCenter}
         onChange={e => setNewCust({...newCust, assignedCallCenter: e.target.value})}
       >
@@ -654,7 +654,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">تاريخ الميلاد</label>
                      <input 
                        type="date"
-                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" 
+                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-teal-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" 
                        value={newCust.birthDate} 
                        onChange={e=>setNewCust({...newCust, birthDate: e.target.value})} 
                      />
@@ -662,7 +662,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                   <div>
                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">رقم الهوية</label>
                      <input 
-                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" 
+                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-teal-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" 
                        value={newCust.idNumber} 
                        onChange={e=>setNewCust({...newCust, idNumber: e.target.value})} 
                        placeholder="رقم البطاقة" 
@@ -673,7 +673,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الوسوم</label>
                   <input 
-                    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" 
+                    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-teal-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold" 
                     value={newCust.tags?.join(', ')} 
                     onChange={e=>setNewCust({...newCust, tags: e.target.value.split(',').map(t => t.trim())})} 
                     placeholder="وسم1, وسم2, وسم3" 
@@ -684,7 +684,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">العطل / المشكلة</label>
                   <textarea 
                     rows="2" 
-                    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold resize-none" 
+                    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-teal-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold resize-none" 
                     value={newCust.issue} 
                     onChange={e=>setNewCust({...newCust, issue:e.target.value})} 
                     placeholder="وصف المشكلة التي يواجهها العميل..." 
@@ -695,7 +695,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ملاحظات إضافية</label>
                   <textarea 
                     rows="2"
-                    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold resize-none" 
+                    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-teal-500 outline-none bg-slate-50 dark:bg-slate-900 text-sm font-bold resize-none" 
                     value={newCust.notes} 
                     onChange={e=>setNewCust({...newCust, notes:e.target.value})} 
                     placeholder="أي تفاصيل أخرى..." 
@@ -705,7 +705,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                <div className="flex gap-3 pt-4 border-t">
                   <button 
                     type="submit" 
-                    className="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 shadow-md transition-colors flex items-center justify-center gap-2"
+                    className="flex-1 bg-teal-600 text-white py-3.5 rounded-xl font-bold hover:bg-teal-700 shadow-md transition-colors flex items-center justify-center gap-2"
                   >
                     <Save size={18}/> حفظ البيانات
                   </button>
@@ -768,9 +768,9 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
       <div className="p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
          <div className="flex items-center gap-2">
            <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
-             <Contact className="text-indigo-600" size={20}/> سجل العملاء
+             <Contact className="text-teal-600" size={20}/> سجل العملاء
            </h2>
-           <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg text-xs">
+           <span className="bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-3 py-1 rounded-lg text-xs">
              {customers.length} عميل
            </span>
          </div>
@@ -788,7 +788,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
              <div className="relative flex-1 md:w-48">
                  <Search className="absolute right-3 top-2.5 text-slate-400" size={16}/>
                  <input 
-                   className="w-full border border-slate-200 dark:border-slate-700 py-2 pr-9 pl-3 rounded-lg outline-none text-xs font-bold focus:border-indigo-500 bg-white dark:bg-slate-900" 
+                   className="w-full border border-slate-200 dark:border-slate-700 py-2 pr-9 pl-3 rounded-lg outline-none text-xs font-bold focus:border-teal-500 bg-white dark:bg-slate-900" 
                    placeholder="بحث..." 
                    value={search} 
                    onChange={e=>setSearch(e.target.value)} 
@@ -831,7 +831,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                {availableTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
              </select>
              
-             {loadingData && <Loader2 className="animate-spin text-indigo-500 mt-2 sm:mt-0" size={16}/>}
+             {loadingData && <Loader2 className="animate-spin text-teal-500 mt-2 sm:mt-0" size={16}/>}
              
              <input
                type="file"
@@ -849,7 +849,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
              
              <button 
                onClick={() => handleExportCustomers('xlsx')}
-               className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 flex items-center gap-2"
+               className="bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-4 py-2 rounded-lg text-xs font-bold hover:bg-teal-100 dark:hover:bg-teal-900/50 flex items-center gap-2"
              >
                 <Download size={14}/> تصدير Excel
              </button>
@@ -863,7 +863,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
              
              <button 
                onClick={()=>setShowAddModal(true)} 
-               className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-sm whitespace-nowrap"
+               className="bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-teal-700 flex items-center gap-2 shadow-sm whitespace-nowrap"
              >
                 <Plus size={14}/> إضافة عميل
              </button>
@@ -877,7 +877,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                   <th className="p-4 w-10">
                     <input 
                       type="checkbox" 
-                      className="w-4 h-4 accent-indigo-600"
+                      className="w-4 h-4 accent-teal-600"
                       checked={selectedItems.size === customers.length && customers.length > 0}
                       onChange={toggleSelectAll}
                     />
@@ -902,7 +902,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                      <td className="p-4">
                        <input 
                          type="checkbox" 
-                         className="w-4 h-4 accent-indigo-600"
+                         className="w-4 h-4 accent-teal-600"
                          checked={selectedItems.has(c.id)}
                          onChange={() => toggleSelectItem(c.id)}
                        />
@@ -915,7 +915,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                      <td className="p-4">
                         {c.productCategory ? (
                            <>
-                             <span className="inline-block bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-2 py-1 rounded text-[9px] font-black mb-1">{c.productCategory}</span>
+                             <span className="inline-block bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-2 py-1 rounded text-[9px] font-black mb-1">{c.productCategory}</span>
                              <p className="text-slate-600 dark:text-slate-400 text-[10px]">{c.productModel || '-'}</p>
                            </>
                         ) : <span className="text-slate-400">-</span>}
@@ -932,14 +932,14 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                      <td className="p-4">
                         <div className="flex flex-wrap gap-1">
                           {(c.tags || []).map(tag => (
-                            <span key={tag} className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded text-[8px] font-bold">
+                            <span key={tag} className="px-1.5 py-0.5 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 rounded text-[8px] font-bold">
                               {tag}
                             </span>
                           ))}
                         </div>
                      </td>
                      <td className="p-4 text-center">
-                       <span className="font-bold text-indigo-600 dark:text-indigo-400">{c.totalPurchases || 0}</span>
+                       <span className="font-bold text-teal-600 dark:text-teal-400">{c.totalPurchases || 0}</span>
                      </td>
                      <td className="p-4 text-center">
                        <span className="font-bold text-amber-600 dark:text-amber-400">{c.ticketsCount || 0}</span>
@@ -947,7 +947,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
                      <td className="p-4 text-center">
                         <button 
                           onClick={() => setSelectedCustomer(c)} 
-                          className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors border border-indigo-100 dark:border-indigo-800 flex items-center gap-1 mx-auto"
+                          className="bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors border border-teal-100 dark:border-teal-800 flex items-center gap-1 mx-auto"
                         >
                           <Eye size={12}/> عرض
                         </button>

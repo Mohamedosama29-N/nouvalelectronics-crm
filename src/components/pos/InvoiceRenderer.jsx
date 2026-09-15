@@ -232,7 +232,7 @@ export function InvoiceRenderer({ data, systemSettings, onBack }) {
           <button onClick={() => window.print()} className="flex-1 bg-black text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-gray-800">
             <Printer size={16}/> طباعة
           </button>
-          <button onClick={exportInvoiceImage} className="flex-1 bg-indigo-600 text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-indigo-700">
+          <button onClick={exportInvoiceImage} className="flex-1 bg-teal-600 text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 text-sm hover:bg-teal-700">
             تحميل صورة
           </button>
           {data.phone && (

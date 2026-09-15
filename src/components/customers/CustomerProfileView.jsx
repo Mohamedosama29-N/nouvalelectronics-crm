@@ -411,7 +411,7 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
 
   return (
       <div className="bg-white dark:bg-slate-800 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden text-right flex flex-col max-h-full" dir="rtl">
-          <div className="p-6 border-b bg-gradient-to-l from-indigo-600 to-purple-600 text-white">
+          <div className="p-6 border-b bg-teal-600 text-white">
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-4">
                 <div className="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center text-3xl font-black backdrop-blur-sm">
@@ -477,31 +477,31 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
           <div className="flex border-b bg-white dark:bg-slate-800 overflow-x-auto">
               <button 
                 onClick={()=>setActiveTab('info')} 
-                className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'info' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
+                className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'info' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-b-2 border-teal-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
               >
                 المعلومات العامة
               </button>
               <button 
                 onClick={()=>setActiveTab('new_invoice')} 
-                className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'new_invoice' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
+                className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'new_invoice' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-b-2 border-teal-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
               >
                 إصدار فاتورة
               </button>
               <button 
                 onClick={()=>setActiveTab('history')} 
-                className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'history' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
+                className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'history' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-b-2 border-teal-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
               >
                 سجل المشتريات
               </button>
               <button 
                 onClick={()=>setActiveTab('tickets')} 
-                className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'tickets' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
+                className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'tickets' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-b-2 border-teal-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
               >
                 تذاكر الصيانة
               </button>
               <button 
                 onClick={()=>setActiveTab('analytics')} 
-                className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'analytics' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
+                className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === 'analytics' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-b-2 border-teal-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
               >
                 التحليلات
               </button>
@@ -511,9 +511,9 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
               {activeTab === 'info' && (
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl">
-                      <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-1">إجمالي المشتريات</p>
-                      <p className="text-xl font-black text-indigo-800 dark:text-indigo-300">{stats.totalSpent.toLocaleString()} ج</p>
+                    <div className="bg-teal-50 dark:bg-teal-900/30 p-4 rounded-xl">
+                      <p className="text-xs text-teal-600 dark:text-teal-400 mb-1">إجمالي المشتريات</p>
+                      <p className="text-xl font-black text-teal-800 dark:text-teal-300">{stats.totalSpent.toLocaleString()} ج</p>
                     </div>
                     <div className="bg-emerald-50 dark:bg-emerald-900/30 p-4 rounded-xl">
                       <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-1">متوسط الفاتورة</p>
@@ -538,7 +538,7 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
                         {stats.favoriteProducts.map((p, idx) => (
                           <div key={idx} className="flex justify-between items-center">
                             <span className="text-sm">{p.name}</span>
-                            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">تم شراؤها {p.count} مرة</span>
+                            <span className="text-xs font-bold text-teal-600 dark:text-teal-400">تم شراؤها {p.count} مرة</span>
                           </div>
                         ))}
                       </div>
@@ -602,7 +602,7 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
                       <div className="flex gap-2 mt-3">
                         <button
                           onClick={handleUpdateCustomer}
-                          className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold text-sm hover:bg-indigo-700"
+                          className="flex-1 bg-teal-600 text-white py-2 rounded-lg font-bold text-sm hover:bg-teal-700"
                         >
                           حفظ التعديلات
                         </button>
@@ -674,7 +674,7 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
                        />
                        <button 
                          type="submit" 
-                         className="bg-indigo-600 text-white px-6 rounded-lg font-bold text-sm shadow-sm hover:bg-indigo-700 transition-colors flex items-center gap-2"
+                         className="bg-teal-600 text-white px-6 rounded-lg font-bold text-sm shadow-sm hover:bg-teal-700 transition-colors flex items-center gap-2"
                        >
                          <Search size={18}/> بحث
                        </button>
@@ -700,7 +700,7 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
                                         <span className="text-[10px] text-slate-400 font-mono mt-0.5 inline-block">{item.serialNumber}</span>
                                       </td>
                                       <td className="p-3 text-center font-bold text-slate-600 dark:text-slate-400">1</td>
-                                      <td className="p-3 text-center font-black text-indigo-600 dark:text-indigo-400">{item.price * item.quantity} ج</td>
+                                      <td className="p-3 text-center font-black text-teal-600 dark:text-teal-400">{item.price * item.quantity} ج</td>
                                       <td className="p-3 text-center font-black text-emerald-600 dark:text-emerald-400">{item.price * item.quantity} ج</td>
                                       <td className="p-3 text-center">
                                         <button 
@@ -721,7 +721,7 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
                         <div>
                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">الفني</label>
                            <select 
-                             className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none font-bold text-sm bg-white dark:bg-slate-900" 
+                             className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-teal-500 outline-none font-bold text-sm bg-white dark:bg-slate-900" 
                              value={invoice.technicianName} 
                              onChange={e=>setInvoice({...invoice, technicianName: e.target.value})}
                            >
@@ -730,8 +730,8 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
                            </select>
                         </div>
                         <div>
-                           <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-300 mb-1">الخصم</label>
-                           <div className="flex bg-white dark:bg-slate-900 rounded-xl border border-indigo-100 dark:border-indigo-800 overflow-hidden">
+                           <label className="block text-[10px] font-bold text-teal-900 dark:text-teal-300 mb-1">الخصم</label>
+                           <div className="flex bg-white dark:bg-slate-900 rounded-xl border border-teal-100 dark:border-teal-800 overflow-hidden">
                               <input 
                                 type="number" 
                                 className="flex-1 p-2.5 outline-none font-bold text-center text-rose-600 dark:text-rose-400 text-sm bg-transparent" 
@@ -751,9 +751,9 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
                            </div>
                         </div>
                         <div>
-                           <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-300 mb-1">الرسوم</label>
+                           <label className="block text-[10px] font-bold text-teal-900 dark:text-teal-300 mb-1">الرسوم</label>
                            <select 
-                             className="w-full p-2.5 border border-indigo-100 dark:border-indigo-800 rounded-xl bg-white dark:bg-slate-900 font-bold text-xs outline-none focus:border-indigo-500" 
+                             className="w-full p-2.5 border border-teal-100 dark:border-teal-800 rounded-xl bg-white dark:bg-slate-900 font-bold text-xs outline-none focus:border-teal-500" 
                              value={invoice.installationFeeId} 
                              onChange={e=>setInvoice({...invoice, installationFeeId: e.target.value})}
                            >
@@ -762,9 +762,9 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
                            </select>
                         </div>
                         <div>
-                           <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-300 mb-1">طريقة الدفع</label>
+                           <label className="block text-[10px] font-bold text-teal-900 dark:text-teal-300 mb-1">طريقة الدفع</label>
                            <select 
-                             className="w-full p-2.5 border border-indigo-100 dark:border-indigo-800 rounded-xl bg-white dark:bg-slate-900 font-bold text-xs outline-none focus:border-indigo-500" 
+                             className="w-full p-2.5 border border-teal-100 dark:border-teal-800 rounded-xl bg-white dark:bg-slate-900 font-bold text-xs outline-none focus:border-teal-500" 
                              value={invoice.paymentMethod}
                              onChange={e => setInvoice({...invoice, paymentMethod: e.target.value})}
                            >
@@ -776,7 +776,7 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
                         <div className="md:col-span-4">
                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ملاحظات</label>
                            <input
-                             className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-indigo-500 outline-none text-sm bg-white dark:bg-slate-900"
+                             className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl focus:border-teal-500 outline-none text-sm bg-white dark:bg-slate-900"
                              value={invoice.notes}
                              onChange={e => setInvoice({...invoice, notes: e.target.value})}
                              placeholder="أي ملاحظات إضافية..."
@@ -832,7 +832,7 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
                             <tr><td colSpan="7" className="p-10 text-center text-slate-400">لا توجد فواتير سابقة</td></tr> :
                              history.map(t => (
                                 <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                                   <td className="p-4 font-mono font-black text-indigo-600 dark:text-indigo-400">{t.invoiceNumber || t.id.slice(0,6)}</td>
+                                   <td className="p-4 font-mono font-black text-teal-600 dark:text-teal-400">{t.invoiceNumber || t.id.slice(0,6)}</td>
                                    <td className="p-4 font-bold text-slate-800 dark:text-white leading-relaxed max-w-xs">
                                      {t.itemName}
                                      {t.serialNumber && <p className="text-[9px] font-mono text-slate-400 dark:text-slate-500 mt-1">{t.serialNumber}</p>}
@@ -913,7 +913,7 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
           <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
             <div className="flex justify-between items-center mb-4 border-b pb-3">
               <h3 className="font-black text-lg flex items-center gap-2">
-                <Eye className="text-indigo-600" size={20}/> تذكرة #{viewingCustomerTicket.ticketNumber}
+                <Eye className="text-teal-600" size={20}/> تذكرة #{viewingCustomerTicket.ticketNumber}
               </h3>
               <button onClick={() => setViewingCustomerTicket(null)} className="text-slate-400 hover:text-rose-600"><X size={22}/></button>
             </div>
@@ -959,7 +959,7 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
             </div>
             <button
               onClick={() => { setViewingCustomerTicket(null); openEditCustomerTicket(viewingCustomerTicket); }}
-              className="w-full mt-4 bg-indigo-600 text-white py-2.5 rounded-xl font-bold hover:bg-indigo-700 flex items-center justify-center gap-2"
+              className="w-full mt-4 bg-teal-600 text-white py-2.5 rounded-xl font-bold hover:bg-teal-700 flex items-center justify-center gap-2"
             >
               <Edit size={16}/> تعديل التذكرة
             </button>

@@ -121,7 +121,7 @@ export function DuplicateCustomersManager({ appUser }) {
         </p>
         <button
           onClick={scanForDuplicates}
-          className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-indigo-100"
+          className="bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-teal-100"
         >
           <RefreshCw size={14}/> إعادة الفحص
         </button>
@@ -141,7 +141,7 @@ export function DuplicateCustomersManager({ appUser }) {
               <button
                 onClick={() => handleMerge(idx)}
                 disabled={merging === idx}
-                className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50"
+                className="bg-teal-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-teal-700 disabled:opacity-50"
               >
                 {merging === idx ? 'جاري الدمج...' : 'دمج الآن'}
               </button>
@@ -154,7 +154,7 @@ export function DuplicateCustomersManager({ appUser }) {
                     name={`primary-${idx}`}
                     checked={selectedPrimary[idx] === c.id}
                     onChange={() => setSelectedPrimary({ ...selectedPrimary, [idx]: c.id })}
-                    className="w-4 h-4 accent-indigo-600"
+                    className="w-4 h-4 accent-teal-600"
                   />
                   <div className="flex-1">
                     <p className="font-bold text-sm">{c.name}</p>

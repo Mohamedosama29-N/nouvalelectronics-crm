@@ -162,53 +162,66 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
     setGlobalLoading(true);
     
     try {
+      // 🛠️ FIX (باگ حقيقي - سباق بيانات محتمل): كانت القراءة جوه الـ
+      // transaction بتتم بـ getDocs() العادية بدل transaction.get()، يعني
+      // Firestore مكنش بيتابعها كجزء فعلي من الترانزاكشن. النتيجة: لو
+      // اتعمل موافقة على تحويلين للصنف نفسه في نفس الوقت تقريبًا (من
+      // فرعين مختلفين مثلًا)، الاتنين ممكن يقروا نفس الكمية القديمة
+      // ويخصموا منها من غير ما أي حد يلاحظ التعارض - يعني فرق حقيقي في
+      // جرد المخزون بمرور الوقت. الحل: نلاقي الـ document reference الأول
+      // (بحث عادي، برّه الترانزاكشن)، وبعدين نقرأه بـ transaction.get()
+      // جوه الترانزاكشن نفسها عشان Firestore يضمن عدم وجود تعارض.
+      const fromQ = query(
+        collection(db, 'inventory'),
+        where('serialNumber', '==', req.serialNumber),
+        where('warehouseId', '==', req.fromWarehouseId),
+        where('isDeleted', '==', false)
+      );
+      const fromLookup = await getDocs(fromQ);
+      if (fromLookup.empty) {
+        throw new Error(`المنتج ${req.itemName} غير موجود بالمخزن المرسل!`);
+      }
+      const fromRef = fromLookup.docs[0].ref;
+
+      const toQ = query(
+        collection(db, 'inventory'),
+        where('serialNumber', '==', req.serialNumber),
+        where('warehouseId', '==', req.toWarehouseId),
+        where('isDeleted', '==', false)
+      );
+      const toLookup = await getDocs(toQ);
+      const toRef = toLookup.empty ? null : toLookup.docs[0].ref;
+
       await runTransaction(db, async (transaction) => {
-        // 1. البحث عن المنتج في المخزن المرسل
-        const fromQ = query(
-          collection(db, 'inventory'),
-          where('serialNumber', '==', req.serialNumber),
-          where('warehouseId', '==', req.fromWarehouseId),
-          where('isDeleted', '==', false)
-        );
-        const fromSnap = await getDocs(fromQ);
-        
-        if (fromSnap.empty) {
+        // كل القراءات التعاملاتية (transactional) الأول، قبل أي كتابة -
+        // ده شرط أساسي في Firestore transactions.
+        const fromSnap = await transaction.get(fromRef);
+        if (!fromSnap.exists()) {
           throw new Error(`المنتج ${req.itemName} غير موجود بالمخزن المرسل!`);
         }
-        
-        const fromItem = fromSnap.docs[0];
-        const currentQty = fromItem.data().quantity || 0;
-        
+        const currentQty = fromSnap.data().quantity || 0;
         if (currentQty < req.requestedQty) {
           throw new Error(`الكمية غير كافية! المتاح: ${currentQty}, المطلوب: ${req.requestedQty}`);
         }
 
-        // 2. خصم الكمية من المخزن المرسل
-        transaction.update(fromItem.ref, {
+        const toSnap = toRef ? await transaction.get(toRef) : null;
+
+        // دلوقتي الكتابات، بعد كل القراءات
+        transaction.update(fromRef, {
           quantity: currentQty - req.requestedQty,
           updatedAt: serverTimestamp()
         });
 
-        // 3. البحث عن المنتج في المخزن المستقبل
-        const toQ = query(
-          collection(db, 'inventory'),
-          where('serialNumber', '==', req.serialNumber),
-          where('warehouseId', '==', req.toWarehouseId),
-          where('isDeleted', '==', false)
-        );
-        const toSnap = await getDocs(toQ);
-
-        if (!toSnap.empty) {
+        if (toSnap && toSnap.exists()) {
           // إضافة الكمية للمنتج الموجود
-          const toItem = toSnap.docs[0];
-          transaction.update(toItem.ref, {
+          transaction.update(toRef, {
             quantity: increment(req.requestedQty),
             updatedAt: serverTimestamp()
           });
         } else {
           // إنشاء منتج جديد في المخزن المستقبل
           const newRef = doc(collection(db, 'inventory'));
-          const sourceData = fromItem.data();
+          const sourceData = fromSnap.data();
           transaction.set(newRef, {
             serialNumber: sourceData.serialNumber,
             name: sourceData.name,
@@ -324,12 +337,12 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
             </h3>
             <div className="space-y-4">
               {transferLog.map((entry, idx) => (
-                <div key={idx} className="relative pr-6 pb-4 border-r-2 border-indigo-200 dark:border-indigo-800 last:border-0 last:pb-0">
-                  <div className="absolute right-[-5px] top-0 w-3 h-3 rounded-full bg-indigo-600"></div>
+                <div key={idx} className="relative pr-6 pb-4 border-r-2 border-teal-200 dark:border-teal-800 last:border-0 last:pb-0">
+                  <div className="absolute right-[-5px] top-0 w-3 h-3 rounded-full bg-teal-600"></div>
                   <p className="text-xs text-slate-400 dark:text-slate-500">{new Date(entry.timestamp).toLocaleString('ar-EG')}</p>
                   <p className="font-bold text-slate-800 dark:text-white">{entry.action}</p>
                   <p className="text-sm text-slate-600 dark:text-slate-400">{entry.details}</p>
-                  <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">بواسطة: {entry.by}</p>
+                  <p className="text-xs text-teal-600 dark:text-teal-400 mt-1">بواسطة: {entry.by}</p>
                 </div>
               ))}
               {transferLog.length === 0 && (
@@ -350,7 +363,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
 
       <div className="p-6 border-b flex flex-wrap items-center justify-between bg-slate-50 dark:bg-slate-900/50 gap-4">
         <h2 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-3">
-          <ArrowRightLeft className="text-indigo-600" size={24}/> 
+          <ArrowRightLeft className="text-teal-600" size={24}/> 
           نظام التحويلات بين المخازن
         </h2>
         <div className="flex gap-2">
@@ -371,7 +384,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
             <Download size={14}/> تصدير CSV
           </button>
           <select 
-            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm font-bold bg-white dark:bg-slate-900 focus:border-indigo-500 outline-none"
+            className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm font-bold bg-white dark:bg-slate-900 focus:border-teal-500 outline-none"
             value={selectedWarehouse}
             onChange={e => setSelectedWarehouse(e.target.value)}
           >
@@ -380,7 +393,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
               <option key={w} value={w}>{warehouseMap[w] || w}</option>
             ))}
           </select>
-          <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-2 rounded-lg text-xs font-bold">
+          <span className="bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-3 py-2 rounded-lg text-xs font-bold">
             {pendingRequests.length} طلبات قيد الانتظار
           </span>
         </div>
@@ -396,7 +409,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
           <button 
             key={tab.id}
             onClick={()=>setActiveTab(tab.id)} 
-            className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === tab.id ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
+            className={`px-6 py-4 font-black text-sm transition-colors whitespace-nowrap ${activeTab === tab.id ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-b-2 border-teal-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}
           >
             {tab.label}
           </button>
@@ -408,24 +421,24 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
         
         {activeTab === 'new' && (
           <div className="max-w-xl mx-auto space-y-6">
-            <div className="bg-indigo-50 dark:bg-indigo-900/30 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-800 text-indigo-800 dark:text-indigo-300 font-bold text-sm leading-relaxed shadow-sm">
+            <div className="bg-teal-50 dark:bg-teal-900/30 p-5 rounded-2xl border border-teal-100 dark:border-teal-800 text-teal-800 dark:text-teal-300 font-bold text-sm leading-relaxed shadow-sm">
               ابحث عن المنتج في مخزنك واختر الكمية والمخزن المرسل إليه. المخزن الرئيسي يمكنه الموافقة أو رفض الطلب.
             </div>
             
             <form onSubmit={handleSearchProduct} className="flex gap-3">
               <input 
-                className="flex-1 border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold text-right bg-white dark:bg-slate-900 focus:border-indigo-500" 
+                className="flex-1 border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold text-right bg-white dark:bg-slate-900 focus:border-teal-500" 
                 placeholder="ابحث بالاسم أو السيريال..." 
                 value={searchProduct} 
                 onChange={e=>setSearchProduct(e.target.value)} 
               />
-              <button type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold shadow-sm hover:bg-indigo-700">
+              <button type="submit" className="bg-teal-600 text-white px-6 py-3 rounded-xl font-bold shadow-sm hover:bg-teal-700">
                 <Search size={18}/>
               </button>
             </form>
 
             {selectedProduct && (
-              <div className="bg-white dark:bg-slate-800 border-2 border-indigo-100 dark:border-indigo-800 rounded-2xl p-6 shadow-md space-y-4">
+              <div className="bg-white dark:bg-slate-800 border-2 border-teal-100 dark:border-teal-800 rounded-2xl p-6 shadow-md space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="font-black text-lg text-slate-800 dark:text-white">{selectedProduct.name}</h3>
                   <button onClick={() => setSelectedProduct(null)} className="text-slate-400 dark:text-slate-500 hover:text-rose-500">
@@ -437,7 +450,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
                   <div className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-4 py-2 rounded-xl font-bold text-sm">
                     المتاح في مخزنك: {selectedProduct.quantity}
                   </div>
-                  <div className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-4 py-2 rounded-xl font-bold text-sm">
+                  <div className="bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-4 py-2 rounded-xl font-bold text-sm">
                     السعر: {selectedProduct.price} ج
                   </div>
                 </div>
@@ -497,7 +510,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
 
                 <button 
                   onClick={handleSubmitRequest} 
-                  className="w-full bg-slate-900 dark:bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-black dark:hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+                  className="w-full bg-slate-900 dark:bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-black dark:hover:bg-teal-700 transition-colors flex items-center justify-center gap-2"
                 >
                   <ArrowRightLeft size={18}/> إرسال طلب التحويل
                 </button>
@@ -527,8 +540,8 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
                   {pendingRequests.length === 0 ? <tr><td colSpan="9" className="p-12 text-center text-slate-400">لا توجد طلبات معلقة</td></tr> :
                     pendingRequests.map(req => (
                       <tr key={req.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                        <td className="p-4 font-black text-indigo-700 dark:text-indigo-400">{warehouseMap[req.fromWarehouseId]}</td>
-                        <td className="p-4 font-black text-indigo-700 dark:text-indigo-400">{warehouseMap[req.toWarehouseId]}</td>
+                        <td className="p-4 font-black text-teal-700 dark:text-teal-400">{warehouseMap[req.fromWarehouseId]}</td>
+                        <td className="p-4 font-black text-teal-700 dark:text-teal-400">{warehouseMap[req.toWarehouseId]}</td>
                         <td className="p-4">
                           <p className="font-bold text-slate-800 dark:text-white mb-0.5">{req.itemName}</p>
                           <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400">{req.serialNumber}</p>
@@ -549,7 +562,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
                         <td className="p-4">
                           <button 
                             onClick={() => viewTransferLog(req)}
-                            className="text-indigo-600 dark:text-indigo-400 hover:underline text-xs"
+                            className="text-teal-600 dark:text-teal-400 hover:underline text-xs"
                           >
                             عرض السجل
                           </button>
@@ -630,7 +643,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
                         <td className="p-4">
                           <button 
                             onClick={() => viewTransferLog(req)}
-                            className="text-indigo-600 dark:text-indigo-400 hover:underline text-xs"
+                            className="text-teal-600 dark:text-teal-400 hover:underline text-xs"
                           >
                             عرض السجل
                           </button>

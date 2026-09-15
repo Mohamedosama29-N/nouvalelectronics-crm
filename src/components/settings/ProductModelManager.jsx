@@ -187,16 +187,16 @@ export function ProductModelManager({}) {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* قسم المنتجات */}
       <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border">
-        <h3 className="font-bold text-indigo-600 mb-4 flex items-center gap-2">
+        <h3 className="font-bold text-teal-600 mb-4 flex items-center gap-2">
           <Package size={18}/> المنتجات
         </h3>
         <div className="flex gap-2 mb-4">
           <input className="flex-1 border p-3 rounded-xl" placeholder="اسم المنتج" value={newProduct} onChange={e => setNewProduct(e.target.value)} />
-          <button onClick={addProduct} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold">إضافة</button>
+          <button onClick={addProduct} className="bg-teal-600 text-white px-6 py-3 rounded-xl font-bold">إضافة</button>
         </div>
         <div className="space-y-2 max-h-60 overflow-y-auto">
           {products.map(p => (
-            <div key={p.id} className={`flex justify-between items-center p-3 rounded-xl cursor-pointer ${selectedProductId === p.id ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-500 border' : 'hover:bg-slate-50'}`}>
+            <div key={p.id} className={`flex justify-between items-center p-3 rounded-xl cursor-pointer ${selectedProductId === p.id ? 'bg-teal-50 dark:bg-teal-900/30 border-teal-500 border' : 'hover:bg-slate-50'}`}>
               <button onClick={() => setSelectedProductId(p.id)} className="font-bold flex-1 text-right">{p.name}</button>
               <button onClick={() => deleteProduct(p.id)} className="text-rose-500 p-2">🗑️</button>
             </div>
@@ -206,7 +206,7 @@ export function ProductModelManager({}) {
 
       {/* قسم الموديلات */}
       <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border">
-        <h3 className="font-bold text-indigo-600 mb-4 flex items-center gap-2">
+        <h3 className="font-bold text-teal-600 mb-4 flex items-center gap-2">
           <Layers size={18}/> الموديلات {selectedProductId && `لـ ${getProductName(selectedProductId)}`}
         </h3>
         {!selectedProductId ? (
@@ -231,7 +231,7 @@ export function ProductModelManager({}) {
 
       {/* قسم أكواد الأعطال الرئيسية */}
       <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border">
-        <h3 className="font-bold text-indigo-600 mb-4 flex items-center gap-2">
+        <h3 className="font-bold text-teal-600 mb-4 flex items-center gap-2">
           <AlertCircle size={18}/> أكواد الأعطال الرئيسية {selectedModelId && `لـ ${getModelName(selectedModelId)}`}
         </h3>
         {!selectedModelId ? (
@@ -259,7 +259,7 @@ export function ProductModelManager({}) {
 
       {/* قسم أكواد الأعطال الفرعية */}
       <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border">
-        <h3 className="font-bold text-indigo-600 mb-4 flex items-center gap-2">
+        <h3 className="font-bold text-teal-600 mb-4 flex items-center gap-2">
           <GitBranch size={18}/> أكواد الأعطال الفرعية
         </h3>
         {!selectedMainFaultId ? (

@@ -203,7 +203,7 @@ export function ReturnsWarehouseManager({ appUser, setGlobalLoading }) {
                 />
               </div>
               <div className="flex gap-2 pt-4">
-                <button type="submit" className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold">حفظ</button>
+                <button type="submit" className="flex-1 bg-teal-600 text-white py-2 rounded-lg font-bold">حفظ</button>
                 <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 bg-slate-100 dark:bg-slate-700 py-2 rounded-lg font-bold">إلغاء</button>
               </div>
             </form>
@@ -215,12 +215,12 @@ export function ReturnsWarehouseManager({ appUser, setGlobalLoading }) {
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-black flex items-center gap-2">
-            <RotateCcw className="text-indigo-600" size={24} />
+            <RotateCcw className="text-teal-600" size={24} />
             مخزن المنتجات المرتجعة
           </h2>
           <button
             onClick={() => setShowAddModal(true)}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+            className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
           >
             <Plus size={16} /> إضافة مرتجع
           </button>

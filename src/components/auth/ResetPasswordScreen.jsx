@@ -47,11 +47,11 @@ export function ResetPasswordScreen({ token, onDone }) {
   };
 
   return (
-    <div className="h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 to-purple-900 p-4 text-right" dir="rtl">
+    <div className="h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 p-4 text-right" dir="rtl">
       <div className="bg-white dark:bg-slate-800 p-8 rounded-[2rem] w-full max-w-md shadow-2xl">
         {checking ? (
           <div className="text-center py-8">
-            <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mx-auto mb-4" />
+            <Loader2 className="w-10 h-10 animate-spin text-teal-600 mx-auto mb-4" />
             <p className="text-slate-600 dark:text-slate-400">جاري التحقق من الرابط...</p>
           </div>
         ) : done ? (
@@ -59,7 +59,7 @@ export function ResetPasswordScreen({ token, onDone }) {
             <CheckCircle2 className="w-14 h-14 text-emerald-500 mx-auto mb-4" />
             <h2 className="text-xl font-black text-slate-800 dark:text-white mb-2">تم تغيير كلمة السر</h2>
             <p className="text-slate-500 dark:text-slate-400 mb-6 text-sm">تقدر تسجل دخولك دلوقتي بكلمة السر الجديدة.</p>
-            <button onClick={onDone} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700">
+            <button onClick={onDone} className="w-full bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700">
               الذهاب لتسجيل الدخول
             </button>
           </div>
@@ -72,14 +72,14 @@ export function ResetPasswordScreen({ token, onDone }) {
             <p className="text-slate-500 dark:text-slate-400 mb-6 text-sm">
               ارجع لشاشة تسجيل الدخول واطلب رابط استعادة جديد.
             </p>
-            <button onClick={onDone} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700">
+            <button onClick={onDone} className="w-full bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700">
               الذهاب لتسجيل الدخول
             </button>
           </div>
         ) : (
           <form onSubmit={handleSubmit}>
             <div className="text-center mb-6">
-              <Lock className="w-12 h-12 text-indigo-600 mx-auto mb-3" />
+              <Lock className="w-12 h-12 text-teal-600 mx-auto mb-3" />
               <h2 className="text-xl font-black text-slate-800 dark:text-white">تحديد كلمة سر جديدة</h2>
             </div>
             {error && (
@@ -108,7 +108,7 @@ export function ResetPasswordScreen({ token, onDone }) {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-60 flex items-center justify-center gap-2"
+              className="w-full bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700 disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {submitting ? <Loader2 size={18} className="animate-spin" /> : null} حفظ كلمة السر الجديدة
             </button>

@@ -270,7 +270,7 @@ export function InvoicesManager({ systemSettings, appUser }) {
             setFilterDateTo('');
             setFilterWarehouse('all');
           }}
-          className="text-xs text-indigo-600 hover:underline"
+          className="text-xs text-teal-600 hover:underline"
         >
           مسح الفلاتر
         </button>
@@ -297,7 +297,7 @@ export function InvoicesManager({ systemSettings, appUser }) {
             <tbody className="divide-y">
               {filtered.map(inv => (
                 <tr key={inv.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30">
-                  <td className="p-3 font-bold font-mono text-indigo-600 dark:text-indigo-400">
+                  <td className="p-3 font-bold font-mono text-teal-600 dark:text-teal-400">
                     {inv.invoiceNumber || inv.id.slice(0,8)}
                     {inv.ticketNumber && (
                       <span className="mr-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded text-[9px] font-bold" title="مرتبطة بتذكرة صيانة">
@@ -323,7 +323,7 @@ export function InvoicesManager({ systemSettings, appUser }) {
                   <td className="p-3">
                     <button
                       onClick={() => setInvoiceData(inv)}
-                      className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-700"
+                      className="bg-teal-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-teal-700"
                     >
                       فتح
                     </button>
@@ -342,7 +342,7 @@ export function InvoicesManager({ systemSettings, appUser }) {
               <button
                 onClick={() => loadInvoices(true)}
                 disabled={loading}
-                className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50"
+                className="bg-teal-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-teal-700 disabled:opacity-50"
               >
                 {loading ? 'جاري التحميل...' : 'تحميل المزيد'}
               </button>

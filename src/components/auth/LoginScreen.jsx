@@ -260,9 +260,9 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
 
   if (isConnecting) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 to-purple-900 p-4 text-right" dir="rtl">
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 p-4 text-right" dir="rtl">
         <div className="bg-white dark:bg-slate-800 p-10 rounded-[2rem] w-full max-w-md shadow-2xl text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mx-auto mb-4" />
+          <Loader2 className="w-12 h-12 animate-spin text-teal-600 mx-auto mb-4" />
           <p className="text-lg font-bold text-slate-800 dark:text-white">جاري الاتصال بقاعدة البيانات...</p>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">يرجى الانتظار</p>
         </div>
@@ -272,7 +272,7 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
 
   if (firebaseError) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 to-purple-900 p-4 text-right" dir="rtl">
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 p-4 text-right" dir="rtl">
         <div className="bg-white dark:bg-slate-800 p-10 rounded-[2rem] w-full max-w-md shadow-2xl">
           <AlertTriangle className="w-16 h-16 text-rose-500 mx-auto mb-4" />
           <h2 className="text-xl font-black text-center text-slate-800 dark:text-white mb-2">خطأ في الاتصال</h2>
@@ -280,7 +280,7 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
           <div className="space-y-3">
             <button 
               onClick={onRetry}
-              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+              className="w-full bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700 transition-colors flex items-center justify-center gap-2"
             >
               <RefreshCcw size={18} /> إعادة المحاولة
             </button>
@@ -299,10 +299,10 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
   }
 
   return (
-    <div className="h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 to-purple-900 p-4 text-right" dir="rtl">
-      <div className="bg-white dark:bg-slate-800 p-10 rounded-[2rem] w-full max-w-md shadow-2xl relative border-t-[6px] border-indigo-600 animate-in fade-in zoom-in-95">
+    <div className="h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 p-4 text-right" dir="rtl">
+      <div className="bg-white dark:bg-slate-800 p-10 rounded-[2rem] w-full max-w-md shadow-2xl relative border-t-[6px] border-teal-600 animate-in fade-in zoom-in-95">
         <div className="flex justify-center mb-6">
-           <div className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-2xl flex items-center justify-center shadow-lg">
+           <div className="w-20 h-20 bg-gradient-to-br from-teal-500 to-teal-700 text-white rounded-2xl flex items-center justify-center shadow-lg">
              <Package size={40}/>
            </div>
         </div>
@@ -320,7 +320,7 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
           <div className="relative font-bold">
             <Mail className="absolute right-4 top-3.5 text-slate-400 dark:text-slate-500" size={18}/>
             <input 
-              className="w-full border-2 border-slate-100 dark:border-slate-700 pr-12 p-3 rounded-xl focus:border-indigo-500 outline-none text-right bg-slate-50 dark:bg-slate-900 font-bold text-slate-700 dark:text-slate-300 text-sm transition-all" 
+              className="w-full border-2 border-slate-100 dark:border-slate-700 pr-12 p-3 rounded-xl focus:border-teal-500 outline-none text-right bg-slate-50 dark:bg-slate-900 font-bold text-slate-700 dark:text-slate-300 text-sm transition-all" 
               placeholder="البريد الإلكتروني للموظف" 
               value={email} 
               onChange={e=>setEmail(e.target.value)} 
@@ -333,7 +333,7 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
           <div className="relative font-bold">
             <Lock className="absolute right-4 top-3.5 text-slate-400 dark:text-slate-500" size={18}/>
             <input 
-              className="w-full border-2 border-slate-100 dark:border-slate-700 pr-12 p-3 rounded-xl focus:border-indigo-500 outline-none text-right bg-slate-50 dark:bg-slate-900 font-bold text-slate-700 dark:text-slate-300 text-sm transition-all" 
+              className="w-full border-2 border-slate-100 dark:border-slate-700 pr-12 p-3 rounded-xl focus:border-teal-500 outline-none text-right bg-slate-50 dark:bg-slate-900 font-bold text-slate-700 dark:text-slate-300 text-sm transition-all" 
               type={showPassword ? "text" : "password"}
               placeholder="كلمة المرور" 
               value={pass} 
@@ -345,7 +345,7 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute left-4 top-3.5 text-slate-400 dark:text-slate-500 hover:text-indigo-600"
+              className="absolute left-4 top-3.5 text-slate-400 dark:text-slate-500 hover:text-teal-600"
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -357,14 +357,14 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
                 type="checkbox" 
                 checked={rememberMe}
                 onChange={e => setRememberMe(e.target.checked)}
-                className="w-4 h-4 accent-indigo-600"
+                className="w-4 h-4 accent-teal-600"
               />
               <span className="text-xs font-bold text-slate-600 dark:text-slate-400">تذكرني</span>
             </label>
             <button 
               type="button"
               onClick={() => { setShowResetModal(true); setResetEmail(email); setResetSent(false); }}
-              className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold"
+              className="text-xs text-teal-600 hover:text-teal-800 dark:text-teal-400 dark:hover:text-teal-300 font-bold"
             >
               نسيت كلمة المرور؟
             </button>
@@ -372,7 +372,7 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
           
           <button 
             disabled={loading || !fbReady || isLocked} 
-            className="w-full bg-gradient-to-l from-indigo-600 to-purple-600 text-white py-3.5 rounded-xl font-bold shadow-lg hover:from-indigo-700 hover:to-purple-700 active:scale-95 flex justify-center items-center gap-2 mt-6 text-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+            className="w-full bg-teal-600 text-white py-3.5 rounded-xl font-bold shadow-lg hover:bg-teal-700 active:scale-95 flex justify-center items-center gap-2 mt-6 text-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed"
           >
              {loading || !fbReady ? <Loader2 className="animate-spin" size={20}/> : <><LogIn size={20}/> تسجيل الدخول بأمان</>}
           </button>
@@ -412,20 +412,20 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
                   <button type="button" onClick={() => setShowResetModal(false)} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white py-2.5 rounded-xl font-bold text-sm">
                     إلغاء
                   </button>
-                  <button type="submit" disabled={resetLoading} className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl font-bold text-sm disabled:opacity-60 flex items-center justify-center gap-2">
+                  <button type="submit" disabled={resetLoading} className="flex-1 bg-teal-600 text-white py-2.5 rounded-xl font-bold text-sm disabled:opacity-60 flex items-center justify-center gap-2">
                     {resetLoading ? <Loader2 size={16} className="animate-spin"/> : null} إرسال الرابط
                   </button>
                 </div>
               </form>
             ) : (
               <div className="text-center">
-                <Mail className="w-12 h-12 text-indigo-600 mx-auto mb-3" />
+                <Mail className="w-12 h-12 text-teal-600 mx-auto mb-3" />
                 <h3 className="font-black text-lg text-slate-800 dark:text-white mb-2">تم الإرسال</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
                   لو الإيميل ده مسجل عندنا، هتوصلك رسالة فيها رابط استعادة كلمة السر خلال دقايق.
                   لو مفيش رسالة، تواصل مع مدير النظام.
                 </p>
-                <button onClick={() => setShowResetModal(false)} className="w-full bg-indigo-600 text-white py-2.5 rounded-xl font-bold text-sm">
+                <button onClick={() => setShowResetModal(false)} className="w-full bg-teal-600 text-white py-2.5 rounded-xl font-bold text-sm">
                   حسنًا
                 </button>
               </div>

@@ -93,9 +93,9 @@ export function WarrantyAlertsView({ systemSettings }) {
     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
       <div className="p-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50 dark:bg-slate-900/50">
         <div className="flex items-center gap-2">
-          <ShieldCheck className="text-indigo-600" size={20}/>
+          <ShieldCheck className="text-teal-600" size={20}/>
           <h2 className="text-lg font-black">تنبيهات اقتراب انتهاء الضمان</h2>
-          <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg text-xs">{warrantyItems.length} منتج</span>
+          <span className="bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-3 py-1 rounded-lg text-xs">{warrantyItems.length} منتج</span>
         </div>
         <div className="flex gap-2">
           <button

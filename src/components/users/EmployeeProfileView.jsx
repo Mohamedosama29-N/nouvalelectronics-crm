@@ -64,7 +64,7 @@ export function EmployeeProfileView({ userToView, warehouseMap }) {
     <div className="max-w-4xl mx-auto space-y-6 text-right" dir="rtl">
        <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-            <div className="w-24 h-24 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-3xl flex items-center justify-center font-black text-4xl text-white shadow-xl shadow-indigo-200 shrink-0">
+            <div className="w-24 h-24 bg-gradient-to-tr from-teal-500 to-teal-700 rounded-3xl flex items-center justify-center font-black text-4xl text-white shadow-xl shadow-teal-200 shrink-0">
               {userToView.name?.charAt(0) || userToView.email?.charAt(0) || '?'}
             </div>
             <div className="flex-1 text-center md:text-right">
@@ -72,7 +72,7 @@ export function EmployeeProfileView({ userToView, warehouseMap }) {
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 text-sm font-bold">
                  <span className="text-slate-500 dark:text-slate-400 font-mono" dir="ltr">{userToView.email}</span>
                  {userToView.phone && <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-lg">{userToView.phone}</span>}
-                 <span className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg">الفرع: {warehouseMap[userToView.assignedWarehouseId] || 'الرئيسي'}</span>
+                 <span className="bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-3 py-1 rounded-lg">الفرع: {warehouseMap[userToView.assignedWarehouseId] || 'الرئيسي'}</span>
                  <span className={`px-3 py-1 rounded-lg ${getRoleColorClasses(userToView.role)} flex items-center gap-1`}>
                    <RoleIcon size={14}/> {USER_ROLES.find(r => r.key === userToView.role)?.label || userToView.role}
                  </span>
@@ -81,9 +81,9 @@ export function EmployeeProfileView({ userToView, warehouseMap }) {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-            <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl text-center">
-              <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-1">إجمالي النشاطات</p>
-              <p className="text-2xl font-black text-indigo-800 dark:text-indigo-300">{stats.totalActions}</p>
+            <div className="bg-teal-50 dark:bg-teal-900/30 p-4 rounded-xl text-center">
+              <p className="text-xs text-teal-600 dark:text-teal-400 mb-1">إجمالي النشاطات</p>
+              <p className="text-2xl font-black text-teal-800 dark:text-teal-300">{stats.totalActions}</p>
             </div>
             <div className="bg-emerald-50 dark:bg-emerald-900/30 p-4 rounded-xl text-center">
               <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-1">آخر نشاط</p>
@@ -111,23 +111,23 @@ export function EmployeeProfileView({ userToView, warehouseMap }) {
 
        <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
            <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2 mb-8 border-b pb-4">
-              <Activity className="text-indigo-600" size={24}/> سجل النشاطات (آخر 100 حركة)
+              <Activity className="text-teal-600" size={24}/> سجل النشاطات (آخر 100 حركة)
            </h3>
            
            {loading ? (
-               <div className="flex justify-center p-10"><Loader2 className="animate-spin text-indigo-500" size={32}/></div>
+               <div className="flex justify-center p-10"><Loader2 className="animate-spin text-teal-500" size={32}/></div>
            ) : activities.length === 0 ? (
                <div className="text-center p-12 text-slate-400 dark:text-slate-500 font-bold border-2 border-dashed border-slate-100 dark:border-slate-700 rounded-2xl">
                    لا توجد نشاطات مسجلة لهذا الموظف حتى الآن.
                </div>
            ) : (
-               <div className="relative border-r-2 border-indigo-200 dark:border-indigo-800 pr-6 ml-2 space-y-6">
+               <div className="relative border-r-2 border-teal-200 dark:border-teal-800 pr-6 ml-2 space-y-6">
                    {activities.map((act, idx) => (
                        <div key={act.id || idx} className="relative">
-                           <span className="absolute -right-[33px] top-1.5 w-4 h-4 bg-white dark:bg-slate-800 border-2 border-indigo-400 rounded-full"></span>
-                           <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-indigo-800 transition-colors">
+                           <span className="absolute -right-[33px] top-1.5 w-4 h-4 bg-white dark:bg-slate-800 border-2 border-teal-400 rounded-full"></span>
+                           <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 hover:border-teal-200 dark:hover:border-teal-800 transition-colors">
                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-                                   <span className="font-black text-sm text-indigo-900 dark:text-indigo-300">{act.action}</span>
+                                   <span className="font-black text-sm text-teal-900 dark:text-teal-300">{act.action}</span>
                                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 w-fit">
                                        {formatDate(act.timestamp)}
                                    </span>

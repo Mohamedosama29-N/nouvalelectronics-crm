@@ -11,7 +11,7 @@ import {
 
 export const USER_ROLES = [
   { key: 'admin', label: 'مدير النظام', level: 100, icon: Crown, color: 'purple' },
-  { key: 'main_warehouse_manager', label: 'مسؤول المخزن الرئيسي', level: 90, icon: ShieldCheck, color: 'indigo' },
+  { key: 'main_warehouse_manager', label: 'مسؤول المخزن الرئيسي', level: 90, icon: ShieldCheck, color: 'sky' },
   { key: 'warehouse_manager', label: 'مسؤول مخزن', level: 80, icon: Shield, color: 'blue' },
   { key: 'accountant', label: 'محاسب', level: 60, icon: Calculator, color: 'emerald' },
   { key: 'maintenance_center', label: 'مركز صيانة', level: 50, icon: Wrench, color: 'orange' },
@@ -433,7 +433,7 @@ export const ROLE_DEFAULT_PERMISSIONS = {
 
 export const ROLE_COLOR_CLASSES = {
   purple: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
-  indigo: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300',
+  sky: 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300',
   blue: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
   emerald: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
   orange: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300',

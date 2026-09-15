@@ -70,7 +70,7 @@ const ResetPasswordScreen = lazyPage(() => import('./components/auth/ResetPasswo
 function PageLoadingFallback() {
   return (
     <div className="flex items-center justify-center h-96">
-      <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
     </div>
   );
 }
@@ -188,7 +188,7 @@ useEffect(() => {
       setFirebaseError(null);
       
       await getDoc(doc(db,'settings','general'));
-      console.log("Firebase connection successful");
+      if (import.meta.env.DEV) console.log("Firebase connection successful");
       return true;
     } catch (error) {
       console.error("Firebase connection error:", error);
@@ -455,7 +455,7 @@ useEffect(() => {
 
   return (
     <ThemeProvider>
-      <div className={`flex h-screen bg-slate-50 dark:bg-slate-900 font-sans overflow-hidden text-right selection:bg-indigo-100 dark:selection:bg-indigo-900 transition-colors duration-200`} dir="rtl">
+      <div className={`flex h-screen bg-slate-50 dark:bg-slate-900 font-sans overflow-hidden text-right selection:bg-teal-100 dark:selection:bg-teal-900 transition-colors duration-200`} dir="rtl">
         
         {/* منطقة الإشعارات */}
         <div className="fixed top-6 left-6 z-[200] flex flex-col gap-2">
@@ -482,7 +482,7 @@ useEffect(() => {
         {/* مؤشر التحميل العالمي */}
         {globalLoading && (
            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[300] flex items-center justify-center">
-              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xl flex flex-col items-center gap-3 font-bold text-indigo-700 dark:text-indigo-400">
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xl flex flex-col items-center gap-3 font-bold text-teal-700 dark:text-teal-400">
                  <Loader2 className="w-8 h-8 animate-spin" /> 
                  <span className="text-sm">جاري المعالجة...</span>
               </div>
@@ -503,7 +503,7 @@ useEffect(() => {
         }`}>
           <div className="h-16 flex items-center px-6 border-b border-slate-700 bg-slate-950/50">
              <div className="flex items-center gap-3">
-               <div className="p-1.5 bg-indigo-600 rounded-lg text-white shadow-lg">
+               <div className="p-1.5 bg-teal-600 rounded-lg text-white shadow-lg">
                  <Package size={18}/>
                </div>
                <span className="font-black text-white truncate">{systemSettings.systemName}</span>
@@ -535,7 +535,7 @@ useEffect(() => {
                       onClick={()=>{setCurrentView(item.id); setIsMobileOpen(false);}} 
                       className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all duration-200 font-bold text-sm ${
                         currentView === item.id 
-                          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
+                          ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/20' 
                           : 'hover:bg-slate-800 hover:text-white text-slate-400'
                       }`}
                     >
@@ -576,7 +576,7 @@ useEffect(() => {
           }}
           className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all duration-200 font-bold text-sm ${
             currentView === 'returns'
-              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
+              ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/20'
               : 'hover:bg-slate-800 hover:text-white text-slate-400'
           }`}
         >
@@ -591,7 +591,7 @@ useEffect(() => {
           onClick={()=>{setCurrentView('warehouses'); setIsMobileOpen(false);}} 
           className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all duration-200 font-bold text-sm ${
             currentView === 'warehouses' 
-              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
+              ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/20' 
               : 'hover:bg-slate-800 hover:text-white text-slate-400'
           }`}
         >
@@ -606,7 +606,7 @@ useEffect(() => {
           onClick={()=>{setCurrentView('users'); setIsMobileOpen(false);}} 
           className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all duration-200 font-bold text-sm ${
             currentView === 'users' 
-              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
+              ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/20' 
               : 'hover:bg-slate-800 hover:text-white text-slate-400'
           }`}
         >
@@ -625,7 +625,7 @@ useEffect(() => {
     }}
     className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all duration-200 font-bold text-sm ${
       currentView === 'returns_warehouse'
-        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
+        ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/20'
         : 'hover:bg-slate-800 hover:text-white text-slate-400'
     }`}
   >
@@ -650,7 +650,7 @@ useEffect(() => {
           onClick={()=>{setCurrentView('settings'); setIsMobileOpen(false);}} 
           className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 transition-all duration-200 font-bold text-sm ${
             currentView === 'settings' 
-              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
+              ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/20' 
               : 'hover:bg-slate-800 hover:text-white text-slate-400'
           }`}
         >
@@ -668,12 +668,12 @@ useEffect(() => {
                onClick={() => openProfileView(appUser)} 
                className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 transition-colors mb-2 text-right group"
              >
-               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center font-black text-white text-sm shadow-lg">
+               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center font-black text-white text-sm shadow-lg">
                  {appUser.name?.charAt(0) || appUser.email?.charAt(0)}
                </div>
                <div className="flex-1 overflow-hidden">
                  <p className="text-sm font-bold text-white truncate">{appUser.name || appUser.email}</p>
-                 <p className="text-[10px] text-slate-400 truncate group-hover:text-indigo-300 transition-colors">
+                 <p className="text-[10px] text-slate-400 truncate group-hover:text-teal-300 transition-colors">
                    {appUser.role === 'admin' ? 'مدير النظام' : USER_ROLES.find(r => r.key === appUser.role)?.label || 'موظف'}
                  </p>
                </div>
@@ -735,7 +735,7 @@ useEffect(() => {
                  </span>
                </div>
                <div className="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
-               <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{warehouseMap[appUser.assignedWarehouseId]}</span>
+               <span className="text-sm font-bold text-teal-600 dark:text-teal-400">{warehouseMap[appUser.assignedWarehouseId]}</span>
             </div>
           </header>
 

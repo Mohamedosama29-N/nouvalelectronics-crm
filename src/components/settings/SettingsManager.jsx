@@ -59,12 +59,6 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
     lastSyncedRef.current = systemSettings;
   }, [systemSettings]);
 
-  // مراقبة تغييرات settings
-  useEffect(() => {
-    console.log("🔄 SettingsManager - settings تغيرت:", settings);
-    console.log("🔄 SettingsManager - maintenanceCenters:", settings.maintenanceCenters);
-  }, [settings]);
-
   useEffect(() => {
     const loadBackups = async () => {
       const backups = await offlineDB.getAll('backups');
@@ -74,7 +68,6 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
   }, []);
 
   useEffect(() => {
-    console.log("🔍 SettingsManager - settings.maintenanceCenters:", settings.maintenanceCenters);
     if (!settings.maintenanceCenters) {
       setSettings({...settings, maintenanceCenters: []});
     }
@@ -266,7 +259,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
               <div className="flex gap-2 pt-4">
                 <button
                   onClick={handleCreateApiKey}
-                  className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700"
+                  className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700"
                 >
                   إنشاء
                 </button>
@@ -282,7 +275,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
         </div>
       )}
 
-      <div className="bg-gradient-to-l from-indigo-600 to-purple-600 p-6 text-white">
+      <div className="bg-teal-600 p-6 text-white">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Settings size={28} className="opacity-90" />
@@ -340,8 +333,8 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-6 py-4 font-bold text-sm transition-all whitespace-nowrap ${
               activeTab === tab.id 
-                ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-400 border-b-2 border-indigo-600 shadow-sm' 
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400'
+                ? 'bg-white dark:bg-slate-800 text-teal-700 dark:text-teal-400 border-b-2 border-teal-600 shadow-sm' 
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-teal-600 dark:hover:text-teal-400'
             }`}
           >
             <tab.icon size={18} />
@@ -368,7 +361,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
       {activeTab === 'maintenance_centers' && (appUser.permissions?.manageMaintenanceCenters || appUser.role === 'admin') && (
         <div className="space-y-6 max-w-2xl">
           <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
-            <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">🏢 قائمة مراكز الصيانة</h4>
+            <h4 className="font-bold text-teal-600 dark:text-teal-400 mb-4">🏢 قائمة مراكز الصيانة</h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
               أضف مراكز الصيانة التي ستظهر في قائمة "مركز الصيانة" عند إنشاء تذكرة
             </p>
@@ -377,7 +370,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
               settings.maintenanceCenters.map((center, idx) => (
                 <div key={idx} className="flex gap-3 mb-3">
                   <input 
-                    className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900 focus:border-indigo-500 outline-none transition-colors"
+                    className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900 focus:border-teal-500 outline-none transition-colors"
                     placeholder="اسم مركز الصيانة"
                     value={center?.name || ''}
                     onChange={e => {
@@ -414,7 +407,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                 const newCenters = [...currentCenters, { value: '', name: '' }];
                 setLocalSettings({...settings, maintenanceCenters: newCenters});
               }} 
-              className="w-full mt-4 py-4 border-2 border-dashed border-indigo-300 dark:border-indigo-700 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center gap-2"
+              className="w-full mt-4 py-4 border-2 border-dashed border-teal-300 dark:border-teal-700 rounded-xl text-teal-600 dark:text-teal-400 font-bold hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors flex items-center justify-center gap-2"
             >
               <Plus size={20}/> إضافة مركز صيانة جديد
             </button>
@@ -433,34 +426,34 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
           <div className="space-y-6 max-w-3xl">
             <div className="grid md:grid-cols-2 gap-6">
               <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2">اسم النظام</label>
+                <label className="block text-xs font-bold text-teal-600 dark:text-teal-400 mb-2">اسم النظام</label>
                 <input 
-                  className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" 
+                  className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" 
                   value={settings.systemName || ''}
                   onChange={e => setLocalSettings({...settings, systemName: e.target.value})}
                   placeholder="مثال: نوڤال ERP"
                 />
               </div>
               <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2">اسم المتجر</label>
+                <label className="block text-xs font-bold text-teal-600 dark:text-teal-400 mb-2">اسم المتجر</label>
                 <input 
-                  className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" 
+                  className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" 
                   value={settings.storeName || ''}
                   onChange={e => setLocalSettings({...settings, storeName: e.target.value})}
                   placeholder="مثال: نوڤال للإلكترونيات"
                 />
               </div>
               <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2">نسبة الضريبة %</label>
+                <label className="block text-xs font-bold text-teal-600 dark:text-teal-400 mb-2">نسبة الضريبة %</label>
                 <input 
                   type="number"
-                  className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" 
+                  className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" 
                   value={settings.taxRate || 14}
                   onChange={e => setLocalSettings({...settings, taxRate: Number(e.target.value)})}
                 />
               </div>
               <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2">شعار الفاتورة</label>
+                <label className="block text-xs font-bold text-teal-600 dark:text-teal-400 mb-2">شعار الفاتورة</label>
                 <div className="flex items-center gap-3">
                   <input 
                     type="file"
@@ -471,7 +464,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                   />
                   <button
                     onClick={() => document.getElementById('logoUpload').click()}
-                    className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                    className="bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors"
                   >
                     اختيار صورة
                   </button>
@@ -483,10 +476,10 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
             </div>
             
             <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-              <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2">تذييل الفاتورة</label>
+              <label className="block text-xs font-bold text-teal-600 dark:text-teal-400 mb-2">تذييل الفاتورة</label>
               <textarea 
                 rows="3"
-                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" 
+                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" 
                 value={settings.footerText || ''}
                 onChange={e => setLocalSettings({...settings, footerText: e.target.value})}
                 placeholder="شكراً لتعاملكم معنا..."
@@ -495,14 +488,14 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
 
             {/* ✨ ميزة جديدة: رابط خدمة إرسال البريد الإلكتروني */}
             <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-              <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2">رابط خدمة إرسال البريد الإلكتروني (Webhook)</label>
+              <label className="block text-xs font-bold text-teal-600 dark:text-teal-400 mb-2">رابط خدمة إرسال البريد الإلكتروني (Webhook)</label>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
                 مطلوب عشان زرار "إرسال بالبريد" في الفاتورة يشتغل فعليًا. تقدر تستخدم EmailJS أو Zapier أو Make لإنشاء الرابط ده.
               </p>
               <input
                 type="url"
                 placeholder="https://api.emailjs.com/... أو أي رابط Webhook لإرسال البريد"
-                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
                 value={settings.emailWebhookUrl || ''}
                 onChange={e => setLocalSettings({...settings, emailWebhookUrl: e.target.value})}
               />
@@ -510,14 +503,14 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
 
             {/* 🆕 التقرير اليومي المجدول تلقائيًا (يحتاج نشر functions/reports/dailySummary.js) */}
             <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-              <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2">مستلمو التقرير اليومي التلقائي</label>
+              <label className="block text-xs font-bold text-teal-600 dark:text-teal-400 mb-2">مستلمو التقرير اليومي التلقائي</label>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
                 إيميلات مفصولة بفاصلة، هتوصلهم ملخص يومي (المبيعات، التذاكر الجديدة) كل يوم الساعة 8 صباحًا. يحتاج رابط الـ Webhook فوق مضبوط.
               </p>
               <input
                 type="text"
                 placeholder="admin@example.com, manager@example.com"
-                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
                 value={(settings.dailyReportRecipients || []).join(', ')}
                 onChange={e => setLocalSettings({
                   ...settings,
@@ -529,7 +522,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
             {/* ✨ ميزة جديدة: تنبيهات النواقص التلقائية */}
             <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
               <div className="flex items-center justify-between mb-3">
-                <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400">تنبيهات النواقص التلقائية</label>
+                <label className="block text-xs font-bold text-teal-600 dark:text-teal-400">تنبيهات النواقص التلقائية</label>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
                     type="checkbox"
@@ -540,7 +533,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                       lowStockAlerts: { ...(settings.lowStockAlerts || {}), enabled: e.target.checked }
                     })}
                   />
-                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
                 </label>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
@@ -550,7 +543,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
               <input
                 type="url"
                 placeholder="https://hooks.zapier.com/... أو أي رابط Webhook"
-                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 mb-3"
+                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 mb-3"
                 value={settings.lowStockAlerts?.webhookUrl || ''}
                 onChange={e => setLocalSettings({
                   ...settings,
@@ -561,7 +554,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
               <input
                 type="number"
                 min="1"
-                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
                 value={settings.lowStockAlerts?.frequencyHours || 24}
                 onChange={e => setLocalSettings({
                   ...settings,
@@ -573,7 +566,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
             {/* ✨ ميزة جديدة: إشعار العميل عند تغيير حالة تذكرته */}
             <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
               <div className="flex items-center justify-between mb-3">
-                <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400">إشعار العميل عند تغيير حالة التذكرة</label>
+                <label className="block text-xs font-bold text-teal-600 dark:text-teal-400">إشعار العميل عند تغيير حالة التذكرة</label>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
                     type="checkbox"
@@ -584,7 +577,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                       ticketNotifications: { ...(settings.ticketNotifications || {}), enabled: e.target.checked }
                     })}
                   />
-                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
                 </label>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
@@ -593,7 +586,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
               <input
                 type="url"
                 placeholder="https://hooks.zapier.com/... أو أي رابط Webhook"
-                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
                 value={settings.ticketNotifications?.webhookUrl || ''}
                 onChange={e => setLocalSettings({
                   ...settings,
@@ -605,7 +598,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
             {/* ✨ ميزة جديدة: تنبيه اقتراب انتهاء الضمان */}
             <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
               <div className="flex items-center justify-between mb-3">
-                <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400">تنبيه اقتراب انتهاء الضمان</label>
+                <label className="block text-xs font-bold text-teal-600 dark:text-teal-400">تنبيه اقتراب انتهاء الضمان</label>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
                     type="checkbox"
@@ -616,7 +609,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                       warrantyAlerts: { ...(settings.warrantyAlerts || {}), enabled: e.target.checked }
                     })}
                   />
-                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
                 </label>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
@@ -626,7 +619,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                 <input
                   type="url"
                   placeholder="رابط Webhook"
-                  className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                  className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
                   value={settings.warrantyAlerts?.webhookUrl || ''}
                   onChange={e => setLocalSettings({
                     ...settings,
@@ -638,7 +631,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                   <input
                     type="number"
                     min="1"
-                    className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                    className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
                     value={settings.warrantyAlerts?.daysBeforeExpiry || 30}
                     onChange={e => setLocalSettings({
                       ...settings,
@@ -651,14 +644,14 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
 
             {/* ✨ ميزة جديدة: تسجيل خروج تلقائي بعد فترة خمول */}
             <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-              <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2">تسجيل الخروج التلقائي بعد الخمول (بالدقائق)</label>
+              <label className="block text-xs font-bold text-teal-600 dark:text-teal-400 mb-2">تسجيل الخروج التلقائي بعد الخمول (بالدقائق)</label>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
                 مفيد لو الأجهزة (زي الكاشير) مشتركة بين أكتر من موظف - يمنع بقاء الجلسة مفتوحة لو حد نسي يعمل تسجيل خروج. اكتب 0 لتعطيل هذه الميزة.
               </p>
               <input
                 type="number"
                 min="0"
-                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
                 value={settings.autoLogoutMinutes ?? 30}
                 onChange={e => setLocalSettings({...settings, autoLogoutMinutes: Number(e.target.value) || 0})}
               />
@@ -666,7 +659,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
 
             {/* ✨ ميزة جديدة: تتبع SLA للتذاكر */}
             <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-              <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2">مهلة حل التذكرة المستهدفة (SLA) - بالساعات</label>
+              <label className="block text-xs font-bold text-teal-600 dark:text-teal-400 mb-2">مهلة حل التذكرة المستهدفة (SLA) - بالساعات</label>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
                 لو التذكرة عدّت المدة دي من وقت إنشائها من غير ما توصل لحالة نهائية (تسليم/إغلاق)، هتتحسب "متأخرة" في شاشة التذاكر.
               </p>
@@ -707,14 +700,14 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
           {activeTab === 'branches' && (appUser.permissions?.manageBranchesList || appUser.role === 'admin') && (
             <div className="space-y-6 max-w-2xl">
               <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">إدارة الفروع (للاختيار في التذاكر)</h4>
+                <h4 className="font-bold text-teal-600 dark:text-teal-400 mb-4">إدارة الفروع (للاختيار في التذاكر)</h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
                   هذه الفروع تظهر في خانة "أقرب فرع" عند إنشاء تذكرة صيانة
                 </p>
                 {(settings.branches || []).map((branch, idx) => (
                   <div key={idx} className="flex gap-3 mb-3">
                     <input 
-                      className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                      className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                       placeholder="اسم الفرع"
                       value={branch.label}
                       onChange={e => {
@@ -740,7 +733,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                     const newBranches = [...(settings.branches || []), { value: '', label: '' }];
                     setLocalSettings({...settings, branches: newBranches});
                   }}
-                  className="w-full mt-4 py-4 border-3 border-dashed border-indigo-200 dark:border-indigo-800 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center gap-2"
+                  className="w-full mt-4 py-4 border-3 border-dashed border-teal-200 dark:border-teal-800 rounded-xl text-teal-600 dark:text-teal-400 font-bold hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors flex items-center justify-center gap-2"
                 >
                   <Plus size={20}/> إضافة فرع جديد
                 </button>
@@ -760,12 +753,12 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
         {activeTab === 'categories' && (appUser.permissions?.manageFeesAndCategories || appUser.role === 'admin') && (
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-              <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">تصنيفات المنتجات</h4>
+              <h4 className="font-bold text-teal-600 dark:text-teal-400 mb-4">تصنيفات المنتجات</h4>
               {settings.productCategories?.map((cat, idx) => (
                 <div key={idx} className="mb-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
                   <div className="flex gap-3 mb-3">
                     <input 
-                      className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                      className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                       placeholder="اسم التصنيف (مثال: تكييف)"
                       value={cat.name}
                       onChange={e => {
@@ -787,7 +780,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                   <div>
                     <label className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 block">الموديلات (افصل بينها بفاصلة)</label>
                     <input 
-                      className="w-full border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                      className="w-full border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                       placeholder="مثال: 1.5 حصان, 2.25 حصان, انفرتر"
                       value={cat.models?.join(', ') || ''}
                       onChange={e => {
@@ -801,7 +794,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
               ))}
               <button 
                 onClick={addCategory}
-                className="w-full py-4 border-3 border-dashed border-indigo-200 dark:border-indigo-800 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-4 border-3 border-dashed border-teal-200 dark:border-teal-800 rounded-xl text-teal-600 dark:text-teal-400 font-bold hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors flex items-center justify-center gap-2"
               >
                 <Plus size={20}/> إضافة تصنيف جديد
               </button>
@@ -812,11 +805,11 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
         {activeTab === 'fees' && (appUser.permissions?.manageFeesAndCategories || appUser.role === 'admin') && (
           <div className="space-y-6 max-w-2xl">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-              <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">الرسوم الإضافية</h4>
+              <h4 className="font-bold text-teal-600 dark:text-teal-400 mb-4">الرسوم الإضافية</h4>
               {settings.installationFees?.map((fee, idx) => (
                 <div key={fee.id} className="flex gap-3 mb-3">
                   <input 
-                    className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                    className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                     placeholder="اسم الرسم (مثال: تركيب)"
                     value={fee.label}
                     onChange={e => {
@@ -827,7 +820,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                   />
                   <input 
                     type="number"
-                    className="w-32 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold text-center outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                    className="w-32 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold text-center outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                     placeholder="القيمة"
                     value={fee.value}
                     onChange={e => {
@@ -849,7 +842,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
               ))}
               <button 
                 onClick={addFee}
-                className="w-full mt-4 py-4 border-3 border-dashed border-indigo-200 dark:border-indigo-800 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center gap-2"
+                className="w-full mt-4 py-4 border-3 border-dashed border-teal-200 dark:border-teal-800 rounded-xl text-teal-600 dark:text-teal-400 font-bold hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors flex items-center justify-center gap-2"
               >
                 <Plus size={20}/> إضافة رسم جديد
               </button>
@@ -860,11 +853,11 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
         {activeTab === 'technicians' && (appUser.permissions?.manageTechniciansList || appUser.role === 'admin') && (
           <div className="space-y-6 max-w-2xl">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-              <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">قائمة الفنيين</h4>
+              <h4 className="font-bold text-teal-600 dark:text-teal-400 mb-4">قائمة الفنيين</h4>
               {settings.technicians?.map((tech, idx) => (
                 <div key={idx} className="flex gap-3 mb-3">
                   <input 
-                    className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-indigo-500 bg-white dark:bg-slate-900"
+                    className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900"
                     placeholder="اسم الفني"
                     value={tech}
                     onChange={e => {
@@ -886,7 +879,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
               ))}
               <button 
                 onClick={addTechnician}
-                className="w-full mt-4 py-4 border-3 border-dashed border-indigo-200 dark:border-indigo-800 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center gap-2"
+                className="w-full mt-4 py-4 border-3 border-dashed border-teal-200 dark:border-teal-800 rounded-xl text-teal-600 dark:text-teal-400 font-bold hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors flex items-center justify-center gap-2"
               >
                 <Plus size={20}/> إضافة فني جديد
               </button>
@@ -897,10 +890,10 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
         {activeTab === 'backup' && (
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-              <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-4">النسخ الاحتياطي</h4>
+              <h4 className="font-bold text-teal-600 dark:text-teal-400 mb-4">النسخ الاحتياطي</h4>
               <button
                 onClick={handleCreateBackup}
-                className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 mb-6"
+                className="w-full py-4 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-colors flex items-center justify-center gap-2 mb-6"
               >
                 <Database size={20}/> إنشاء نسخة احتياطية جديدة
               </button>
@@ -915,7 +908,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                     </div>
                     <button
                       onClick={() => handleRestoreBackup(backup)}
-                      className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-xs font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50"
+                      className="px-3 py-1.5 bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 rounded-lg text-xs font-bold hover:bg-teal-100 dark:hover:bg-teal-900/50"
                     >
                       استعادة
                     </button>
@@ -930,10 +923,10 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
               <div className="flex justify-between items-center mb-4">
-                <h4 className="font-bold text-indigo-600 dark:text-indigo-400">مفاتيح API</h4>
+                <h4 className="font-bold text-teal-600 dark:text-teal-400">مفاتيح API</h4>
                 <button
                   onClick={() => setShowApiKeyModal(true)}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-2"
+                  className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700 flex items-center gap-2"
                 >
                   <Plus size={16}/> مفتاح جديد
                 </button>
@@ -969,7 +962,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
           </button>
           <button 
             onClick={handleSave}
-            className="px-8 py-3 bg-gradient-to-l from-indigo-600 to-purple-600 text-white rounded-xl font-bold hover:from-indigo-700 hover:to-purple-700 transition-colors flex items-center gap-2 shadow-lg"
+            className="px-8 py-3 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-colors flex items-center gap-2 shadow-lg"
           >
             <Save size={18}/> حفظ الإعدادات
           </button>

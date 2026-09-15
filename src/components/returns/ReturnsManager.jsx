@@ -502,13 +502,13 @@ const handleApproveReturn = async (returnId) => {
             
             <form onSubmit={handleAddReturn} className="space-y-4">
               {/* ===== البحث عن المنتج ===== */}
-              <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl border border-indigo-200 dark:border-indigo-800">
-                <label className="block text-xs font-bold text-indigo-900 dark:text-indigo-300 mb-2">
+              <div className="bg-teal-50 dark:bg-teal-900/30 p-4 rounded-xl border border-teal-200 dark:border-teal-800">
+                <label className="block text-xs font-bold text-teal-900 dark:text-teal-300 mb-2">
                   🔍 البحث عن المنتج بالسيريال
                 </label>
                 <div className="flex gap-2">
                   <input
-                    className="flex-1 border border-indigo-200 dark:border-indigo-800 p-3 rounded-xl font-mono text-sm bg-white dark:bg-slate-900"
+                    className="flex-1 border border-teal-200 dark:border-teal-800 p-3 rounded-xl font-mono text-sm bg-white dark:bg-slate-900"
                     placeholder="أدخل السيريال..."
                     value={searchProduct}
                     onChange={e => setSearchProduct(e.target.value)}
@@ -517,14 +517,14 @@ const handleApproveReturn = async (returnId) => {
                     type="button"
                     onClick={handleSearchProduct}
                     disabled={isSearching}
-                    className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-indigo-700 disabled:opacity-50"
+                    className="bg-teal-600 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-teal-700 disabled:opacity-50"
                   >
                     {isSearching ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
                   </button>
                 </div>
                 
                 {foundProduct && (
-                  <div className="mt-3 p-3 bg-white dark:bg-slate-900 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                  <div className="mt-3 p-3 bg-white dark:bg-slate-900 rounded-lg border border-teal-200 dark:border-teal-800">
                     <p className="font-bold text-emerald-600 dark:text-emerald-400">
                       ✅ تم العثور على: {foundProduct.name}
                     </p>
@@ -634,7 +634,7 @@ const handleApproveReturn = async (returnId) => {
               </div>
 
               <div className="flex gap-2 pt-4 border-t">
-                <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700">
+                <button type="submit" className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700">
                   <Save size={18} className="inline ml-2" /> حفظ المرتجع
                 </button>
                 <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">
@@ -718,7 +718,7 @@ const handleApproveReturn = async (returnId) => {
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
           <h2 className="text-xl font-black flex items-center gap-2">
-            <RotateCcw className="text-indigo-600" size={24} />
+            <RotateCcw className="text-teal-600" size={24} />
             إدارة المرتجعات
           </h2>
           
@@ -741,7 +741,7 @@ const handleApproveReturn = async (returnId) => {
             </button>
             <button
               onClick={() => setShowAddModal(true)}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-indigo-700"
+              className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-teal-700"
             >
               <Plus size={16} /> مرتجع جديد
             </button>
@@ -798,7 +798,7 @@ const handleApproveReturn = async (returnId) => {
                          item.status === 'approved' ? '✅ موافق عليه' : '❌ مرفوض'}
                       </span>
                     </td>
-                    <td className="p-3 font-bold text-indigo-600">{warehouseMap[item.fromWarehouse] || item.fromWarehouse}</td>
+                    <td className="p-3 font-bold text-teal-600">{warehouseMap[item.fromWarehouse] || item.fromWarehouse}</td>
                     <td className="p-3 text-[10px]">{formatTimestamp(item.createdAt)}</td>
                     <td className="p-3">
                       {item.status === 'pending' && (
@@ -807,7 +807,7 @@ const handleApproveReturn = async (returnId) => {
                             setSelectedReturn(item);
                             setShowApproveModal(true);
                           }}
-                          className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-700"
+                          className="bg-teal-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-teal-700"
                         >
                           معالجة
                         </button>

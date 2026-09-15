@@ -362,8 +362,8 @@ export function ExcelImportManager() {
       
       {/* إحصائيات سريعة */}
       <div className="grid grid-cols-4 gap-3">
-        <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-xl text-center">
-          <p className="text-xs text-indigo-600 dark:text-indigo-400">المنتجات</p>
+        <div className="bg-teal-50 dark:bg-teal-900/30 p-3 rounded-xl text-center">
+          <p className="text-xs text-teal-600 dark:text-teal-400">المنتجات</p>
           <p className="text-xl font-black">{importStats.products}</p>
         </div>
         <div className="bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-xl text-center">
@@ -389,7 +389,7 @@ export function ExcelImportManager() {
           <Download size={18}/> تحميل قالب Excel (5 مستويات)
         </button>
         
-        <label className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors cursor-pointer flex items-center gap-2">
+        <label className="bg-teal-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-teal-700 transition-colors cursor-pointer flex items-center gap-2">
           <UploadCloud size={18}/> اختيار ملف
           <input
             type="file"
@@ -435,7 +435,7 @@ export function ExcelImportManager() {
                     <td className="p-2 text-amber-600">{row.main_fault_description || '-'}</td>
                     <td className="p-2 font-mono text-purple-600">{row.sub_fault_code || '-'}</td>
                     <td className="p-2 text-purple-600">{row.sub_fault_description || '-'}</td>
-                    <td className="p-2 font-mono text-indigo-600">{row.product_code || '-'}</td>
+                    <td className="p-2 font-mono text-teal-600">{row.product_code || '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -445,7 +445,7 @@ export function ExcelImportManager() {
             <button
               onClick={handleImport}
               disabled={loading}
-              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 size={18} className="animate-spin"/> : <UploadCloud size={18}/>}
               {loading ? 'جاري الاستيراد...' : `تأكيد استيراد ${previewData.length} صف`}
@@ -481,7 +481,7 @@ export function ExcelImportManager() {
       {loading && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center">
           <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 text-center">
-            <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mx-auto mb-4" />
+            <Loader2 className="w-12 h-12 animate-spin text-teal-600 mx-auto mb-4" />
             <p className="text-lg font-bold">جاري استيراد البيانات...</p>
             <p className="text-sm text-slate-500">يرجى الانتظار، قد تستغرق العملية بضع ثوانٍ</p>
           </div>

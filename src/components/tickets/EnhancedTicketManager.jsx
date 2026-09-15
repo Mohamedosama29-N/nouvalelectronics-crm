@@ -1363,7 +1363,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-4xl shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="flex justify-between items-center mb-6 border-b pb-4">
               <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
-                <MessageSquare className="text-indigo-600"/> إنشاء تذكرة صيانة جديدة
+                <MessageSquare className="text-teal-600"/> إنشاء تذكرة صيانة جديدة
               </h3>
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-rose-600"><X size={24}/></button>
             </div>
@@ -1373,7 +1373,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   <div className="relative">
     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">🔍 البحث عن عميل موجود</label>
     <input 
-      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-indigo-500"
+      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500"
       placeholder="ابحث عن عميل مسجل..."
       value={customerSearch}
       onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true); }}
@@ -1438,9 +1438,9 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   </div>
 
   {/* القوائم المتتالية */}
-  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl">
+  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-teal-50 dark:bg-teal-900/30 p-4 rounded-xl">
     <div>
-      <label className="block text-xs font-bold mb-1 text-indigo-800 dark:text-indigo-300">المنتج</label>
+      <label className="block text-xs font-bold mb-1 text-teal-800 dark:text-teal-300">المنتج</label>
       {/* 🆕 FIX: تحويل الليستة لخانة قابلة للكتابة (بحث مباشر) بدل السكرول في
           ليستة طويلة - اكتب أي جزء من اسم المنتج وهيبان في الاقتراحات */}
       <input
@@ -1469,7 +1469,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     </div>
 
     <div>
-      <label className="block text-xs font-bold mb-1 text-indigo-800 dark:text-indigo-300">الموديل</label>
+      <label className="block text-xs font-bold mb-1 text-teal-800 dark:text-teal-300">الموديل</label>
       <select className="w-full border p-3 rounded-xl text-sm bg-white dark:bg-slate-900 disabled:opacity-50" value={selectedModelId} onChange={e => {
         setSelectedModelId(e.target.value);
         setSelectedMainFaultId('');
@@ -1510,12 +1510,12 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       <button
         type="button"
         onClick={handleAddAnotherFault}
-        className="self-start text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+        className="self-start text-xs font-bold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1"
       >
         <Plus size={14}/> إضافة كود عطل تاني لنفس التذكرة
       </button>
       {newTicket.mainFaultCode && (
-        <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-2 text-xs">
+        <div className="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-lg p-2 text-xs">
           <span className="font-bold">العطل الأساسي:</span> {newTicket.mainFaultCode} - {newTicket.subFaultCode} ({newTicket.subFaultDescription})
         </div>
       )}
@@ -1720,9 +1720,9 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   </div>
 
   {/* ===== ✅ قسم Follow up Callcenter ===== */}
-  <div className="border-t-2 border-indigo-200 dark:border-indigo-800 pt-4 mt-4">
-    <h4 className="font-black text-lg text-indigo-700 dark:text-indigo-300 mb-4 flex items-center gap-2">
-      <Headphones size={20} className="text-indigo-600" />
+  <div className="border-t-2 border-teal-200 dark:border-teal-800 pt-4 mt-4">
+    <h4 className="font-black text-lg text-teal-700 dark:text-teal-300 mb-4 flex items-center gap-2">
+      <Headphones size={20} className="text-teal-600" />
       📋 Follow up Callcenter
     </h4>
     
@@ -1747,7 +1747,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                     accessibility: Number(e.target.value)
                   }
                 })}
-                className="w-4 h-4 accent-indigo-600"
+                className="w-4 h-4 accent-teal-600"
               />
               <span className="text-xs font-bold">{num}</span>
             </label>
@@ -1775,7 +1775,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                     maintenanceTime: Number(e.target.value)
                   }
                 })}
-                className="w-4 h-4 accent-indigo-600"
+                className="w-4 h-4 accent-teal-600"
               />
               <span className="text-xs font-bold">{num}</span>
             </label>
@@ -1803,7 +1803,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                     centerDealing: Number(e.target.value)
                   }
                 })}
-                className="w-4 h-4 accent-indigo-600"
+                className="w-4 h-4 accent-teal-600"
               />
               <span className="text-xs font-bold">{num}</span>
             </label>
@@ -1831,7 +1831,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                     deliveryProcedures: Number(e.target.value)
                   }
                 })}
-                className="w-4 h-4 accent-indigo-600"
+                className="w-4 h-4 accent-teal-600"
               />
               <span className="text-xs font-bold">{num}</span>
             </label>
@@ -1900,7 +1900,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
 
   {/* الأزرار */}
   <div className="flex gap-3 pt-4 border-t">
-    <button type="submit" className="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2">
+    <button type="submit" className="flex-1 bg-teal-600 text-white py-3.5 rounded-xl font-bold hover:bg-teal-700 transition-colors flex items-center justify-center gap-2">
       <Save size={18}/> إنشاء التذكرة
     </button>
     <button type="button" onClick={() => setShowAddModal(false)} className="px-6 bg-slate-100 dark:bg-slate-700 py-3.5 rounded-xl font-bold hover:bg-slate-200 transition-colors">
@@ -1920,7 +1920,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       {showFullTicketModal && fullTicketView && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] w-full max-w-5xl shadow-2xl max-h-[95vh] overflow-y-auto custom-scrollbar">
-            <div className="sticky top-0 bg-gradient-to-l from-indigo-600 to-purple-600 p-6 rounded-t-[1.5rem] z-10 text-white">
+            <div className="sticky top-0 bg-teal-600 p-6 rounded-t-[1.5rem] z-10 text-white">
               <div className="flex justify-between items-start">
                 <div>
                   <div className="flex items-center gap-3 mb-2">
@@ -2025,7 +2025,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       <label className="text-xs text-slate-500 block mb-2">أكواد الأعطال</label>
       <div className="space-y-1.5">
         {fullTicketView.mainFaultCode && (
-          <div className="text-sm font-bold bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-2">
+          <div className="text-sm font-bold bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-lg p-2">
             {fullTicketView.mainFaultCode} - {fullTicketView.subFaultCode} ({fullTicketView.subFaultDescription})
           </div>
         )}
@@ -2056,7 +2056,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
 
   {/* المبالغ */}
   <div className="grid grid-cols-4 gap-3 text-center">
-    <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-xl">
+    <div className="bg-teal-50 dark:bg-teal-900/30 p-3 rounded-xl">
       <label className="text-xs block mb-1">التكلفة</label>
       <p className="font-black text-lg">{(fullTicketView.totalCost || fullTicketView.estimatedCost || 0).toLocaleString()} ج</p>
     </div>
@@ -2125,9 +2125,9 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     fullTicketView.followUp?.deliveryProcedures > 0 || 
     fullTicketView.followUp?.repurchase) && (
     
-    <div className="border-t-2 border-indigo-200 dark:border-indigo-800 pt-4 mt-4">
-      <h4 className="font-black text-lg text-indigo-700 dark:text-indigo-300 mb-4 flex items-center gap-2">
-        <Headphones size={20} className="text-indigo-600" />
+    <div className="border-t-2 border-teal-200 dark:border-teal-800 pt-4 mt-4">
+      <h4 className="font-black text-lg text-teal-700 dark:text-teal-300 mb-4 flex items-center gap-2">
+        <Headphones size={20} className="text-teal-600" />
         📋 تقييم خدمة العملاء (Follow up)
       </h4>
       
@@ -2136,13 +2136,13 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
           <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">سهولة الوصول الى الشركة</p>
           <div className="flex items-center gap-2">
-            <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
               {fullTicketView.followUp?.accessibility || 0}
             </span>
             <span className="text-sm text-slate-500">/ 10</span>
             <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
               <div 
-                className="h-2 bg-indigo-600 rounded-full transition-all"
+                className="h-2 bg-teal-600 rounded-full transition-all"
                 style={{ width: `${((fullTicketView.followUp?.accessibility || 0) / 10) * 100}%` }}
               />
             </div>
@@ -2153,13 +2153,13 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
           <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">تقييم وقت الصيانة</p>
           <div className="flex items-center gap-2">
-            <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
               {fullTicketView.followUp?.maintenanceTime || 0}
             </span>
             <span className="text-sm text-slate-500">/ 10</span>
             <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
               <div 
-                className="h-2 bg-indigo-600 rounded-full transition-all"
+                className="h-2 bg-teal-600 rounded-full transition-all"
                 style={{ width: `${((fullTicketView.followUp?.maintenanceTime || 0) / 10) * 100}%` }}
               />
             </div>
@@ -2170,13 +2170,13 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
           <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">التعامل داخل مركز الصيانة</p>
           <div className="flex items-center gap-2">
-            <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
               {fullTicketView.followUp?.centerDealing || 0}
             </span>
             <span className="text-sm text-slate-500">/ 10</span>
             <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
               <div 
-                className="h-2 bg-indigo-600 rounded-full transition-all"
+                className="h-2 bg-teal-600 rounded-full transition-all"
                 style={{ width: `${((fullTicketView.followUp?.centerDealing || 0) / 10) * 100}%` }}
               />
             </div>
@@ -2187,13 +2187,13 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
           <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">سهولة اجراءات التسليم والاستلام</p>
           <div className="flex items-center gap-2">
-            <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
               {fullTicketView.followUp?.deliveryProcedures || 0}
             </span>
             <span className="text-sm text-slate-500">/ 10</span>
             <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
               <div 
-                className="h-2 bg-indigo-600 rounded-full transition-all"
+                className="h-2 bg-teal-600 rounded-full transition-all"
                 style={{ width: `${((fullTicketView.followUp?.deliveryProcedures || 0) / 10) * 100}%` }}
               />
             </div>
@@ -2249,7 +2249,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   {/* التعليقات */}
   <div className="border rounded-xl p-4">
     <h3 className="font-bold mb-3 flex items-center gap-2">
-      <MessageSquare size={18} className="text-indigo-600"/> التعليقات ({ticketComments.length})
+      <MessageSquare size={18} className="text-teal-600"/> التعليقات ({ticketComments.length})
     </h3>
     <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
       {ticketComments.map(comment => (
@@ -2257,7 +2257,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
           {editingCommentId === comment.id ? (
             <div className="flex gap-2">
               <input className="flex-1 border p-2 rounded-lg text-sm" value={editingCommentText} onChange={e => setEditingCommentText(e.target.value)} />
-              <button onClick={() => editComment(comment.id)} className="px-3 py-1 bg-indigo-600 text-white rounded text-xs">حفظ</button>
+              <button onClick={() => editComment(comment.id)} className="px-3 py-1 bg-teal-600 text-white rounded text-xs">حفظ</button>
               <button onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }} className="px-3 py-1 bg-slate-200 rounded text-xs">إلغاء</button>
             </div>
           ) : (
@@ -2271,7 +2271,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                   {comment.editedAt && <span className="text-xs text-amber-500 mr-2">(معدل)</span>}
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text); }} className="text-xs text-indigo-500">تعديل</button>
+                  <button onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text); }} className="text-xs text-teal-500">تعديل</button>
                   <button onClick={() => deleteComment(comment.id)} className="text-xs text-rose-500">حذف</button>
                 </div>
               </div>
@@ -2282,7 +2282,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     </div>
     <div className="flex gap-2">
       <input className="flex-1 border p-2 rounded-lg text-sm" placeholder="أضف تعليقاً..." value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addComment(); }} />
-      <button onClick={addComment} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold">إضافة</button>
+      <button onClick={addComment} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">إضافة</button>
     </div>
   </div>
 
@@ -2354,7 +2354,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                 </select>
               </div>
               <div className="flex gap-2 pt-4">
-                <button onClick={() => handleAssign(selectedTicket.id)} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold">حفظ</button>
+                <button onClick={() => handleAssign(selectedTicket.id)} className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold">حفظ</button>
                 <button onClick={() => { setShowAssignModal(false); setAssignData({ technician: '', center: '', callCenter: '' }); }} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إلغاء</button>
               </div>
             </div>
@@ -2414,7 +2414,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                   handleAddSparePart(selectedTicket.id, { name, quantity: qty, price });
                   document.getElementById('partName').value = '';
                   document.getElementById('partPrice').value = '';
-                }} className="mt-3 w-full bg-indigo-600 text-white py-2 rounded-lg font-bold text-sm">إضافة القطعة</button>
+                }} className="mt-3 w-full bg-teal-600 text-white py-2 rounded-lg font-bold text-sm">إضافة القطعة</button>
               </div>
               
               <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
@@ -2446,12 +2446,12 @@ const loadTickets = useCallback(async (targetPage = 1) => {
             </div>
             <div className="space-y-4">
               {ticketHistory.map((event, idx) => (
-                <div key={idx} className="relative pr-6 pb-4 border-r-2 border-indigo-200 dark:border-indigo-800 last:border-0">
-                  <div className="absolute right-[-5px] top-0 w-3 h-3 rounded-full bg-indigo-600"></div>
+                <div key={idx} className="relative pr-6 pb-4 border-r-2 border-teal-200 dark:border-teal-800 last:border-0">
+                  <div className="absolute right-[-5px] top-0 w-3 h-3 rounded-full bg-teal-600"></div>
                   <p className="text-xs text-slate-400">{formatDate(event.timestamp)}</p>
                   <p className="font-bold">{event.action}</p>
                   {event.details && <p className="text-sm text-slate-600">{event.details}</p>}
-                  <p className="text-xs text-indigo-500 mt-1">بواسطة: {event.by}</p>
+                  <p className="text-xs text-teal-500 mt-1">بواسطة: {event.by}</p>
                 </div>
               ))}
               {ticketHistory.length === 0 && <p className="text-center text-slate-400 py-8">لا يوجد سجل</p>}
@@ -2482,15 +2482,15 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-[1.75rem] w-full max-w-4xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
 
-            {/* ===== ✨ رأس احترافي بتدرج لوني ===== */}
-            <div className="relative bg-gradient-to-l from-indigo-600 via-indigo-600 to-purple-600 px-6 py-5 flex justify-between items-center shrink-0">
+            {/* ===== رأس المودال ===== */}
+            <div className="relative bg-teal-600 px-6 py-5 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-3 text-white">
                 <div className="bg-white/15 p-2.5 rounded-xl">
                   <Edit2 size={22} />
                 </div>
                 <div>
                   <h3 className="font-black text-lg leading-tight">تعديل التذكرة</h3>
-                  <p className="text-indigo-100 text-xs font-mono mt-0.5" dir="ltr">#{editingTicket.ticketNumber}</p>
+                  <p className="text-teal-100 text-xs font-mono mt-0.5" dir="ltr">#{editingTicket.ticketNumber}</p>
                 </div>
                 <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full bg-white/15 text-white`}>
                   {TICKET_STATUSES.find(s => s.value === editFormData.status)?.label || editFormData.status}
@@ -2510,45 +2510,45 @@ const loadTickets = useCallback(async (targetPage = 1) => {
 
               {/* ===== قسم: بيانات العميل ===== */}
               <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
-                <div className="flex items-center gap-2 px-5 py-3 bg-indigo-50/60 dark:bg-indigo-900/20 border-b border-slate-100 dark:border-slate-700">
-                  <User size={16} className="text-indigo-600 dark:text-indigo-400" />
-                  <h4 className="font-black text-sm text-indigo-700 dark:text-indigo-300">بيانات العميل</h4>
+                <div className="flex items-center gap-2 px-5 py-3 bg-teal-50/60 dark:bg-teal-900/20 border-b border-slate-100 dark:border-slate-700">
+                  <User size={16} className="text-teal-600 dark:text-teal-400" />
+                  <h4 className="font-black text-sm text-teal-700 dark:text-teal-300">بيانات العميل</h4>
                 </div>
                 <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">اسم العميل *</label>
-                    <input required className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.customerName} onChange={e => setEditFormData({ ...editFormData, customerName: e.target.value })} />
+                    <input required className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-teal-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.customerName} onChange={e => setEditFormData({ ...editFormData, customerName: e.target.value })} />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">رقم الهاتف *</label>
-                    <input required className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold font-mono outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.customerPhone} onChange={e => setEditFormData({ ...editFormData, customerPhone: e.target.value })} dir="ltr" />
+                    <input required className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold font-mono outline-none focus:border-teal-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.customerPhone} onChange={e => setEditFormData({ ...editFormData, customerPhone: e.target.value })} dir="ltr" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">رقم ثاني</label>
-                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold font-mono outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.secondPhone} onChange={e => setEditFormData({ ...editFormData, secondPhone: e.target.value })} dir="ltr" />
+                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold font-mono outline-none focus:border-teal-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.secondPhone} onChange={e => setEditFormData({ ...editFormData, secondPhone: e.target.value })} dir="ltr" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">تليفون أرضي</label>
-                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold font-mono outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.landline} onChange={e => setEditFormData({ ...editFormData, landline: e.target.value })} dir="ltr" />
+                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold font-mono outline-none focus:border-teal-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.landline} onChange={e => setEditFormData({ ...editFormData, landline: e.target.value })} dir="ltr" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">البريد الإلكتروني</label>
-                    <input type="email" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.customerEmail} onChange={e => setEditFormData({ ...editFormData, customerEmail: e.target.value })} />
+                    <input type="email" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-teal-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.customerEmail} onChange={e => setEditFormData({ ...editFormData, customerEmail: e.target.value })} />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">العنوان</label>
-                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.customerAddress} onChange={e => setEditFormData({ ...editFormData, customerAddress: e.target.value })} />
+                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-teal-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.customerAddress} onChange={e => setEditFormData({ ...editFormData, customerAddress: e.target.value })} />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">المحافظة</label>
-                    <select className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.governorate} onChange={e => setEditFormData({ ...editFormData, governorate: e.target.value })}>
+                    <select className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-teal-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.governorate} onChange={e => setEditFormData({ ...editFormData, governorate: e.target.value })}>
                       <option value="">-- اختر --</option>
                       {EGYPT_GOVERNORATES.map(g => <option key={g} value={g}>{g}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">المدينة</label>
-                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.city} onChange={e => setEditFormData({ ...editFormData, city: e.target.value })} />
+                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-teal-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.city} onChange={e => setEditFormData({ ...editFormData, city: e.target.value })} />
                   </div>
                 </div>
               </div>
@@ -2783,20 +2783,20 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                 <div className="p-5 space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">الوسوم</label>
-                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.tags?.join(', ')} onChange={e => setEditFormData({...editFormData, tags: e.target.value.split(',').map(t => t.trim())})} />
+                    <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-teal-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.tags?.join(', ')} onChange={e => setEditFormData({...editFormData, tags: e.target.value.split(',').map(t => t.trim())})} />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">ملاحظات</label>
-                    <textarea rows="2" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 resize-none" value={editFormData.notes} onChange={e => setEditFormData({...editFormData, notes: e.target.value})} />
+                    <textarea rows="2" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-teal-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 resize-none" value={editFormData.notes} onChange={e => setEditFormData({...editFormData, notes: e.target.value})} />
                   </div>
                 </div>
               </div>
 
               {/* ===== ✅ قسم Follow up Callcenter - تعديل ===== */}
               <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
-                <div className="flex items-center gap-2 px-5 py-3 bg-indigo-50/60 dark:bg-indigo-900/20 border-b border-slate-100 dark:border-slate-700">
-                  <Headphones size={16} className="text-indigo-600 dark:text-indigo-400" />
-                  <h4 className="font-black text-sm text-indigo-700 dark:text-indigo-300">📋 Follow up Callcenter</h4>
+                <div className="flex items-center gap-2 px-5 py-3 bg-teal-50/60 dark:bg-teal-900/20 border-b border-slate-100 dark:border-slate-700">
+                  <Headphones size={16} className="text-teal-600 dark:text-teal-400" />
+                  <h4 className="font-black text-sm text-teal-700 dark:text-teal-300">📋 Follow up Callcenter</h4>
                 </div>
                 <div className="p-5">
                 <div className="space-y-4">
@@ -2817,7 +2817,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                               ...editFormData,
                               followUpAccessibility: Number(e.target.value)
                             })}
-                            className="w-4 h-4 accent-indigo-600"
+                            className="w-4 h-4 accent-teal-600"
                           />
                           <span className="text-xs font-bold">{num}</span>
                         </label>
@@ -2842,7 +2842,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                               ...editFormData,
                               followUpMaintenanceTime: Number(e.target.value)
                             })}
-                            className="w-4 h-4 accent-indigo-600"
+                            className="w-4 h-4 accent-teal-600"
                           />
                           <span className="text-xs font-bold">{num}</span>
                         </label>
@@ -2867,7 +2867,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                               ...editFormData,
                               followUpCenterDealing: Number(e.target.value)
                             })}
-                            className="w-4 h-4 accent-indigo-600"
+                            className="w-4 h-4 accent-teal-600"
                           />
                           <span className="text-xs font-bold">{num}</span>
                         </label>
@@ -2892,7 +2892,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                               ...editFormData,
                               followUpDeliveryProcedures: Number(e.target.value)
                             })}
-                            className="w-4 h-4 accent-indigo-600"
+                            className="w-4 h-4 accent-teal-600"
                           />
                           <span className="text-xs font-bold">{num}</span>
                         </label>
@@ -2995,7 +2995,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
               <button type="button" onClick={() => setEditingTicket(null)} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
                 إلغاء
               </button>
-              <button type="submit" className="flex-1 bg-gradient-to-l from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20">
+              <button type="submit" className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-lg shadow-teal-600/20">
                 <Save size={18}/> حفظ التعديلات
               </button>
             </div>
@@ -3009,9 +3009,9 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       <div className="p-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-black flex items-center gap-2">
-            <MessageSquare className="text-indigo-600" size={20}/> تذاكر الصيانة
+            <MessageSquare className="text-teal-600" size={20}/> تذاكر الصيانة
           </h2>
-          <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg text-xs">{displayedTickets.length} تذكرة</span>
+          <span className="bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-3 py-1 rounded-lg text-xs">{displayedTickets.length} تذكرة</span>
           <button
             onClick={() => setShowOverdueOnly(prev => !prev)}
             className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors ${
@@ -3113,7 +3113,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
             <RotateCcw size={14}/>
           </button>
           
-          <button onClick={() => setShowAddModal(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center gap-2">
+          <button onClick={() => setShowAddModal(true)} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-teal-700 flex items-center gap-2">
             <Plus size={14}/> تذكرة جديدة
           </button>
         </div>
@@ -3130,7 +3130,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
           <thead className="bg-white dark:bg-slate-900 border-b text-slate-500 dark:text-slate-400 font-bold text-[11px] uppercase sticky top-0">
             <tr>
               <th className="p-3 w-10">
-                <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={selectedItems.size === tickets.length && tickets.length > 0} onChange={toggleSelectAll} />
+                <input type="checkbox" className="w-4 h-4 accent-teal-600" checked={selectedItems.size === tickets.length && tickets.length > 0} onChange={toggleSelectAll} />
               </th>
               <th className="p-3">رقم التذكرة</th>
               <th className="p-3">العميل</th>
@@ -3172,9 +3172,9 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                   }}
                 >
                   <td className="p-3" onClick={e => e.stopPropagation()}>
-                    <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={selectedItems.has(t.id)} onChange={() => toggleSelectItem(t.id)} />
+                    <input type="checkbox" className="w-4 h-4 accent-teal-600" checked={selectedItems.has(t.id)} onChange={() => toggleSelectItem(t.id)} />
                   </td>
-                  <td className="p-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">{t.ticketNumber || t.id.slice(0,8)}</td>
+                  <td className="p-3 font-mono font-bold text-teal-600 dark:text-teal-400">{t.ticketNumber || t.id.slice(0,8)}</td>
                   <td className="p-3 font-bold">{t.customerName}</td>
                   <td className="p-3 font-mono" dir="ltr">{t.customerPhone}</td>
                   <td className="p-3">{t.deviceModel || t.device || '-'}</td>
@@ -3210,7 +3210,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                   <td className="p-3 text-[9px]">{formatDate(t.updatedAt || t.createdAt)}</td>
                   <td className="p-3 text-center" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-center gap-1">
-                      <button onClick={(e) => { e.stopPropagation(); openFullTicket(t); }} className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded hover:bg-indigo-100" title="فتح">
+                      <button onClick={(e) => { e.stopPropagation(); openFullTicket(t); }} className="p-1.5 bg-teal-50 dark:bg-teal-900/30 text-teal-600 rounded hover:bg-teal-100" title="فتح">
                         <Eye size={14}/>
                       </button>
                       <button onClick={(e) => { e.stopPropagation(); setSelectedTicket(t); setShowAssignModal(true); }} className="p-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 rounded hover:bg-amber-100" title="تعيين">
