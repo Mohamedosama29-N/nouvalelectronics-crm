@@ -76,6 +76,13 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "fromWarehouseId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transfers",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "toWarehouseId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]

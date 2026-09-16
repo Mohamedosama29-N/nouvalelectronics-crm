@@ -342,7 +342,13 @@ useEffect(() => {
 
     const unsubW = onSnapshot(collection(db, 'warehouses'), (s) => {
        const whs = [{id: 'main', name: 'المخزن الرئيسي'}];
-       s.docs.forEach(d => whs.push({id:d.id, ...d.data()}));
+       s.docs.forEach(d => {
+         const data = d.data();
+         // 🛠️ FIX: بعض مستندات المخازن القديمة كان اسمها متخزن جوه
+         // managers.name بدل حقل name مباشر - فكانت بتظهر فاضية في كل
+         // مكان (الهيدر، طلبات التحويل، قايمة تعيين الموظفين، التصدير).
+         whs.push({ id: d.id, ...data, name: data.name || data.managers?.name || `فرع (${d.id.slice(0, 6)})` });
+       });
        setWarehouses(whs);
        const m = {}; 
        whs.forEach(w => m[w.id] = w.name); 
