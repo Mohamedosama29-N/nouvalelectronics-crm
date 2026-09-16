@@ -93,11 +93,23 @@ const fixSearchKeys = async () => {
     const withDeletedFlag = (data, extra = {}) =>
       data.isDeleted === undefined ? { ...extra, isDeleted: false } : extra;
 
+    // 🛠️ FIX (سبب جذري لباگ حقيقي): كل أصناف المخزون القديمة اتضافت من
+    // غير حقل warehouseId خالص. أي استعلام بيفلتر where('warehouseId','==',...)
+    // (شاشة المخزون لغير الأدمن، التحويلات المخزنية، نقطة البيع) بيختفي
+    // منه أي صنف ناقصه الحقل ده تمامًا - حتى لو الصنف موجود فعليًا وبكمية
+    // كافية. بنضيف warehouseId='main' لأي صنف ناقصه (افتراض إن كل المخزون
+    // القديم فعليًا في المخزن الرئيسي، وهو الافتراض الصحيح هنا).
+    const withDefaults = (data, extra = {}) => ({
+      ...withDeletedFlag(data),
+      ...(data.warehouseId === undefined ? { warehouseId: 'main' } : {}),
+      ...extra,
+    });
+
     const jobs = [
       {
         name: 'inventory',
         tokensOf: (data) => buildInventorySearchTokens(data.name, data.serialNumber, data.category, ...(data.tags || [])),
-        extraFieldsOf: (data) => withDeletedFlag(data)
+        extraFieldsOf: (data) => withDefaults(data)
       },
       {
         name: 'customers',
@@ -134,7 +146,7 @@ const fixSearchKeys = async () => {
       }
     }
 
-    showSuccess(`✅ تم تحديث فهارس البحث لـ ${count} مستند (مخزون + عملاء + تذاكر)`);
+    showSuccess(`✅ تم تحديث فهارس البحث وتصحيح المخزن المخصص لـ ${count} مستند (مخزون + عملاء + تذاكر)`);
     loadItems(1); // إعادة تحميل بيانات المخزون
     loadTotalCount();
   } catch (error) {
@@ -1336,7 +1348,7 @@ useEffect(() => {
                 {appUser.role === 'admin' && (
                   <button
                     onClick={fixSearchKeys}
-                    title="يشغّل مرة واحدة لتحديث فهارس البحث لكل الأصناف والعملاء والتذاكر القديمة"
+                    title="يشغّل مرة واحدة لتحديث فهارس البحث ولتصحيح المخزن المخصص (warehouseId) للأصناف القديمة اللي مفيش عندها، ولحقل isDeleted الناقص في الأصناف والعملاء والتذاكر"
                     className="bg-purple-600 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-purple-700"
                   >
                     <RefreshCw size={14} /> تحديث فهارس البحث (شامل)
