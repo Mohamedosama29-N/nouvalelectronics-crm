@@ -101,6 +101,8 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
   //   يختار صنف يبعته بنفسه لفرع معين - تحويل بالدفع مش بالطلب).
   const searchSource = isMainWarehouse ? inventory : mainInventory;
 
+  const [searchResults, setSearchResults] = useState([]);
+
   const handleSearchProduct = (e) => {
     e.preventDefault();
     const term = normalizeSearch(searchProduct);
@@ -109,22 +111,36 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
       return;
     }
 
-    const found = searchSource.find(i => 
+    // 🛠️ FIX (باگ حقيقي): كان بيستخدم .find() فبيختار أول نتيجة مطابقة
+    // تلقائيًا - لو في صنفين سيريالهم "903" و"19035"، البحث عن "903"
+    // كان ممكن يختار "19035" غلط من غير ما يديك فرصة تشوف باقي النتائج.
+    // دلوقتي بنجيب كل النتائج المطابقة ونوريها عشان تختار الصح بنفسك،
+    // إلا لو نتيجة واحدة بس مطابقة - وقتها نختارها تلقائيًا مباشرة.
+    const matches = searchSource.filter(i => 
       normalizeSearch(i.serialNumber).includes(term) || 
       normalizeSearch(i.name).includes(term)
     );
-    
-    if (found) {
-      if (found.quantity <= 0) {
-        showError(isMainWarehouse ? "المنتج غير متوفر بالكمية المطلوبة في مخزنك" : "المنتج غير متوفر حاليًا في المخزن الرئيسي");
-        return;
-      }
-      setSelectedProduct(found);
-      setSearchProduct('');
-      setReqQty(1);
-    } else {
+
+    if (matches.length === 0) {
       showError(isMainWarehouse ? "لم يتم العثور على المنتج في مخزنك" : "لم يتم العثور على المنتج في المخزن الرئيسي");
+      setSearchResults([]);
+    } else if (matches.length === 1) {
+      selectProduct(matches[0]);
+    } else {
+      setSelectedProduct(null);
+      setSearchResults(matches);
     }
+  };
+
+  const selectProduct = (item) => {
+    if (item.quantity <= 0) {
+      showError(isMainWarehouse ? "المنتج غير متوفر بالكمية المطلوبة في مخزنك" : "المنتج غير متوفر حاليًا في المخزن الرئيسي");
+      return;
+    }
+    setSelectedProduct(item);
+    setSearchResults([]);
+    setSearchProduct('');
+    setReqQty(1);
   };
 
   const handleSubmitRequest = async () => {
@@ -467,6 +483,31 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
                 <Search size={18}/>
               </button>
             </form>
+
+            {searchResults.length > 1 && (
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
+                <p className="px-5 pt-4 pb-2 text-xs font-bold text-slate-500 dark:text-slate-400">
+                  لقينا {searchResults.length} أصناف مطابقة - اختر الصنف الصحيح:
+                </p>
+                <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                  {searchResults.map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => selectProduct(item)}
+                      className="w-full text-right px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center justify-between gap-3"
+                    >
+                      <div>
+                        <p className="font-bold text-slate-800 dark:text-white">{item.name}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{item.serialNumber}</p>
+                      </div>
+                      <span className={`text-xs font-bold px-3 py-1 rounded-lg ${item.quantity > 0 ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300'}`}>
+                        الكمية: {item.quantity}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {selectedProduct && (
               <div className="bg-white dark:bg-slate-800 border-2 border-teal-100 dark:border-teal-800 rounded-2xl p-6 shadow-md space-y-4">
