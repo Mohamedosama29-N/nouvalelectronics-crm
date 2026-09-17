@@ -337,7 +337,7 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
 
   // 🆕 بحث عن قطعة غيار حقيقية في المخزون لإضافتها للتذكرة
   const handleSearchSparePart = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     const term = normalizeSearch(sparePartSearch);
     if (!term) return;
     setSearchingSpareParts(true);
@@ -1744,17 +1744,18 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     <p className="text-xs font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1">
       <Package size={14}/> قطع الغيار المطلوبة <span className="text-slate-400 font-normal">(اختياري - تقدر تضيفها دلوقتي أو بعدين)</span>
     </p>
-    <form onSubmit={handleSearchSparePart} className="flex gap-2">
+    <div className="flex gap-2">
       <input
         className="flex-1 border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900"
         placeholder="ابحث بالاسم أو السيريال..."
         value={sparePartSearch}
         onChange={e => setSparePartSearch(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSearchSparePart(); } }}
       />
-      <button type="submit" className="bg-teal-600 text-white px-4 rounded-xl font-bold text-sm flex items-center gap-1">
+      <button type="button" onClick={() => handleSearchSparePart()} className="bg-teal-600 text-white px-4 rounded-xl font-bold text-sm flex items-center gap-1">
         {searchingSpareParts ? <Loader2 size={14} className="animate-spin"/> : <Search size={14}/>} بحث
       </button>
-    </form>
+    </div>
 
     {sparePartResults.length > 0 && (
       <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden divide-y divide-slate-100 dark:divide-slate-700 max-h-48 overflow-y-auto">
@@ -2660,17 +2661,18 @@ const loadTickets = useCallback(async (targetPage = 1) => {
               
               <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
                 <h4 className="font-bold mb-3">إضافة قطعة غيار من المخزون</h4>
-                <form onSubmit={handleSearchSparePart} className="flex gap-2">
+                <div className="flex gap-2">
                   <input
                     className="flex-1 border p-2.5 rounded-lg text-sm bg-white dark:bg-slate-900"
                     placeholder="ابحث بالاسم أو السيريال..."
                     value={sparePartSearch}
                     onChange={e => setSparePartSearch(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSearchSparePart(); } }}
                   />
-                  <button type="submit" className="bg-teal-600 text-white px-4 rounded-lg font-bold text-sm flex items-center gap-1">
+                  <button type="button" onClick={() => handleSearchSparePart()} className="bg-teal-600 text-white px-4 rounded-lg font-bold text-sm flex items-center gap-1">
                     {searchingSpareParts ? <Loader2 size={14} className="animate-spin"/> : <Search size={14}/>} بحث
                   </button>
-                </form>
+                </div>
 
                 {sparePartResults.length > 0 && (
                   <div className="mt-3 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden divide-y divide-slate-100 dark:divide-slate-700 max-h-48 overflow-y-auto">
