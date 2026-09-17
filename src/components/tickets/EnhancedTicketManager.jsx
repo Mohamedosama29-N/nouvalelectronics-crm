@@ -136,6 +136,11 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
   const [filterMaintenanceCenter, setFilterMaintenanceCenter] = useState('all');
   
   // بيانات التذكرة الجديدة
+  // 🆕 قطع غيار بيتم اختيارها وقت إنشاء التذكرة نفسها (قبل ما التذكرة
+  // تتحفظ أصلًا) - بتتضاف فعليًا لما التذكرة تتحفظ، بدل ما تنتظر لحد ما
+  // تفتح التذكرة تاني بعد الحفظ.
+  const [newTicketSpareParts, setNewTicketSpareParts] = useState([]);
+
   const [newTicket, setNewTicket] = useState({
     customerId: '', customerName: '', customerPhone: '', secondPhone: '', landline: '',
     customerEmail: '', customerAddress: '', governorate: '', city: '',
@@ -404,6 +409,32 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
         issue: `${selected.code} - ${selected.description}`
       }));
     }
+  };
+
+  // 🆕 إدارة قطع الغيار المختارة وقت إنشاء التذكرة (لسه محلية، هتتحفظ
+  // فعليًا مع التذكرة نفسها لما تتحفظ)
+  const handleAddNewTicketSparePart = (item) => {
+    if (newTicketSpareParts.some(p => p.id === item.id)) {
+      showError('القطعة دي مضافة بالفعل');
+      return;
+    }
+    setNewTicketSpareParts(prev => [...prev, {
+      id: item.id,
+      serialNumber: item.serialNumber,
+      name: item.name,
+      quantity: 1,
+      price: Number(item.price) || 0,
+    }]);
+    setSparePartResults([]);
+    setSparePartSearch('');
+  };
+
+  const handleRemoveNewTicketSparePart = (itemId) => {
+    setNewTicketSpareParts(prev => prev.filter(p => p.id !== itemId));
+  };
+
+  const handleNewTicketSparePartQtyChange = (itemId, qty) => {
+    setNewTicketSpareParts(prev => prev.map(p => p.id === itemId ? { ...p, quantity: Math.max(1, Number(qty) || 1) } : p));
   };
 
   // 🆕 إضافة كود عطل رئيسي/فرعي إضافي لنفس التذكرة (ممكن يكون فيها أكتر
@@ -957,8 +988,10 @@ const loadTickets = useCallback(async (targetPage = 1) => {
           newTicket.subFaultCode, newTicket.subFaultDescription, fullIssue, newTicket.notes
         ),
         assignedCenter: appUser?.assignedWarehouseId || "main",
-        spareParts: [],
-        totalCost: 0,
+        // 🛠️ FIX: كانت مثبتة على مصفوفة فاضية دايمًا - يعني مستحيل تحدد
+        // قطع غيار وانت بتنشئ التذكرة، لازم تستنى لحد ما تتحفظ وتفتحها تاني.
+        spareParts: newTicketSpareParts,
+        totalCost: newTicketSpareParts.reduce((sum, p) => sum + (Number(p.price) || 0) * (Number(p.quantity) || 1), 0),
         totalPaid: 0,
         remaining: 0,
         comments: [],
@@ -996,6 +1029,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       showSuccess("تم إنشاء التذكرة بنجاح");
       setShowAddModal(false);
       resetNewTicket();
+      setNewTicketSpareParts([]);
       resetSelections();
       setLastDoc(null);
       loadTickets(currentTicketsPage);
@@ -1701,6 +1735,69 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   <div>
     <label className="block text-xs font-bold mb-1">كود المنتج <span className="text-slate-400 font-normal">(اختياري)</span></label>
     <input className="w-full border p-3 rounded-xl text-sm font-mono" value={newTicket.productCode} onChange={e => setNewTicket({...newTicket, productCode: e.target.value})} placeholder="كود المنتج (لو موجود)" />
+  </div>
+
+  {/* 🆕 اختيار قطع الغيار المطلوبة من المخزون وقت إنشاء التذكرة نفسها -
+      بتتحفظ مع التذكرة مباشرة، وتقدر تعمل منها فاتورة بضغطة واحدة بعد كده
+      وهتتحط تلقائي في نقطة البيع مرتبطة بالمخزون الحقيقي. */}
+  <div className="md:col-span-2 bg-purple-50/40 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/40 rounded-xl p-4 space-y-3">
+    <p className="text-xs font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1">
+      <Package size={14}/> قطع الغيار المطلوبة <span className="text-slate-400 font-normal">(اختياري - تقدر تضيفها دلوقتي أو بعدين)</span>
+    </p>
+    <form onSubmit={handleSearchSparePart} className="flex gap-2">
+      <input
+        className="flex-1 border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900"
+        placeholder="ابحث بالاسم أو السيريال..."
+        value={sparePartSearch}
+        onChange={e => setSparePartSearch(e.target.value)}
+      />
+      <button type="submit" className="bg-teal-600 text-white px-4 rounded-xl font-bold text-sm flex items-center gap-1">
+        {searchingSpareParts ? <Loader2 size={14} className="animate-spin"/> : <Search size={14}/>} بحث
+      </button>
+    </form>
+
+    {sparePartResults.length > 0 && (
+      <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden divide-y divide-slate-100 dark:divide-slate-700 max-h-48 overflow-y-auto">
+        {sparePartResults.map(item => (
+          <button
+            type="button"
+            key={item.id}
+            onClick={() => handleAddNewTicketSparePart(item)}
+            className="w-full text-right px-3 py-2 hover:bg-teal-50 dark:hover:bg-teal-900/30 flex items-center justify-between gap-2 bg-white dark:bg-slate-900"
+          >
+            <div>
+              <p className="font-bold text-sm">{item.name}</p>
+              <p className="text-xs text-slate-400 font-mono">{item.serialNumber} - متاح: {item.quantity}</p>
+            </div>
+            <span className="text-xs font-bold text-teal-600">{item.price} ج</span>
+          </button>
+        ))}
+      </div>
+    )}
+
+    {newTicketSpareParts.length > 0 && (
+      <div className="space-y-2">
+        {newTicketSpareParts.map(p => (
+          <div key={p.id} className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5">
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm truncate">{p.name}</p>
+              <p className="text-xs text-slate-400 font-mono">{p.serialNumber}</p>
+            </div>
+            <input
+              type="number"
+              min="1"
+              value={p.quantity}
+              onChange={e => handleNewTicketSparePartQtyChange(p.id, e.target.value)}
+              className="w-14 border rounded-lg p-1.5 text-xs text-center bg-slate-50 dark:bg-slate-800"
+            />
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 w-16 text-left">{p.price * p.quantity} ج</span>
+            <button type="button" onClick={() => handleRemoveNewTicketSparePart(p.id)} className="text-rose-500 hover:text-rose-700">
+              <X size={16}/>
+            </button>
+          </div>
+        ))}
+      </div>
+    )}
   </div>
 
   {/* ملاحظات إضافية */}
