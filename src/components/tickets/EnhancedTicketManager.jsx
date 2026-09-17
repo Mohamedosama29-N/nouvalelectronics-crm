@@ -318,7 +318,7 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
     return () => unsub();
   }, [editSelectedMainFaultId]);
 
-  const handleEditSelectSubFault = (subFaultId) => {
+  const handleEditSelectSubFault = async (subFaultId) => {
     const selected = editSubFaults.find(f => f.id === subFaultId);
     if (selected) {
       setEditSelectedSubFaultId(subFaultId);
@@ -332,6 +332,19 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
         productCode: selected.productCode || prev.productCode,
         issue: `${selected.code} - ${selected.description}`
       }));
+
+      // 🆕 نفس ربط قطعة الغيار التلقائي، بس هنا بنكتبها مباشرة على
+      // التذكرة الموجودة فعلاً (زي أي إضافة قطعة غيار تانية وقت التعديل)
+      if (selected.productCode && editingTicket?.id) {
+        const found = await lookupInventoryByProductCode(selected.productCode);
+        if (found) {
+          const alreadyLinked = (editingTicket.spareParts || []).some(p => p.id === found.id);
+          if (!alreadyLinked) {
+            handleAddSparePart(editingTicket.id, found);
+            showInfo(`تم ربط قطعة الغيار "${found.name}" تلقائيًا بكود العطل ده`);
+          }
+        }
+      }
     }
   };
 
@@ -394,7 +407,29 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
     }
   };
 
-  const handleSelectSubFault = (subFaultId) => {
+  // 🆕 كود المنتج المرتبط بكود العطل (لو موجود) بيتراجع تلقائيًا في
+  // المخزون عشان نعرف نضيف قطعة الغيار المرتبطة بيه تلقائيًا، من غير
+  // ما المستخدم يدوّر عليها يدوي.
+  const lookupInventoryByProductCode = async (productCode) => {
+    if (!productCode) return null;
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'inventory'),
+        where('serialNumber', '==', productCode),
+        where('isDeleted', '==', false),
+        limit(1)
+      ));
+      if (snap.empty) return null;
+      const d = snap.docs[0];
+      const data = d.data();
+      return { id: d.id, serialNumber: data.serialNumber, name: data.name, price: Number(data.price) || 0, quantity: 1 };
+    } catch (error) {
+      console.error('Failed to auto-link product code:', error);
+      return null;
+    }
+  };
+
+  const handleSelectSubFault = async (subFaultId) => {
     const selected = subFaults.find(f => f.id === subFaultId);
     if (selected) {
       setSelectedSubFaultId(subFaultId);
@@ -408,6 +443,16 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
         productCode: selected.productCode || '',
         issue: `${selected.code} - ${selected.description}`
       }));
+
+      // 🆕 لو كود العطل ده مرتبط بكود منتج، ندوّر عليه في المخزون
+      // ونضيفه كقطعة غيار تلقائيًا من غير ما المستخدم يدوّر عليه يدوي.
+      if (selected.productCode) {
+        const found = await lookupInventoryByProductCode(selected.productCode);
+        if (found) {
+          setNewTicketSpareParts(prev => prev.some(p => p.id === found.id) ? prev : [...prev, found]);
+          showInfo(`تم ربط قطعة الغيار "${found.name}" تلقائيًا بكود العطل ده`);
+        }
+      }
     }
   };
 
