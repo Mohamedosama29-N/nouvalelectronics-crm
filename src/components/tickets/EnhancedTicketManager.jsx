@@ -1123,6 +1123,9 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       if (fullTicketView?.id === ticketId) {
         setFullTicketView({ ...fullTicketView, spareParts, totalCost, remaining, history });
       }
+      // 🛠️ FIX: المودال بيعرض بيانات selectedTicket، وده كان بيفضل زي
+      // ما هو (قديم) بعد الإضافة لحد ما تقفل المودال وتفتحه تاني.
+      setSelectedTicket(prev => prev?.id === ticketId ? { ...prev, spareParts, totalCost, remaining, history } : prev);
     } catch(e) {
       showError("فشل إضافة قطعة الغيار: " + e.message);
     }
@@ -1160,6 +1163,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       if (fullTicketView?.id === ticketId) {
         setFullTicketView({ ...fullTicketView, totalPaid, remaining, history });
       }
+      setSelectedTicket(prev => prev?.id === ticketId ? { ...prev, totalPaid, remaining, history } : prev);
     } catch(e) {
       showError("فشل إضافة الدفعة: " + e.message);
     }
@@ -2452,6 +2456,12 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   <div className="flex flex-wrap gap-2 pt-4 border-t">
     <button onClick={() => { setSelectedTicket(fullTicketView); setShowAssignModal(true); }} className="px-4 py-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg text-sm font-bold">
       <Users size={14} className="inline ml-1"/> تعيين مسؤولين
+    </button>
+    {/* 🛠️ FIX (باگ حقيقي): مودال قطع الغيار كان موجود بالكامل في الكود
+        (جدول + بحث + إضافة) بس مفيش أي زرار في كل الملف بيفتحه خالص -
+        يعني الميزة كانت موجودة تقنيًا لكن مستحيل توصلها من الواجهة. */}
+    <button onClick={() => { setSelectedTicket(fullTicketView); setShowSparePartsModal(true); }} className="px-4 py-2 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg text-sm font-bold">
+      <Package size={14} className="inline ml-1"/> قطع الغيار {(fullTicketView.spareParts || []).length > 0 && `(${fullTicketView.spareParts.length})`}
     </button>
     <button onClick={() => { openEditModal(fullTicketView); setShowFullTicketModal(false); }} className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-sm font-bold">
       <Edit size={14} className="inline ml-1"/> تعديل التذكرة
