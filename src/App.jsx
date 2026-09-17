@@ -747,7 +747,7 @@ useEffect(() => {
 
           {/* Main Content */}
           <main className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar">
-             <div className="max-w-7xl mx-auto h-full pb-10 print:pb-0">
+             <div key={currentView} className="max-w-7xl mx-auto h-full pb-10 print:pb-0 animate-fade-in">
                 
                 {/* الصفحات المختلفة - كل صفحة بتتحمّل عند الحاجة فقط (React.lazy) */}
                 <React.Suspense fallback={<PageLoadingFallback />}>

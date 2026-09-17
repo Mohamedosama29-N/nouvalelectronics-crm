@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp, orderBy, increment, limit, runTransaction
+  collection, addDoc, getDocs, getDoc, doc, updateDoc, query, where, serverTimestamp, orderBy, increment, limit, runTransaction
 } from 'firebase/firestore';
 import {
   Receipt,
@@ -58,21 +58,78 @@ export function POSManager({ appUser, systemSettings, setGlobalLoading, prefillF
       ticketId: prefillFromTicket.ticketId || '',
       ticketNumber: prefillFromTicket.ticketNumber || ''
     }));
-    // قطع الغيار بتضاف كـ "خدمات" (isService) عشان مش مرتبطة بصنف حقيقي
-    // في المخزون بمعرّف (id)، فمينفعش تتعامل كأصناف مخزون عادية وقت الدفع.
-    const serviceItems = (prefillFromTicket.items || []).map((item, idx) => ({
-      id: `ticket-item-${prefillFromTicket.ticketId}-${idx}`,
-      name: item.name,
-      price: Number(item.price) || 0,
-      quantity: Number(item.quantity) || 1,
-      serialNumber: '-',
-      isService: true,
-      underWarranty: false
-    }));
-    if (serviceItems.length > 0) {
-      setCart(prev => [...prev, ...serviceItems]);
-    }
-    showInfo(`تم تجهيز بيانات التذكرة #${prefillFromTicket.ticketNumber} في الفاتورة`);
+
+    // 🛠️ FIX: كل قطع الغيار كانت بتتحول لـ"خدمات" عامة بدون خصم من
+    // المخزون، حتى لو كانت فعليًا قطعة حقيقية مرتبطة بصنف في المخزون.
+    // دلوقتي: لو القطعة معاها id حقيقي، بنتحقق من وجودها وكميتها المتاحة
+    // فعليًا دلوقتي (مش الكمية القديمة المحفوظة وقت إضافتها للتذكرة، اللي
+    // ممكن تكون اتغيرت)، وبتتحط في السلة كصنف حقيقي يتخصم من المخزون عند
+    // الدفع. لو القطعة اتضافت يدويًا بدون ربط بالمخزون (أو الصنف بقى مش
+    // موجود/اتحذف)، بتفضل تتعامل كخدمة عادية زي قبل كده.
+    const loadPrefillItems = async () => {
+      const rawItems = prefillFromTicket.items || [];
+      const cartItems = [];
+
+      for (let idx = 0; idx < rawItems.length; idx++) {
+        const item = rawItems[idx];
+        const fallbackServiceItem = {
+          id: `ticket-item-${prefillFromTicket.ticketId}-${idx}`,
+          name: item.name,
+          price: Number(item.price) || 0,
+          quantity: Number(item.quantity) || 1,
+          serialNumber: '-',
+          isService: true,
+          underWarranty: false
+        };
+
+        if (!item.id) {
+          cartItems.push(fallbackServiceItem);
+          continue;
+        }
+
+        try {
+          const snap = await getDoc(doc(db, 'inventory', item.id));
+          if (!snap.exists() || snap.data().isDeleted) {
+            cartItems.push(fallbackServiceItem);
+            continue;
+          }
+          const invData = snap.data();
+          const availableQty = Number(invData.quantity) || 0;
+          const requestedQty = Number(item.quantity) || 1;
+
+          if (availableQty <= 0) {
+            showError(`⚠️ "${item.name}" نفذ من المخزون - اتضافت كخدمة بدون خصم مخزون`);
+            cartItems.push(fallbackServiceItem);
+            continue;
+          }
+
+          const finalQty = Math.min(requestedQty, availableQty);
+          if (finalQty < requestedQty) {
+            showError(`⚠️ الكمية المتاحة من "${item.name}" أقل من المطلوب (متاح ${availableQty} فقط)`);
+          }
+
+          cartItems.push({
+            id: item.id,
+            name: invData.name,
+            price: Number(invData.price) || 0,
+            quantity: finalQty,
+            serialNumber: invData.serialNumber || item.serialNumber || '-',
+            isService: false,
+            underWarranty: false
+          });
+        } catch (error) {
+          console.error('Failed to verify ticket spare part stock:', error);
+          cartItems.push(fallbackServiceItem);
+        }
+      }
+
+      if (cartItems.length > 0) {
+        setCart(prev => [...prev, ...cartItems]);
+      }
+      showInfo(`تم تجهيز بيانات التذكرة #${prefillFromTicket.ticketNumber} في الفاتورة`);
+    };
+
+    loadPrefillItems();
     if (onConsumeTicketPrefill) onConsumeTicketPrefill();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillFromTicket]);
@@ -606,7 +663,7 @@ const handleCheckout = async () => {
   // 🎨 واجهة المستخدم
   // ==========================================================================
   return (
-    <div className="max-w-6xl mx-auto space-y-6" dir="rtl">
+    <div className="max-w-[1400px] mx-auto" dir="rtl">
       
       {/* ===== مودال الدفع ===== */}
       {paymentModal && (
@@ -751,321 +808,355 @@ const handleCheckout = async () => {
         </div>
       )}
 
-      {/* ===== واجهة POS الرئيسية ===== */}
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700">
-        <h2 className="text-2xl font-black mb-8 flex items-center gap-3 text-slate-800 dark:text-white">
-          <Receipt className="text-teal-600" size={26}/> نقطة البيع POS
-        </h2>
+      {/* ===== واجهة POS الرئيسية - عمودين: منطقة العمل + لوحة الدفع الثابتة ===== */}
+      <div className="flex items-center gap-3 mb-6">
+        <div className="p-2.5 bg-teal-600 text-white rounded-xl shadow-sm">
+          <Receipt size={22}/>
+        </div>
+        <div>
+          <h2 className="text-xl font-black text-slate-800 dark:text-white">نقطة البيع</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500">إضافة أصناف وإتمام عملية بيع جديدة</p>
+        </div>
+      </div>
 
-        {/* ✨ ميزة جديدة: تنبيه إن الفاتورة دي مرتبطة بتذكرة صيانة */}
-        {invoice.ticketId && (
-          <div className="mb-6 bg-teal-50 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-800 rounded-xl p-3 flex items-center gap-2 text-sm">
-            <LinkIcon size={16} className="text-teal-600 dark:text-teal-400 shrink-0"/>
-            <span className="text-teal-700 dark:text-teal-300 font-bold">
-              هذه الفاتورة مرتبطة بتذكرة الصيانة #{invoice.ticketNumber}
-            </span>
-          </div>
-        )}
-        
-        {/* ===== شريط البحث ===== */}
-        <form onSubmit={handleSearch} className="flex gap-3 mb-8 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-          <input 
-            className="flex-1 border-none bg-transparent p-3 outline-none text-xl font-mono text-center tracking-widest text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600" 
-            placeholder="مرر الباركود أو اكتب رقم المنتج..." 
-            value={search} 
-            onChange={e => setSearch(e.target.value)} 
-            autoFocus 
-          />
-          <input
-            type="number"
-            min="1"
-            className="w-24 border border-slate-200 dark:border-slate-700 rounded-lg text-center font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-white"
-            value={sellQty}
-            onChange={e => setSellQty(Number(e.target.value) || 1)}
-          />
-          <button 
-            type="submit" 
-            className="bg-teal-600 text-white px-8 rounded-lg font-bold text-sm shadow-sm hover:bg-teal-700 transition-colors flex items-center gap-2"
-          >
-            <Search size={18}/> إضافة
-          </button>
-        </form>
+      {/* ✨ تنبيه إن الفاتورة دي مرتبطة بتذكرة صيانة */}
+      {invoice.ticketId && (
+        <div className="mb-6 bg-teal-50 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-800 rounded-xl p-3 flex items-center gap-2 text-sm">
+          <LinkIcon size={16} className="text-teal-600 dark:text-teal-400 shrink-0"/>
+          <span className="text-teal-700 dark:text-teal-300 font-bold">
+            هذه الفاتورة مرتبطة بتذكرة الصيانة #{invoice.ticketNumber}
+          </span>
+        </div>
+      )}
 
-        {/* ===== عرض السلة مع Checkbox الضمان ===== */}
-        {cart.length > 0 && (
-          <div className="mb-6 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-            <div className="bg-slate-50 dark:bg-slate-900/50 p-3 border-b flex justify-between items-center">
-              <h3 className="font-bold">السلة ({cart.length})</h3>
-              <button
-                onClick={handleClearCart}
-                className="text-rose-500 hover:text-rose-700 text-sm font-bold"
-              >
-                تفريغ السلة
-              </button>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6 items-start">
+
+        {/* ===================== العمود الأساسي: البحث والسلة ===================== */}
+        <div className="space-y-6">
+
+          {/* ===== شريط البحث ===== */}
+          <form onSubmit={handleSearch} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex gap-3">
+            <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700 focus-within:border-teal-500 transition-colors">
+              <Search className="mr-4 text-slate-400 shrink-0" size={20}/>
+              <input 
+                className="flex-1 border-none bg-transparent p-3.5 outline-none text-lg font-mono tracking-wide text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600" 
+                placeholder="مرر الباركود أو اكتب رقم المنتج..." 
+                value={search} 
+                onChange={e => setSearch(e.target.value)} 
+                autoFocus 
+              />
             </div>
-            <div className="max-h-60 overflow-y-auto">
-              {cart.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 border-b last:border-0 hover:bg-slate-50 dark:hover:bg-slate-900/50">
-                  <div className="flex items-center gap-3 flex-1">
-                    {/* ✅ Checkbox الضمان */}
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={item.underWarranty || false}
-                        onChange={(e) => {
-                          const updatedCart = [...cart];
-                          updatedCart[idx] = { 
-                            ...updatedCart[idx], 
-                            underWarranty: e.target.checked 
-                          };
-                          setCart(updatedCart);
-                        }}
-                        className="w-4 h-4 accent-emerald-600"
-                      />
-                      <span className={`text-[10px] font-bold ${item.underWarranty ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                        {item.underWarranty ? '✅ تحت الضمان' : '⬜ خارج الضمان'}
-                      </span>
-                    </label>
-                    
-                    <div className="mr-2">
-                      <p className="font-bold text-slate-800 dark:text-white text-sm">{item.name}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{item.serialNumber}</p>
+            <input
+              type="number"
+              min="1"
+              className="w-20 border border-slate-200 dark:border-slate-700 rounded-xl text-center font-bold bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-white outline-none focus:border-teal-500"
+              value={sellQty}
+              onChange={e => setSellQty(Number(e.target.value) || 1)}
+            />
+            <button 
+              type="submit" 
+              className="bg-teal-600 text-white px-6 rounded-xl font-bold text-sm shadow-sm hover:bg-teal-700 transition-colors flex items-center gap-2"
+            >
+              <Search size={18}/> إضافة
+            </button>
+          </form>
+
+          {/* ===== السلة ===== */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+            <div className="bg-slate-50 dark:bg-slate-900/50 px-5 py-3.5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+              <h3 className="font-black text-slate-800 dark:text-white flex items-center gap-2">
+                السلة
+                {cart.length > 0 && (
+                  <span className="bg-teal-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                    {cart.length}
+                  </span>
+                )}
+              </h3>
+              {cart.length > 0 && (
+                <button
+                  onClick={handleClearCart}
+                  className="text-rose-500 hover:text-rose-700 text-xs font-bold flex items-center gap-1"
+                >
+                  <X size={14}/> تفريغ السلة
+                </button>
+              )}
+            </div>
+
+            {cart.length === 0 ? (
+              <div className="py-16 flex flex-col items-center justify-center text-slate-300 dark:text-slate-600">
+                <Receipt size={40} className="mb-3 opacity-50"/>
+                <p className="text-sm font-bold text-slate-400 dark:text-slate-500">السلة فاضية</p>
+                <p className="text-xs mt-1">ابحث عن صنف بالباركود أو الاسم فوق عشان تضيفه</p>
+              </div>
+            ) : (
+              <div className="max-h-[50vh] overflow-y-auto custom-scrollbar divide-y divide-slate-50 dark:divide-slate-700/50">
+                {cart.map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between gap-3 p-4 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${item.isService ? 'bg-violet-50 dark:bg-violet-900/30 text-violet-500' : 'bg-teal-50 dark:bg-teal-900/30 text-teal-500'}`}>
+                        {item.isService ? <LinkIcon size={16}/> : <Receipt size={16}/>}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-800 dark:text-white text-sm truncate">{item.name}</p>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 font-mono">{item.serialNumber} {item.quantity > 1 ? `× ${item.quantity}` : ''}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    {/* ✨ ميزة جديدة: تحديد مدة ضمان المنتج المباع (لتفعيل تنبيهات اقتراب انتهاء الضمان لاحقًا) */}
-                    {!item.underWarranty && (
-                      <div className="flex items-center gap-1" title="مدة ضمان هذا المنتج بالشهور">
+
+                    {!item.isService && (
+                      <label className="flex items-center gap-1.5 cursor-pointer shrink-0" title="تحت الضمان">
                         <input
-                          type="number"
-                          min="0"
-                          placeholder="0"
-                          value={item.warrantyMonths || ''}
+                          type="checkbox"
+                          checked={item.underWarranty || false}
                           onChange={(e) => {
                             const updatedCart = [...cart];
-                            updatedCart[idx] = { ...updatedCart[idx], warrantyMonths: Number(e.target.value) || 0 };
+                            updatedCart[idx] = { ...updatedCart[idx], underWarranty: e.target.checked };
                             setCart(updatedCart);
                           }}
-                          className="w-14 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 text-xs text-center bg-white dark:bg-slate-900"
+                          className="w-4 h-4 accent-emerald-600"
                         />
-                        <span className="text-[9px] text-slate-400">شهر ضمان</span>
-                      </div>
+                        <span className={`text-[10px] font-bold whitespace-nowrap ${item.underWarranty ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                          ضمان
+                        </span>
+                      </label>
                     )}
-                    <span className={`font-black ${item.underWarranty ? 'text-emerald-500 dark:text-emerald-400' : 'text-teal-600 dark:text-teal-400'}`}>
+
+                    {!item.isService && !item.underWarranty && (
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="أشهر"
+                        value={item.warrantyMonths || ''}
+                        onChange={(e) => {
+                          const updatedCart = [...cart];
+                          updatedCart[idx] = { ...updatedCart[idx], warrantyMonths: Number(e.target.value) || 0 };
+                          setCart(updatedCart);
+                        }}
+                        title="مدة ضمان هذا المنتج بالشهور"
+                        className="w-14 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 text-xs text-center bg-slate-50 dark:bg-slate-900 shrink-0"
+                      />
+                    )}
+
+                    <span className={`font-black shrink-0 w-24 text-left ${item.underWarranty ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-800 dark:text-white'}`}>
                       {item.underWarranty ? '0 ج' : `${(item.price * item.quantity).toLocaleString()} ج`}
                     </span>
+
                     <button
                       onClick={() => handleRemoveFromCart(item)}
-                      className="text-rose-500 hover:text-rose-700"
+                      className="text-slate-300 dark:text-slate-600 hover:text-rose-500 shrink-0"
                     >
-                      <X size={16}/>
+                      <X size={18}/>
                     </button>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ===== معلومات العميل ===== */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div>
-            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 block">العميل</label>
-            <div className="relative flex gap-2">
-              <div className="flex-1 relative">
-                <User className="absolute right-3 top-3 text-slate-400" size={18}/>
-                <input 
-                  className="w-full border border-slate-200 dark:border-slate-700 pr-10 p-3 rounded-xl font-bold focus:border-teal-500 outline-none text-sm bg-white dark:bg-slate-900" 
-                  placeholder="اسم العميل" 
-                  value={invoice.customerName} 
-                  onChange={e => {
-                    setInvoice({...invoice, customerName: e.target.value});
-                    setShowCustomerSuggestions(true);
-                  }}
-                  onFocus={() => setShowCustomerSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 150)}
-                  autoComplete="off"
-                  required
-                />
-                {/* ✨ قائمة اقتراحات العملاء الموجودين فعليًا */}
-                {showCustomerSuggestions && invoice.customerName.trim().length >= 2 && (
-                  <div className="absolute z-20 top-full mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg max-h-60 overflow-y-auto">
-                    {searchingCustomers ? (
-                      <div className="p-3 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-                        <Loader2 size={14} className="animate-spin"/> جاري البحث...
-                      </div>
-                    ) : customerSuggestions.length > 0 ? (
-                      <>
-                        <div className="px-3 py-1.5 text-[10px] text-slate-400 border-b border-slate-100 dark:border-slate-700">
-                          عملاء موجودين فعلاً - اضغط للاختيار
-                        </div>
-                        {customerSuggestions.map(c => (
-                          <button
-                            type="button"
-                            key={c.id}
-                            onClick={() => { handleSelectCustomer(c); setShowCustomerSuggestions(false); }}
-                            className="w-full text-right px-3 py-2 hover:bg-teal-50 dark:hover:bg-teal-900/30 flex items-center justify-between gap-2 border-b border-slate-50 dark:border-slate-700/50 last:border-0"
-                          >
-                            <span className="font-bold text-sm">{c.name}</span>
-                            <span className="text-xs text-slate-400 font-mono" dir="ltr">{c.phone}</span>
-                          </button>
-                        ))}
-                      </>
-                    ) : (
-                      <div className="p-3 text-center text-xs text-slate-400">
-                        مفيش عميل بهذا الاسم - هيتم اعتباره عميل جديد تلقائيًا عند إتمام البيع
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={() => setShowCustomerModal(true)}
-                className="px-3 bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 rounded-xl hover:bg-teal-100 dark:hover:bg-teal-900/50"
-                title="إضافة عميل جديد"
-              >
-                <UserPlus size={18}/>
-              </button>
-            </div>
-            
-            {recentCustomers.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                <span className="text-[9px] text-slate-400 dark:text-slate-500">أخر العملاء:</span>
-                {recentCustomers.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => handleSelectCustomer(c)}
-                    className="text-[9px] bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded hover:bg-teal-100 dark:hover:bg-teal-900/50"
-                  >
-                    {c.name}
-                  </button>
                 ))}
               </div>
             )}
           </div>
-          <div>
-            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 block">رقم الهاتف</label>
-            <div className="relative">
-              <Phone className="absolute right-3 top-3 text-slate-400" size={18}/>
-              <input 
-                className="w-full border border-slate-200 dark:border-slate-700 pr-10 p-3 rounded-xl font-bold font-mono focus:border-teal-500 outline-none text-sm bg-white dark:bg-slate-900" 
-                placeholder="01XXXXXXXXX" 
-                value={invoice.phone} 
-                onChange={e => setInvoice({...invoice, phone: e.target.value})} 
-              />
-            </div>
-          </div>
         </div>
 
-        {/* ===== خيارات الفاتورة ===== */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 mb-6">
-          <div>
-            <label className="block text-xs font-bold text-teal-900 dark:text-teal-300 mb-1">الفني</label>
-            <select 
-              className="w-full p-2.5 border border-teal-100 dark:border-teal-800 rounded-xl bg-white dark:bg-slate-900 font-bold text-xs outline-none focus:border-teal-500" 
-              value={invoice.technicianName} 
-              onChange={e => setInvoice({...invoice, technicianName: e.target.value})}
-            >
-              <option value="">-- بدون فني --</option>
-              {(systemSettings.technicians || []).map((t, idx) => <option key={idx} value={t}>{t}</option>)}
-            </select>
+        {/* ===================== لوحة الدفع الجانبية (ثابتة أثناء التمرير) ===================== */}
+        <div className="lg:sticky lg:top-6 space-y-4">
+
+          {/* ===== معلومات العميل ===== */}
+          <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-4">
+            <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-wide">بيانات العميل</h3>
+            <div>
+              <div className="relative flex gap-2">
+                <div className="flex-1 relative">
+                  <User className="absolute right-3 top-3 text-slate-400" size={18}/>
+                  <input 
+                    className="w-full border border-slate-200 dark:border-slate-700 pr-10 p-3 rounded-xl font-bold focus:border-teal-500 outline-none text-sm bg-slate-50 dark:bg-slate-900/60" 
+                    placeholder="اسم العميل" 
+                    value={invoice.customerName} 
+                    onChange={e => {
+                      setInvoice({...invoice, customerName: e.target.value});
+                      setShowCustomerSuggestions(true);
+                    }}
+                    onFocus={() => setShowCustomerSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 150)}
+                    autoComplete="off"
+                    required
+                  />
+                  {/* ✨ قائمة اقتراحات العملاء الموجودين فعليًا */}
+                  {showCustomerSuggestions && invoice.customerName.trim().length >= 2 && (
+                    <div className="absolute z-20 top-full mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                      {searchingCustomers ? (
+                        <div className="p-3 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                          <Loader2 size={14} className="animate-spin"/> جاري البحث...
+                        </div>
+                      ) : customerSuggestions.length > 0 ? (
+                        <>
+                          <div className="px-3 py-1.5 text-[10px] text-slate-400 border-b border-slate-100 dark:border-slate-700">
+                            عملاء موجودين فعلاً - اضغط للاختيار
+                          </div>
+                          {customerSuggestions.map(c => (
+                            <button
+                              type="button"
+                              key={c.id}
+                              onClick={() => { handleSelectCustomer(c); setShowCustomerSuggestions(false); }}
+                              className="w-full text-right px-3 py-2 hover:bg-teal-50 dark:hover:bg-teal-900/30 flex items-center justify-between gap-2 border-b border-slate-50 dark:border-slate-700/50 last:border-0"
+                            >
+                              <span className="font-bold text-sm">{c.name}</span>
+                              <span className="text-xs text-slate-400 font-mono" dir="ltr">{c.phone}</span>
+                            </button>
+                          ))}
+                        </>
+                      ) : (
+                        <div className="p-3 text-center text-xs text-slate-400">
+                          مفيش عميل بهذا الاسم - هيتم اعتباره عميل جديد تلقائيًا عند إتمام البيع
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => setShowCustomerModal(true)}
+                  className="px-3 bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 rounded-xl hover:bg-teal-100 dark:hover:bg-teal-900/50"
+                  title="إضافة عميل جديد"
+                >
+                  <UserPlus size={18}/>
+                </button>
+              </div>
+              
+              {recentCustomers.length > 0 && (
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {recentCustomers.map(c => (
+                    <button
+                      key={c.id}
+                      onClick={() => handleSelectCustomer(c)}
+                      className="text-[10px] bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-md hover:bg-teal-100 dark:hover:bg-teal-900/50 hover:text-teal-700 dark:hover:text-teal-300"
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <div className="relative">
+                <Phone className="absolute right-3 top-3 text-slate-400" size={18}/>
+                <input 
+                  className="w-full border border-slate-200 dark:border-slate-700 pr-10 p-3 rounded-xl font-bold font-mono focus:border-teal-500 outline-none text-sm bg-slate-50 dark:bg-slate-900/60" 
+                  placeholder="رقم الهاتف" 
+                  value={invoice.phone} 
+                  onChange={e => setInvoice({...invoice, phone: e.target.value})} 
+                />
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-bold text-teal-900 dark:text-teal-300 mb-1">الخصم</label>
-            <div className="flex bg-white dark:bg-slate-900 rounded-xl border border-teal-100 dark:border-teal-800 overflow-hidden">
-              <input 
-                type="number" 
-                className="flex-1 p-2.5 outline-none font-bold text-center text-rose-600 dark:text-rose-400 text-sm bg-transparent" 
-                value={invoice.discount} 
-                onChange={e => setInvoice({...invoice, discount: e.target.value})} 
-                min="0"
-                max={invoice.discountType === 'percent' ? 100 : undefined}
-                placeholder="0"
-              />
-              <select 
-                className="bg-slate-50 dark:bg-slate-800 px-3 font-bold text-xs border-r border-slate-100 dark:border-slate-700 outline-none" 
-                value={invoice.discountType} 
-                onChange={e => setInvoice({...invoice, discountType: e.target.value})}
+
+          {/* ===== خيارات الفاتورة ===== */}
+          <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-3">
+            <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-wide">تفاصيل الفاتورة</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">الفني</label>
+                <select 
+                  className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/60 font-bold text-xs outline-none focus:border-teal-500" 
+                  value={invoice.technicianName} 
+                  onChange={e => setInvoice({...invoice, technicianName: e.target.value})}
+                >
+                  <option value="">-- بدون فني --</option>
+                  {(systemSettings.technicians || []).map((t, idx) => <option key={idx} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">الخصم</label>
+                <div className="flex bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                  <input 
+                    type="number" 
+                    className="flex-1 w-0 p-2.5 outline-none font-bold text-center text-rose-600 dark:text-rose-400 text-sm bg-transparent" 
+                    value={invoice.discount} 
+                    onChange={e => setInvoice({...invoice, discount: e.target.value})} 
+                    min="0"
+                    max={invoice.discountType === 'percent' ? 100 : undefined}
+                    placeholder="0"
+                  />
+                  <select 
+                    className="bg-slate-100 dark:bg-slate-800 px-2 font-bold text-xs border-r border-slate-200 dark:border-slate-700 outline-none" 
+                    value={invoice.discountType} 
+                    onChange={e => setInvoice({...invoice, discountType: e.target.value})}
+                  >
+                    <option value="value">ج.م</option>
+                    <option value="percent">%</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">الرسوم</label>
+                <select 
+                  className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/60 font-bold text-xs outline-none focus:border-teal-500" 
+                  value={invoice.installationFeeId} 
+                  onChange={e => setInvoice({...invoice, installationFeeId: e.target.value})}
+                >
+                  <option value="">بدون رسوم</option>
+                  {(systemSettings.installationFees || []).map(f => <option key={f.id} value={f.id}>{f.label} (+{f.value} ج)</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">طريقة الدفع</label>
+                <select 
+                  className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/60 font-bold text-xs outline-none focus:border-teal-500" 
+                  value={invoice.paymentMethod}
+                  onChange={e => setInvoice({...invoice, paymentMethod: e.target.value})}
+                >
+                  <option value="cash">نقداً</option>
+                  <option value="card">بطاقة</option>
+                  <option value="transfer">تحويل بنكي</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">الضريبة</label>
+                <button 
+                  type="button" 
+                  onClick={() => setInvoice({...invoice, taxEnabled: !invoice.taxEnabled})} 
+                  className={`w-full p-2.5 rounded-xl font-bold text-xs transition-all border ${invoice.taxEnabled ? 'bg-teal-600 border-teal-600 text-white' : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`}
+                >
+                  {invoice.taxEnabled ? 'مطبقة' : 'غير مطبقة'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ===== عرض الإجماليات وزرار الدفع ===== */}
+          <div className="bg-teal-900 text-white p-6 rounded-2xl shadow-lg border-t-4 border-emerald-500 space-y-4">
+            <div className="text-xs font-bold text-teal-100 space-y-1.5">
+              <p className="flex justify-between"><span>المجموع الفرعي</span><span className="text-white">{calculations.subtotal}</span></p>
+              {calculations.discountAmount > 0 && 
+                <p className="flex justify-between text-rose-300"><span>الخصم</span><span>-{calculations.discountAmount.toFixed(1)}</span></p>
+              }
+              <p className="flex justify-between"><span>الضريبة</span><span className="text-white">+{calculations.taxAmount.toFixed(1)}</span></p>
+              {calculations.installAmount > 0 && 
+                <p className="flex justify-between"><span>الرسوم</span><span className="text-white">+{calculations.installAmount}</span></p>
+              }
+              {calculations.servicesAmount > 0 && 
+                <p className="flex justify-between text-emerald-300"><span>الخدمات</span><span className="text-white">+{calculations.servicesAmount}</span></p>
+              }
+            </div>
+            <div className="border-t border-teal-800 pt-4 flex items-end justify-between">
+              <p className="text-[11px] text-teal-200">الصافي للدفع</p>
+              <span className="text-4xl font-black text-emerald-400 tracking-tighter">
+                {calculations.finalTotal.toLocaleString()} <span className="text-sm font-normal">ج.م</span>
+              </span>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button 
+                onClick={handleProcessPayment}
+                disabled={cart.length === 0 && !foundItem}
+                className="flex-1 bg-emerald-500 text-white py-3.5 rounded-xl font-bold text-base shadow-md hover:bg-emerald-600 transition-colors flex justify-center items-center gap-2 disabled:opacity-50"
               >
-                <option value="value">ج.م</option>
-                <option value="percent">%</option>
-              </select>
+                <CheckCircle size={22}/> إتمام البيع
+              </button>
+              <button 
+                onClick={handleGenerateQR}
+                disabled={calculations.finalTotal === 0}
+                className="px-5 bg-teal-700 hover:bg-teal-600 text-white py-3.5 rounded-xl font-bold shadow-md transition-colors disabled:opacity-50"
+                title="توليد QR للفاتورة"
+              >
+                <ImageIcon size={22}/>
+              </button>
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-bold text-teal-900 dark:text-teal-300 mb-1">الرسوم</label>
-            <select 
-              className="w-full p-2.5 border border-teal-100 dark:border-teal-800 rounded-xl bg-white dark:bg-slate-900 font-bold text-xs outline-none focus:border-teal-500" 
-              value={invoice.installationFeeId} 
-              onChange={e => setInvoice({...invoice, installationFeeId: e.target.value})}
-            >
-              <option value="">بدون رسوم</option>
-              {(systemSettings.installationFees || []).map(f => <option key={f.id} value={f.id}>{f.label} (+{f.value} ج)</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-teal-900 dark:text-teal-300 mb-1">طريقة الدفع</label>
-            <select 
-              className="w-full p-2.5 border border-teal-100 dark:border-teal-800 rounded-xl bg-white dark:bg-slate-900 font-bold text-xs outline-none focus:border-teal-500" 
-              value={invoice.paymentMethod}
-              onChange={e => setInvoice({...invoice, paymentMethod: e.target.value})}
-            >
-              <option value="cash">نقداً</option>
-              <option value="card">بطاقة</option>
-              <option value="transfer">تحويل بنكي</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-teal-900 dark:text-teal-300 mb-1">الضريبة</label>
-            <button 
-              type="button" 
-              onClick={() => setInvoice({...invoice, taxEnabled: !invoice.taxEnabled})} 
-              className={`w-full p-2.5 rounded-xl font-bold text-xs transition-all border ${invoice.taxEnabled ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`}
-            >
-              {invoice.taxEnabled ? 'مطبقة' : 'غير مطبقة'}
-            </button>
-          </div>
-        </div>
-
-        {/* ===== عرض الإجماليات ===== */}
-        <div className="bg-teal-900 text-white p-8 rounded-2xl shadow-lg flex flex-col md:flex-row justify-between items-center border-t-4 border-emerald-500 mb-6">
-          <div className="text-right text-xs font-bold text-teal-100 space-y-1.5">
-            <p>المجموع الفرعي: <span className="text-white mr-2">{calculations.subtotal}</span></p>
-            {calculations.discountAmount > 0 && 
-              <p className="text-rose-300">الخصم: <span className="mr-2">-{calculations.discountAmount.toFixed(1)}</span></p>
-            }
-            <p>الضريبة: <span className="text-white mr-2">+{calculations.taxAmount.toFixed(1)}</span></p>
-            {calculations.installAmount > 0 && 
-              <p>الرسوم: <span className="text-white mr-2">+{calculations.installAmount}</span></p>
-            }
-            {calculations.servicesAmount > 0 && 
-              <p className="text-emerald-300">الخدمات: <span className="text-white mr-2">+{calculations.servicesAmount}</span></p>
-            }
-          </div>
-          <div className="text-center md:text-left w-full md:w-auto">
-            <p className="text-[10px] text-teal-200 mb-0.5">الصافي للدفع</p>
-            <span className="text-5xl font-black text-emerald-400 tracking-tighter">
-              {calculations.finalTotal.toLocaleString()} <span className="text-sm font-normal">ج.م</span>
-            </span>
-          </div>
-        </div>
-
-        {/* ===== أزرار الإجراءات ===== */}
-        <div className="flex flex-wrap gap-3">
-          <button 
-            onClick={handleProcessPayment}
-            disabled={cart.length === 0 && !foundItem}
-            className="flex-1 bg-emerald-500 text-white py-4 rounded-xl font-bold text-lg shadow-md hover:bg-emerald-600 transition-colors flex justify-center items-center gap-2 disabled:opacity-50"
-          >
-            <CheckCircle size={24}/> إتمام البيع
-          </button>
-          <button 
-            onClick={handleGenerateQR}
-            disabled={calculations.finalTotal === 0}
-            className="px-6 bg-teal-600 text-white py-4 rounded-xl font-bold text-lg shadow-md hover:bg-teal-700 transition-colors disabled:opacity-50"
-          >
-            <ImageIcon size={24}/>
-          </button>
         </div>
       </div>
     </div>

@@ -15,6 +15,36 @@
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-teal-500;
   }
+
+  /* 🎨 تحسين احترافي: تبديل الوضع الليلي/النهاري كان بيحصل فجأة بدون أي
+     انتقال، فكان حسّه مفاجئ. دلوقتي الألوان بتتغيّر بسلاسة على أي عنصر
+     (خلفيات، حدود، نصوص) بدون ما يأثر على أي أنيميشن تاني في الصفحة. */
+  *,
+  *::before,
+  *::after {
+    transition-property: background-color, border-color, color, box-shadow;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+
+  /* بيحترم لو المستخدم مفعّل "تقليل الحركة" من إعدادات نظام التشغيل */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+
+  /* 🎨 استجابة لمسية للأزرار - ضغطة خفيفة بتحس إنها فعلية، من غير ما
+     تحتاج تلمس كل زرار في كل شاشة على حدة */
+  button:not(:disabled) {
+    transition: transform 100ms ease-out, background-color 150ms ease-out, box-shadow 150ms ease-out;
+  }
+  button:not(:disabled):active {
+    transform: scale(0.97);
+  }
 }
 
 @layer utilities {
@@ -33,4 +63,34 @@
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     @apply bg-slate-400 dark:bg-slate-600;
   }
+  /* 🎨 نفس شريط التمرير المخصص، بس لمتصفح Firefox (custom-scrollbar
+     كانت شغالة على كروم بس، Firefox بيستخدم خصائص مختلفة تمامًا) */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.slate.300') transparent;
+  }
+  .dark .custom-scrollbar {
+    scrollbar-color: theme('colors.slate.700') transparent;
+  }
+
+  /* 🎨 دخول سلس للمحتوى عند التنقل بين الصفحات - بيدّي إحساس احترافي
+     أكتر من ظهور المحتوى فجأة. استخدامها اختيارية (class="animate-fade-in") */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-in {
+    animation: fadeIn 200ms ease-out;
+  }
+
+  /* 🎨 رفعة خفيفة للبطاقات عند مرور الماوس - إحساس تفاعلي بدل ما تكون
+     البطاقات ثابتة تمامًا (استخدام اختياري: class="hover-lift") */
+  .hover-lift {
+    transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+  }
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    @apply shadow-lg;
+  }
 }
+

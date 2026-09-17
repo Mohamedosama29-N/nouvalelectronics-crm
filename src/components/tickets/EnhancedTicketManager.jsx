@@ -30,7 +30,8 @@ import {
   Webhook,
   RotateCcw,
   Wrench as WrenchIcon,
-  FileText as FileTextIcon
+  FileText as FileTextIcon,
+  Search
 } from 'lucide-react';
 import { StatusSelectComp } from './StatusSelectComp';
 import { EGYPT_GOVERNORATES } from '../../constants/misc';
@@ -99,6 +100,24 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
   const [models, setModels] = useState([]);
   const [mainFaults, setMainFaults] = useState([]);
   const [subFaults, setSubFaults] = useState([]);
+
+  // 🆕 نفس نظام الأكواد المرتبطة (منتج → موديل → كود رئيسي → كود فرعي)
+  // بس لسياق التعديل، منفصل عن سياق إنشاء تذكرة جديدة عشان متتعارضش
+  // القوائم مع بعض لو الاتنين اتفتحوا في لحظات مختلفة.
+  const [editProductSearchInput, setEditProductSearchInput] = useState('');
+  const [editSelectedProductId, setEditSelectedProductId] = useState('');
+  const [editSelectedModelId, setEditSelectedModelId] = useState('');
+  const [editSelectedMainFaultId, setEditSelectedMainFaultId] = useState('');
+  const [editSelectedSubFaultId, setEditSelectedSubFaultId] = useState('');
+  const [editModels, setEditModels] = useState([]);
+  const [editMainFaults, setEditMainFaults] = useState([]);
+  const [editSubFaults, setEditSubFaults] = useState([]);
+
+  // 🆕 البحث عن قطع غيار حقيقية من المخزون لإضافتها للتذكرة (بدل خانة
+  // نص حرة)، عشان تتربط فعليًا بالفاتورة لاحقًا وتتخصم من المخزون صح.
+  const [sparePartSearch, setSparePartSearch] = useState('');
+  const [sparePartResults, setSparePartResults] = useState([]);
+  const [searchingSpareParts, setSearchingSpareParts] = useState(false);
 
   // باقي الـ State
   const [technicians, setTechnicians] = useState([]);
@@ -253,6 +272,122 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
     });
     return () => unsub();
   }, [selectedMainFaultId]);
+
+  // 🆕 نفس سلسلة تحميل موديل/كود رئيسي/كود فرعي، بس لسياق التعديل
+  useEffect(() => {
+    if (!editSelectedProductId) {
+      setEditModels([]);
+      setEditSelectedModelId('');
+      return;
+    }
+    const q = query(collection(db, 'models'), where('productId', '==', editSelectedProductId));
+    const unsub = onSnapshot(q, (snap) => {
+      setEditModels(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, [editSelectedProductId]);
+
+  useEffect(() => {
+    if (!editSelectedModelId) {
+      setEditMainFaults([]);
+      setEditSelectedMainFaultId('');
+      return;
+    }
+    const q = query(collection(db, 'mainFaultCodes'), where('modelId', '==', editSelectedModelId));
+    const unsub = onSnapshot(q, (snap) => {
+      setEditMainFaults(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, [editSelectedModelId]);
+
+  useEffect(() => {
+    if (!editSelectedMainFaultId) {
+      setEditSubFaults([]);
+      setEditSelectedSubFaultId('');
+      return;
+    }
+    const q = query(collection(db, 'subFaultCodes'), where('mainFaultId', '==', editSelectedMainFaultId));
+    const unsub = onSnapshot(q, (snap) => {
+      setEditSubFaults(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, [editSelectedMainFaultId]);
+
+  const handleEditSelectSubFault = (subFaultId) => {
+    const selected = editSubFaults.find(f => f.id === subFaultId);
+    if (selected) {
+      setEditSelectedSubFaultId(subFaultId);
+      const mainFault = editMainFaults.find(m => m.id === editSelectedMainFaultId);
+      setEditFormData(prev => ({
+        ...prev,
+        mainFaultCode: mainFault?.code || '',
+        mainFaultDescription: mainFault?.description || '',
+        subFaultCode: selected.code,
+        subFaultDescription: selected.description,
+        productCode: selected.productCode || prev.productCode,
+        issue: `${selected.code} - ${selected.description}`
+      }));
+    }
+  };
+
+  // 🆕 بحث عن قطعة غيار حقيقية في المخزون لإضافتها للتذكرة
+  const handleSearchSparePart = async (e) => {
+    e.preventDefault();
+    const term = normalizeSearch(sparePartSearch);
+    if (!term) return;
+    setSearchingSpareParts(true);
+    try {
+      const tokens = buildQueryTokens(term);
+      const snap = await getDocs(query(
+        collection(db, 'inventory'),
+        where('isDeleted', '==', false),
+        where('searchTokens', 'array-contains-any', tokens.length ? tokens : [term]),
+        limit(10)
+      ));
+      setSparePartResults(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch {
+      showError('فشل البحث عن قطع الغيار');
+    }
+    setSearchingSpareParts(false);
+  };
+
+  // 🆕 محاولة استرجاع اختيار المنتج/الموديل/الكود اللي اتسجل وقت إنشاء
+  // التذكرة، عشان القوائم المرتبطة تفتح جاهزة بدل ما تبدأ فاضية كل مرة.
+  const initEditFaultSelection = async (ticket) => {
+    setEditSelectedProductId('');
+    setEditSelectedModelId('');
+    setEditSelectedMainFaultId('');
+    setEditSelectedSubFaultId('');
+    setEditProductSearchInput(ticket.device || '');
+    if (!ticket.mainFaultCode) return;
+
+    try {
+      const mainSnap = await getDocs(query(collection(db, 'mainFaultCodes'), where('code', '==', ticket.mainFaultCode)));
+      if (mainSnap.empty) return;
+      const mainDoc = mainSnap.docs[0];
+      const modelId = mainDoc.data().modelId;
+      if (!modelId) return;
+
+      const modelSnap = await getDocs(query(collection(db, 'models'), where('__name__', '==', modelId)));
+      const productId = modelSnap.empty ? '' : modelSnap.docs[0].data().productId;
+
+      if (productId) setEditSelectedProductId(productId);
+      setEditSelectedModelId(modelId);
+      setEditSelectedMainFaultId(mainDoc.id);
+
+      if (ticket.subFaultCode) {
+        const subSnap = await getDocs(query(
+          collection(db, 'subFaultCodes'),
+          where('mainFaultId', '==', mainDoc.id),
+          where('code', '==', ticket.subFaultCode)
+        ));
+        if (!subSnap.empty) setEditSelectedSubFaultId(subSnap.docs[0].id);
+      }
+    } catch (error) {
+      // مش مشكلة كبيرة لو فشلت الاسترجاع التلقائي - المستخدم يقدر يختار يدوي
+      console.error('Failed to restore fault code selection:', error);
+    }
+  };
 
   const handleSelectSubFault = (subFaultId) => {
     const selected = subFaults.find(f => f.id === subFaultId);
@@ -1102,7 +1237,10 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         ticketNumber: ticket.ticketNumber,
         customerName: ticket.customerName,
         customerPhone: ticket.customerPhone,
-        items: ticket.spareParts?.map(p => ({ name: p.name, price: p.price, quantity: p.quantity })) || [],
+        // 🛠️ FIX: كان بيسقط id/serialNumber هنا، يعني حتى لو القطعة كانت
+        // مرتبطة بصنف حقيقي في المخزون، الوصلة كانت بتتقطع قبل ما توصل
+        // نقطة البيع، فمستحيل كان يتحدد إنها فعلاً من المخزون ولا مضافة يدويًا.
+        items: ticket.spareParts?.map(p => ({ id: p.id, serialNumber: p.serialNumber, name: p.name, price: p.price, quantity: p.quantity })) || [],
         totalCost: ticket.totalCost || 0
       });
     } else {
@@ -1159,6 +1297,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   // ========== دوال التعديل ==========
   const openEditModal = (ticket) => {
     setEditingTicket(ticket);
+    initEditFaultSelection(ticket);
     setEditFormData({
       id: ticket.id,
       ticketNumber: ticket.ticketNumber || '',
@@ -1175,6 +1314,12 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       deviceModel: ticket.deviceModel || '',
       deviceSerial: ticket.deviceSerial || '',
       productCode: ticket.productCode || '',
+      // 🆕 أكواد العطل - كانت مش موجودة خالص في نموذج التعديل قبل كده
+      mainFaultCode: ticket.mainFaultCode || '',
+      mainFaultDescription: ticket.mainFaultDescription || '',
+      subFaultCode: ticket.subFaultCode || '',
+      subFaultDescription: ticket.subFaultDescription || '',
+      additionalFaults: ticket.additionalFaults || [],
       issue: ticket.issue || '',
       status: ticket.status || 'created',
       priority: ticket.priority || 'medium',
@@ -1235,6 +1380,13 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         deviceModel: editFormData.deviceModel,
         deviceSerial: editFormData.deviceSerial,
         productCode: editFormData.productCode || '',
+        // 🆕 كانت مش بتتحفظ خالص عند التعديل - يعني تعديل كود العطل بعد
+        // الإنشاء مكانش بيتسجل فعليًا حتى لو غيّرته في الفورم
+        mainFaultCode: editFormData.mainFaultCode || '',
+        mainFaultDescription: editFormData.mainFaultDescription || '',
+        subFaultCode: editFormData.subFaultCode || '',
+        subFaultDescription: editFormData.subFaultDescription || '',
+        additionalFaults: editFormData.additionalFaults || [],
         issue: editFormData.issue,
         status: editFormData.status,
         priority: editFormData.priority,
@@ -2400,21 +2552,70 @@ const loadTickets = useCallback(async (targetPage = 1) => {
               </div>
               
               <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                <h4 className="font-bold mb-3">إضافة قطعة جديدة</h4>
-                <div className="grid grid-cols-4 gap-3">
-                  <input className="col-span-2 border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="اسم القطعة" id="partName" />
-                  <input type="number" className="border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="الكمية" id="partQty" defaultValue="1" />
-                  <input type="number" className="border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="السعر" id="partPrice" />
-                </div>
-                <button onClick={() => {
-                  const name = document.getElementById('partName').value;
-                  const qty = parseInt(document.getElementById('partQty').value) || 1;
-                  const price = parseFloat(document.getElementById('partPrice').value) || 0;
-                  if (!name) return showError("يرجى إدخال اسم القطعة");
-                  handleAddSparePart(selectedTicket.id, { name, quantity: qty, price });
-                  document.getElementById('partName').value = '';
-                  document.getElementById('partPrice').value = '';
-                }} className="mt-3 w-full bg-teal-600 text-white py-2 rounded-lg font-bold text-sm">إضافة القطعة</button>
+                <h4 className="font-bold mb-3">إضافة قطعة غيار من المخزون</h4>
+                <form onSubmit={handleSearchSparePart} className="flex gap-2">
+                  <input
+                    className="flex-1 border p-2.5 rounded-lg text-sm bg-white dark:bg-slate-900"
+                    placeholder="ابحث بالاسم أو السيريال..."
+                    value={sparePartSearch}
+                    onChange={e => setSparePartSearch(e.target.value)}
+                  />
+                  <button type="submit" className="bg-teal-600 text-white px-4 rounded-lg font-bold text-sm flex items-center gap-1">
+                    {searchingSpareParts ? <Loader2 size={14} className="animate-spin"/> : <Search size={14}/>} بحث
+                  </button>
+                </form>
+
+                {sparePartResults.length > 0 && (
+                  <div className="mt-3 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden divide-y divide-slate-100 dark:divide-slate-700 max-h-48 overflow-y-auto">
+                    {sparePartResults.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          handleAddSparePart(selectedTicket.id, {
+                            id: item.id,
+                            serialNumber: item.serialNumber,
+                            name: item.name,
+                            quantity: 1,
+                            price: Number(item.price) || 0,
+                          });
+                          setSparePartResults([]);
+                          setSparePartSearch('');
+                        }}
+                        className="w-full text-right px-3 py-2 hover:bg-teal-50 dark:hover:bg-teal-900/30 flex items-center justify-between gap-2 bg-white dark:bg-slate-900"
+                      >
+                        <div>
+                          <p className="font-bold text-sm">{item.name}</p>
+                          <p className="text-xs text-slate-400 font-mono">{item.serialNumber} - متاح: {item.quantity}</p>
+                        </div>
+                        <span className="text-xs font-bold text-teal-600">{item.price} ج</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {sparePartResults.length === 0 && sparePartSearch && !searchingSpareParts && (
+                  <p className="text-xs text-slate-400 mt-2">جرب البحث بجزء من الاسم أو السيريال</p>
+                )}
+
+                {/* 🆕 بديل يدوي لو القطعة مش موجودة أصلاً في المخزون (اتجابت خصيصًا مثلاً) */}
+                <details className="mt-3">
+                  <summary className="text-xs font-bold text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-300">
+                    القطعة مش موجودة في المخزون؟ أضفها يدويًا
+                  </summary>
+                  <div className="grid grid-cols-4 gap-3 mt-2">
+                    <input className="col-span-2 border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="اسم القطعة" id="partName" />
+                    <input type="number" className="border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="الكمية" id="partQty" defaultValue="1" />
+                    <input type="number" className="border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="السعر" id="partPrice" />
+                  </div>
+                  <button onClick={() => {
+                    const name = document.getElementById('partName').value;
+                    const qty = parseInt(document.getElementById('partQty').value) || 1;
+                    const price = parseFloat(document.getElementById('partPrice').value) || 0;
+                    if (!name) return showError("يرجى إدخال اسم القطعة");
+                    handleAddSparePart(selectedTicket.id, { name, quantity: qty, price });
+                    document.getElementById('partName').value = '';
+                    document.getElementById('partPrice').value = '';
+                  }} className="mt-2 w-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-white py-2 rounded-lg font-bold text-sm">إضافة يدوية (بدون ربط بالمخزون)</button>
+                </details>
               </div>
               
               <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
@@ -2579,6 +2780,69 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                       <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">كود المنتج <span className="text-slate-400 font-normal">(اختياري)</span></label>
                       <input className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold font-mono outline-none focus:border-amber-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800" value={editFormData.productCode || ''} onChange={e => setEditFormData({ ...editFormData, productCode: e.target.value })} />
                     </div>
+                  </div>
+
+                  {/* 🆕 اختيار أكواد الأعطال بنفس طريقة إنشاء التذكرة (قوائم مرتبطة) -
+                      كانت غير موجودة خالص عند التعديل قبل كده */}
+                  <div className="bg-amber-50/40 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/40 rounded-xl p-4 space-y-3">
+                    <p className="text-xs font-bold text-amber-700 dark:text-amber-400">اختيار كود العطل (قوائم مرتبطة)</p>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">المنتج</label>
+                        <input
+                          className="w-full border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900"
+                          list="edit-products-datalist"
+                          value={editProductSearchInput}
+                          placeholder="اكتب اسم المنتج..."
+                          onChange={e => {
+                            setEditProductSearchInput(e.target.value);
+                            const matched = products.find(p => p.name === e.target.value);
+                            setEditSelectedModelId('');
+                            setEditSelectedMainFaultId('');
+                            setEditSelectedSubFaultId('');
+                            setEditSelectedProductId(matched ? matched.id : '');
+                          }}
+                        />
+                        <datalist id="edit-products-datalist">
+                          {products.map(p => <option key={p.id} value={p.name} />)}
+                        </datalist>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">الموديل</label>
+                        <select className="w-full border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900 disabled:opacity-50" value={editSelectedModelId} onChange={e => {
+                          setEditSelectedModelId(e.target.value);
+                          setEditSelectedMainFaultId('');
+                          setEditSelectedSubFaultId('');
+                          const model = editModels.find(m => m.id === e.target.value);
+                          if (model) setEditFormData(prev => ({ ...prev, deviceModel: model.name }));
+                        }} disabled={!editSelectedProductId}>
+                          <option value="">-- اختر الموديل --</option>
+                          {editModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">كود العطل الرئيسي</label>
+                        <select className="w-full border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900 disabled:opacity-50" value={editSelectedMainFaultId} onChange={e => {
+                          setEditSelectedMainFaultId(e.target.value);
+                          setEditSelectedSubFaultId('');
+                        }} disabled={!editSelectedModelId}>
+                          <option value="">-- اختر الكود الرئيسي --</option>
+                          {editMainFaults.map(f => <option key={f.id} value={f.id}>{f.code} - {f.description}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">كود العطل الفرعي</label>
+                        <select className="w-full border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900 disabled:opacity-50" value={editSelectedSubFaultId} onChange={e => handleEditSelectSubFault(e.target.value)} disabled={!editSelectedMainFaultId}>
+                          <option value="">-- اختر الكود الفرعي --</option>
+                          {editSubFaults.map(f => <option key={f.id} value={f.id}>{f.code} - {f.description}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    {editFormData.mainFaultCode && (
+                      <div className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-lg p-2 text-xs">
+                        <span className="font-bold">الكود الحالي:</span> {editFormData.mainFaultCode} - {editFormData.subFaultCode} ({editFormData.subFaultDescription})
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">المشكلة</label>
