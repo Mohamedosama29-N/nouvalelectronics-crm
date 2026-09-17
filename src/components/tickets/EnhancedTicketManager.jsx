@@ -343,6 +343,8 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
             handleAddSparePart(editingTicket.id, found);
             showInfo(`تم ربط قطعة الغيار "${found.name}" تلقائيًا بكود العطل ده`);
           }
+        } else {
+          showInfo(`كود المنتج "${selected.productCode}" مش مطابق لأي صنف في المخزون - أضف القطعة يدويًا لو محتاجها`);
         }
       }
     }
@@ -413,16 +415,38 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
   const lookupInventoryByProductCode = async (productCode) => {
     if (!productCode) return null;
     try {
-      const snap = await getDocs(query(
+      // أول محاولة: تطابق تام مع السيريال (لو كود المنتج هو نفسه سيريال حقيقي)
+      let matchDoc = null;
+      const exactSnap = await getDocs(query(
         collection(db, 'inventory'),
         where('serialNumber', '==', productCode),
         where('isDeleted', '==', false),
         limit(1)
       ));
-      if (snap.empty) return null;
-      const d = snap.docs[0];
-      const data = d.data();
-      return { id: d.id, serialNumber: data.serialNumber, name: data.name, price: Number(data.price) || 0, quantity: 1 };
+      if (!exactSnap.empty) {
+        matchDoc = exactSnap.docs[0];
+      } else {
+        // 🛠️ FIX: كود المنتج أحيانًا بيكون وصف كامل ("الفرشة كبيرة -4403A")
+        // مش سيريال نضيف، فالتطابق التام كان دايمًا بيفشل من غير أي سبب
+        // ظاهر. دلوقتي بندوّر بنفس أسلوب البحث اليدوي (بحث مرن بالكلمات).
+        const term = normalizeSearch(productCode);
+        const tokens = buildQueryTokens(term);
+        const candidatesSnap = await getDocs(query(
+          collection(db, 'inventory'),
+          where('isDeleted', '==', false),
+          where('searchTokens', 'array-contains-any', tokens.length ? tokens : [term]),
+          limit(10)
+        ));
+        const candidates = candidatesSnap.docs;
+        matchDoc = candidates.find(d => {
+          const data = d.data();
+          return normalizeSearch(data.name || '').includes(term) || normalizeSearch(data.serialNumber || '').includes(term);
+        }) || candidates[0] || null;
+      }
+
+      if (!matchDoc) return null;
+      const data = matchDoc.data();
+      return { id: matchDoc.id, serialNumber: data.serialNumber, name: data.name, price: Number(data.price) || 0, quantity: 1 };
     } catch (error) {
       console.error('Failed to auto-link product code:', error);
       return null;
@@ -451,6 +475,8 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
         if (found) {
           setNewTicketSpareParts(prev => prev.some(p => p.id === found.id) ? prev : [...prev, found]);
           showInfo(`تم ربط قطعة الغيار "${found.name}" تلقائيًا بكود العطل ده`);
+        } else {
+          showInfo(`كود المنتج "${selected.productCode}" مش مطابق لأي صنف في المخزون - أضف القطعة يدويًا لو محتاجها`);
         }
       }
     }
