@@ -1404,8 +1404,22 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   };
 
   // ========== دوال التعديل ==========
+  // 🆕 إغلاق فورم التعديل بيرجعك لنفس شاشة عرض التذكرة (مش للقايمة) -
+  // fullTicketView أصلاً محتفظ ببيانات نفس التذكرة طول الوقت.
+  const closeEditModal = () => {
+    setEditingTicket(null);
+    setShowFullTicketModal(true);
+  };
+
   const openEditModal = (ticket) => {
     setEditingTicket(ticket);
+    // 🛠️ FIX: فيه طريقتين لفتح التعديل - من داخل شاشة التذكرة، أو زرار
+    // تعديل سريع في قايمة التذاكر مباشرة (من غير ما تفتح شاشة التذكرة
+    // الأول). لازم fullTicketView و showFullTicketModal يتظبطوا هنا في
+    // الحالتين - دلوقتي التعديل بيتعرض جوه نفس مودال شاشة التذكرة (مش
+    // مودال منفصل)، فلو الشاشة دي مش متفتحة أصلًا مفيش حاجة هتظهر خالص.
+    setFullTicketView(ticket);
+    setShowFullTicketModal(true);
     initEditFaultSelection(ticket);
     setEditFormData({
       id: ticket.id,
@@ -1585,6 +1599,10 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       if (fullTicketView?.id === editingTicket.id) {
         setFullTicketView({ ...fullTicketView, ...updateData });
       }
+      // 🛠️ FIX: بعد حفظ التعديل كان بيرجعك لقايمة التذاكر بدل ما يفتحلك
+      // نفس التذكرة تاني - يعني تفقد كل السياق (قطع الغيار، السجل،
+      // الأزرار التانية) وتحتاج تدور عليها وتفتحها من الأول.
+      setShowFullTicketModal(true);
     } catch (error) {
       console.error(error);
       showError("حدث خطأ أثناء تحديث التذكرة: " + error.message);
@@ -2244,625 +2262,10 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       {/* ===== مودال فتح التذكرة كاملة ===== */}
       {showFullTicketModal && fullTicketView && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] w-full max-w-5xl shadow-2xl max-h-[95vh] overflow-y-auto custom-scrollbar">
-            <div className="sticky top-0 bg-teal-600 p-6 rounded-t-[1.5rem] z-10 text-white">
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-white/80 text-sm font-mono">#{fullTicketView.ticketNumber}</span>
-                    <StatusSelectComp value={fullTicketView.status} onChange={handleUpdateStatus} ticketId={fullTicketView.id} />
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      fullTicketView.priority === 'high' ? 'bg-rose-500 text-white' : 
-                      fullTicketView.priority === 'medium' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'
-                    }`}>
-                      {fullTicketView.priority === 'high' ? 'عالية' : fullTicketView.priority === 'medium' ? 'متوسطة' : 'منخفضة'}
-                    </span>
-                  </div>
-                  <h2 className="text-2xl font-black">{fullTicketView.customerName}</h2>
-                </div>
-                <button onClick={() => setShowFullTicketModal(false)} className="text-white/70 hover:text-white">
-                  <X size={24}/>
-                </button>
-              </div>
-            </div>
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] w-full max-w-5xl shadow-2xl max-h-[95vh] flex flex-col overflow-hidden">
 
-            <div className="p-6 space-y-6">
-  {/* معلومات العميل */}
-  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-      <label className="text-xs text-slate-500 block mb-1">رقم الهاتف</label>
-      <p className="font-bold font-mono" dir="ltr">{fullTicketView.customerPhone}</p>
-    </div>
-    {fullTicketView.secondPhone && (
-      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-        <label className="text-xs text-slate-500 block mb-1">رقم ثاني</label>
-        <p className="font-bold font-mono" dir="ltr">{fullTicketView.secondPhone}</p>
-      </div>
-    )}
-    {fullTicketView.landline && (
-      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-        <label className="text-xs text-slate-500 block mb-1">أرضي</label>
-        <p className="font-bold font-mono" dir="ltr">{fullTicketView.landline}</p>
-      </div>
-    )}
-    {fullTicketView.customerEmail && (
-      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-        <label className="text-xs text-slate-500 block mb-1">البريد</label>
-        <p className="font-bold text-sm">{fullTicketView.customerEmail}</p>
-      </div>
-    )}
-  </div>
-
-  {/* الجهاز والضمان */}
-  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-      <label className="text-xs text-slate-500 block mb-1">الجهاز</label>
-      <p className="font-bold">{fullTicketView.device || '-'}</p>
-    </div>
-    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-      <label className="text-xs text-slate-500 block mb-1">الموديل</label>
-      <p className="font-bold">{fullTicketView.deviceModel || '-'}</p>
-    </div>
-    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-      <label className="text-xs text-slate-500 block mb-1">السيريال</label>
-      <p className="font-bold font-mono">{fullTicketView.deviceSerial || '-'}</p>
-    </div>
-    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-      <label className="text-xs text-slate-500 block mb-1">الضمان</label>
-      <p className="font-bold">{WARRANTY_OPTIONS.find(w => w.value === fullTicketView.warrantyStatus)?.label || '-'}</p>
-    </div>
-    {fullTicketView.productCode && (
-      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-        <label className="text-xs text-slate-500 block mb-1">كود المنتج</label>
-        <p className="font-bold font-mono">{fullTicketView.productCode}</p>
-      </div>
-    )}
-  </div>
-
-  {/* النوع والمصدر والفرع */}
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-      <label className="text-xs text-slate-500 block mb-1">نوع التذكرة</label>
-      <p className="font-bold">{TICKET_TYPES.find(t => t.value === fullTicketView.ticketType)?.label || '-'}</p>
-    </div>
-    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-      <label className="text-xs text-slate-500 block mb-1">المصدر</label>
-      <p className="font-bold">{TICKET_SOURCES.find(s => s.value === fullTicketView.source)?.label || '-'}</p>
-    </div>
-  </div>
-
-  {/* العنوان والمشكلة */}
-  {fullTicketView.customerAddress && (
-    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-      <label className="text-xs text-slate-500 block mb-1">العنوان</label>
-      <p className="font-bold">{fullTicketView.customerAddress}</p>
-    </div>
-  )}
-  
-  <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-    <label className="text-xs text-slate-500 block mb-1">المشكلة</label>
-    <p className="font-bold">{fullTicketView.issue || '-'}</p>
-  </div>
-
-  {/* 🆕 أكواد الأعطال (الأساسي + الإضافية لو موجودة) */}
-  {(fullTicketView.mainFaultCode || (fullTicketView.additionalFaults || []).length > 0) && (
-    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-      <label className="text-xs text-slate-500 block mb-2">أكواد الأعطال</label>
-      <div className="space-y-1.5">
-        {fullTicketView.mainFaultCode && (
-          <div className="text-sm font-bold bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-lg p-2">
-            {fullTicketView.mainFaultCode} - {fullTicketView.subFaultCode} ({fullTicketView.subFaultDescription})
-          </div>
-        )}
-        {(fullTicketView.additionalFaults || []).map((f, idx) => (
-          <div key={idx} className="text-sm font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2">
-            {f.mainFaultCode} - {f.subFaultCode} ({f.subFaultDescription})
-          </div>
-        ))}
-      </div>
-    </div>
-  )}
-
-  {/* المسؤولون */}
-  <div className="grid grid-cols-3 gap-3">
-    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-      <label className="text-xs text-slate-500 block mb-1">الفني</label>
-      <p className="font-bold">{fullTicketView.assignedTechnician || '-'}</p>
-    </div>
-    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-      <label className="text-xs text-slate-500 block mb-1">مركز الصيانة</label>
-      <p className="font-bold">{fullTicketView.assignedMaintenanceCenter || '-'}</p>
-    </div>
-    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
-      <label className="text-xs text-slate-500 block mb-1">الكول سنتر</label>
-      <p className="font-bold">{fullTicketView.assignedCallCenter || '-'}</p>
-    </div>
-  </div>
-
-  {/* المبالغ */}
-  <div className="grid grid-cols-4 gap-3 text-center">
-    <div className="bg-teal-50 dark:bg-teal-900/30 p-3 rounded-xl">
-      <label className="text-xs block mb-1">التكلفة</label>
-      <p className="font-black text-lg">{(fullTicketView.totalCost || fullTicketView.estimatedCost || 0).toLocaleString()} ج</p>
-    </div>
-    <div className="bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-xl">
-      <label className="text-xs block mb-1">المدفوع</label>
-      <p className="font-black text-lg">{(fullTicketView.totalPaid || 0).toLocaleString()} ج</p>
-    </div>
-    <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-xl">
-      <label className="text-xs block mb-1">المتبقي</label>
-      <p className="font-black text-lg">{((fullTicketView.totalCost || 0) - (fullTicketView.totalPaid || 0)).toLocaleString()} ج</p>
-    </div>
-    <div className="bg-purple-50 dark:bg-purple-900/30 p-3 rounded-xl">
-      <label className="text-xs block mb-1">قطع الغيار</label>
-      <p className="font-black text-lg">{(fullTicketView.spareParts || []).length}</p>
-    </div>
-  </div>
-
-  {/* قطع غيار */}
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-    {fullTicketView.sparePartsWithCost && (
-      <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-xl border border-amber-200 dark:border-amber-800">
-        <label className="text-xs text-amber-600 dark:text-amber-400 block mb-1 font-bold">🛠️ قطع غيار بتكلفة</label>
-        <p className="text-sm whitespace-pre-wrap font-bold">{fullTicketView.sparePartsWithCost}</p>
-      </div>
-    )}
-    {fullTicketView.sparePartsWithoutCost && (
-      <div className="bg-green-50 dark:bg-green-900/30 p-3 rounded-xl border border-green-200 dark:border-green-800">
-        <label className="text-xs text-green-600 dark:text-green-400 block mb-1 font-bold">🔧 قطع غيار بدون تكلفة</label>
-        <p className="text-sm whitespace-pre-wrap font-bold">{fullTicketView.sparePartsWithoutCost}</p>
-      </div>
-    )}
-  </div>
-
-  {/* التواريخ */}
-  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-    {fullTicketView.invoiceDate && (
-      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-        <label className="text-xs text-slate-500 block mb-1 font-bold">📅 تاريخ الفاتورة</label>
-        <p className="font-bold">{formatDateOnly(fullTicketView.invoiceDate)}</p>
-      </div>
-    )}
-    {(fullTicketView.maintenanceEndDate || fullTicketView.maintenanceEndTime) && (
-      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-        <label className="text-xs text-slate-500 block mb-1 font-bold">⏰ توقيت انتهاء الصيانة</label>
-        <p className="font-bold">
-          {fullTicketView.maintenanceEndDate ? formatDateOnly(fullTicketView.maintenanceEndDate) : '-'}
-          {fullTicketView.maintenanceEndTime ? ` - ${fullTicketView.maintenanceEndTime}` : ''}
-        </p>
-      </div>
-    )}
-    {(fullTicketView.deliveryDate || fullTicketView.deliveryTime) && (
-      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-        <label className="text-xs text-slate-500 block mb-1 font-bold">📦 توقيت تسليم العميل</label>
-        <p className="font-bold">
-          {fullTicketView.deliveryDate ? formatDateOnly(fullTicketView.deliveryDate) : '-'}
-          {fullTicketView.deliveryTime ? ` - ${fullTicketView.deliveryTime}` : ''}
-        </p>
-      </div>
-    )}
-  </div>
-
-  {/* ===== ✅ قسم Follow up Callcenter - عرض ===== */}
-  {(fullTicketView.followUp?.accessibility > 0 || 
-    fullTicketView.followUp?.maintenanceTime > 0 || 
-    fullTicketView.followUp?.centerDealing > 0 || 
-    fullTicketView.followUp?.deliveryProcedures > 0 || 
-    fullTicketView.followUp?.repurchase) && (
-    
-    <div className="border-t-2 border-teal-200 dark:border-teal-800 pt-4 mt-4">
-      <h4 className="font-black text-lg text-teal-700 dark:text-teal-300 mb-4 flex items-center gap-2">
-        <Headphones size={20} className="text-teal-600" />
-        📋 تقييم خدمة العملاء (Follow up)
-      </h4>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* السؤال 1 */}
-        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">سهولة الوصول الى الشركة</p>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
-              {fullTicketView.followUp?.accessibility || 0}
-            </span>
-            <span className="text-sm text-slate-500">/ 10</span>
-            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
-              <div 
-                className="h-2 bg-teal-600 rounded-full transition-all"
-                style={{ width: `${((fullTicketView.followUp?.accessibility || 0) / 10) * 100}%` }}
-              />
-            </div>
-          </div>
-        </div>
-        
-        {/* السؤال 2 */}
-        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">تقييم وقت الصيانة</p>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
-              {fullTicketView.followUp?.maintenanceTime || 0}
-            </span>
-            <span className="text-sm text-slate-500">/ 10</span>
-            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
-              <div 
-                className="h-2 bg-teal-600 rounded-full transition-all"
-                style={{ width: `${((fullTicketView.followUp?.maintenanceTime || 0) / 10) * 100}%` }}
-              />
-            </div>
-          </div>
-        </div>
-        
-        {/* السؤال 3 */}
-        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">التعامل داخل مركز الصيانة</p>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
-              {fullTicketView.followUp?.centerDealing || 0}
-            </span>
-            <span className="text-sm text-slate-500">/ 10</span>
-            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
-              <div 
-                className="h-2 bg-teal-600 rounded-full transition-all"
-                style={{ width: `${((fullTicketView.followUp?.centerDealing || 0) / 10) * 100}%` }}
-              />
-            </div>
-          </div>
-        </div>
-        
-        {/* السؤال 4 */}
-        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">سهولة اجراءات التسليم والاستلام</p>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
-              {fullTicketView.followUp?.deliveryProcedures || 0}
-            </span>
-            <span className="text-sm text-slate-500">/ 10</span>
-            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
-              <div 
-                className="h-2 bg-teal-600 rounded-full transition-all"
-                style={{ width: `${((fullTicketView.followUp?.deliveryProcedures || 0) / 10) * 100}%` }}
-              />
-            </div>
-          </div>
-        </div>
-        
-        {/* السؤال 5 */}
-        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl md:col-span-2">
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">شراء منتجات نوفال مرة أخرى</p>
-          <div className="flex items-center gap-4">
-            <span className={`text-xl font-black ${fullTicketView.followUp?.repurchase === 'yes' ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {fullTicketView.followUp?.repurchase === 'yes' ? '✅ نعم' : 
-               fullTicketView.followUp?.repurchase === 'no' ? '❌ لا' : 'لم يتم التقييم'}
-            </span>
-          </div>
-        </div>
-        
-        {/* ملاحظات */}
-        {fullTicketView.followUpNotes && (
-          <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl md:col-span-2">
-            <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">📝 ملاحظات التقييم</p>
-            <p className="font-bold text-sm">{fullTicketView.followUpNotes}</p>
-          </div>
-        )}
-        
-        {/* معلومات التقييم */}
-        {(fullTicketView.followUpBy || fullTicketView.followUpDate) && (
-          <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl md:col-span-2">
-            <div className="flex flex-wrap gap-4 text-xs text-slate-500">
-              {fullTicketView.followUpBy && (
-                <p>👤 تم التقييم بواسطة: <span className="font-bold text-slate-700">{fullTicketView.followUpBy}</span></p>
-              )}
-              {fullTicketView.followUpDate && (
-                <p>📅 تاريخ التقييم: <span className="font-bold text-slate-700">{formatDate(fullTicketView.followUpDate)}</span></p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )}
-
-  {/* 🆕 الملاحظات العامة - كانت موجودة بس مش ظاهرة إلا لو فتحت وضع التعديل */}
-  {fullTicketView.notes && (
-    <div className="border rounded-xl p-4 bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800">
-      <h3 className="font-bold mb-2 flex items-center gap-2 text-amber-800 dark:text-amber-300">
-        <FileTextIcon size={18}/> ملاحظات
-      </h3>
-      <p className="text-sm whitespace-pre-wrap">{fullTicketView.notes}</p>
-    </div>
-  )}
-
-  {/* التعليقات */}
-  <div className="border rounded-xl p-4">
-    <h3 className="font-bold mb-3 flex items-center gap-2">
-      <MessageSquare size={18} className="text-teal-600"/> التعليقات ({ticketComments.length})
-    </h3>
-    <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
-      {ticketComments.map(comment => (
-        <div key={comment.id} className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg">
-          {editingCommentId === comment.id ? (
-            <div className="flex gap-2">
-              <input className="flex-1 border p-2 rounded-lg text-sm" value={editingCommentText} onChange={e => setEditingCommentText(e.target.value)} />
-              <button onClick={() => editComment(comment.id)} className="px-3 py-1 bg-teal-600 text-white rounded text-xs">حفظ</button>
-              <button onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }} className="px-3 py-1 bg-slate-200 rounded text-xs">إلغاء</button>
-            </div>
-          ) : (
-            <div>
-              <p className="text-sm">{comment.text}</p>
-              <div className="flex justify-between items-center mt-2">
-                <div>
-                  <span className="text-xs text-slate-500">{comment.createdBy}</span>
-                  <span className="text-xs text-slate-400 mx-2">•</span>
-                  <span className="text-xs text-slate-400">{new Date(comment.createdAt).toLocaleString('ar-EG')}</span>
-                  {comment.editedAt && <span className="text-xs text-amber-500 mr-2">(معدل)</span>}
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text); }} className="text-xs text-teal-500">تعديل</button>
-                  <button onClick={() => deleteComment(comment.id)} className="text-xs text-rose-500">حذف</button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-    <div className="flex gap-2">
-      <input className="flex-1 border p-2 rounded-lg text-sm" placeholder="أضف تعليقاً..." value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addComment(); }} />
-      <button onClick={addComment} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">إضافة</button>
-    </div>
-  </div>
-
-  {/* ✨ ميزة جديدة: عرض الفاتورة المرتبطة بالتذكرة (لو موجودة) */}
-  {fullTicketView.linkedInvoiceNumber && (
-    <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 flex items-center gap-2">
-      <LinkIcon size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0"/>
-      <span className="text-emerald-700 dark:text-emerald-300 text-sm font-bold">
-        مرتبطة بالفاتورة #{fullTicketView.linkedInvoiceNumber}
-      </span>
-    </div>
-  )}
-
-  {/* أزرار الإجراءات */}
-  <div className="flex flex-wrap gap-2 pt-4 border-t">
-    <button onClick={() => { setSelectedTicket(fullTicketView); setShowAssignModal(true); }} className="px-4 py-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg text-sm font-bold">
-      <Users size={14} className="inline ml-1"/> تعيين مسؤولين
-    </button>
-    {/* 🛠️ FIX (باگ حقيقي): مودال قطع الغيار كان موجود بالكامل في الكود
-        (جدول + بحث + إضافة) بس مفيش أي زرار في كل الملف بيفتحه خالص -
-        يعني الميزة كانت موجودة تقنيًا لكن مستحيل توصلها من الواجهة. */}
-    <button onClick={() => { setSelectedTicket(fullTicketView); setShowSparePartsModal(true); }} className="px-4 py-2 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg text-sm font-bold">
-      <Package size={14} className="inline ml-1"/> قطع الغيار {(fullTicketView.spareParts || []).length > 0 && `(${fullTicketView.spareParts.length})`}
-    </button>
-    <button onClick={() => { openEditModal(fullTicketView); setShowFullTicketModal(false); }} className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-sm font-bold">
-      <Edit size={14} className="inline ml-1"/> تعديل التذكرة
-    </button>
-    <button onClick={() => handleGenerateInvoice(fullTicketView)} className="px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-sm font-bold">
-      <Receipt size={14} className="inline ml-1"/> {fullTicketView.linkedInvoiceNumber ? 'إنشاء فاتورة أخرى' : 'إنشاء فاتورة'}
-    </button>
-    <button onClick={() => window.print()} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold">
-      <Printer size={14} className="inline ml-1"/> طباعة
-    </button>
-    <button onClick={() => setShowFullTicketModal(false)} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold">
-      إغلاق
-    </button>
-  </div>
-
-  <div className="text-xs text-slate-400 space-y-1 border-t pt-4">
-    <p>تاريخ الإنشاء: {formatDate(fullTicketView.createdAt)}</p>
-    <p>آخر تحديث: {formatDate(fullTicketView.updatedAt)}</p>
-    <p>تم الإنشاء بواسطة: {fullTicketView.createdByName}</p>
-    <p>المركز: {warehouseMap?.[fullTicketView.assignedCenter] || fullTicketView.assignedCenter}</p>
-  </div>
-</div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== مودال تعيين مسؤولين ===== */}
-      {showAssignModal && selectedTicket && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
-            <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white">تعيين مسؤولين للتذكرة #{selectedTicket.ticketNumber}</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold mb-1">الفني</label>
-                <select className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" value={assignData.technician} onChange={e => setAssignData({...assignData, technician: e.target.value})}>
-                  <option value="">-- اختر --</option>
-                  {technicians.map((tech, idx) => <option key={idx} value={tech}>{tech}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold mb-1">مركز الصيانة</label>
-                <select className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" value={assignData.center} onChange={e => setAssignData({...assignData, center: e.target.value})}>
-                  <option value="">-- اختر --</option>
-                  {maintenanceCenters.map(center => <option key={center.id} value={center.name}>{center.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold mb-1">الكول سنتر</label>
-                <select className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" value={assignData.callCenter} onChange={e => setAssignData({...assignData, callCenter: e.target.value})}>
-                  <option value="">-- اختر --</option>
-                  {callCenters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                </select>
-              </div>
-              <div className="flex gap-2 pt-4">
-                <button onClick={() => handleAssign(selectedTicket.id)} className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold">حفظ</button>
-                <button onClick={() => { setShowAssignModal(false); setAssignData({ technician: '', center: '', callCenter: '' }); }} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إلغاء</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== مودال قطع الغيار ===== */}
-      {showSparePartsModal && selectedTicket && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6 border-b pb-4">
-              <h3 className="font-black text-xl">قطع غيار التذكرة #{selectedTicket.ticketNumber}</h3>
-              <button onClick={() => setShowSparePartsModal(false)} className="hover:text-rose-600"><X size={24}/></button>
-            </div>
-            <div className="space-y-6">
-              <div className="border rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-900/50">
-                    <tr>
-                      <th className="p-3">القطعة</th>
-                      <th className="p-3 text-center">الكمية</th>
-                      <th className="p-3 text-center">السعر</th>
-                      <th className="p-3 text-center">الإجمالي</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {(selectedTicket.spareParts || []).map((p, i) => (
-                      <tr key={i}>
-                        <td className="p-3 font-bold">{p.name}</td>
-                        <td className="p-3 text-center">{p.quantity}</td>
-                        <td className="p-3 text-center">{p.price} ج</td>
-                        <td className="p-3 text-center font-black">{p.quantity * p.price} ج</td>
-                      </tr>
-                    ))}
-                    {(selectedTicket.spareParts || []).length === 0 && (
-                      <tr>
-                        <td colSpan="4" className="p-6 text-center text-slate-400">لا توجد قطع غيار</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              
-              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                <h4 className="font-bold mb-3">إضافة قطعة غيار من المخزون</h4>
-                <div className="flex gap-2">
-                  <input
-                    className="flex-1 border p-2.5 rounded-lg text-sm bg-white dark:bg-slate-900"
-                    placeholder="ابحث بالاسم أو السيريال..."
-                    value={sparePartSearch}
-                    onChange={e => setSparePartSearch(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSearchSparePart(); } }}
-                  />
-                  <button type="button" onClick={() => handleSearchSparePart()} className="bg-teal-600 text-white px-4 rounded-lg font-bold text-sm flex items-center gap-1">
-                    {searchingSpareParts ? <Loader2 size={14} className="animate-spin"/> : <Search size={14}/>} بحث
-                  </button>
-                </div>
-
-                {sparePartResults.length > 0 && (
-                  <div className="mt-3 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden divide-y divide-slate-100 dark:divide-slate-700 max-h-48 overflow-y-auto">
-                    {sparePartResults.map(item => (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          handleAddSparePart(selectedTicket.id, {
-                            id: item.id,
-                            serialNumber: item.serialNumber,
-                            name: item.name,
-                            quantity: 1,
-                            price: Number(item.price) || 0,
-                          });
-                          setSparePartResults([]);
-                          setSparePartSearch('');
-                        }}
-                        className="w-full text-right px-3 py-2 hover:bg-teal-50 dark:hover:bg-teal-900/30 flex items-center justify-between gap-2 bg-white dark:bg-slate-900"
-                      >
-                        <div>
-                          <p className="font-bold text-sm">{item.name}</p>
-                          <p className="text-xs text-slate-400 font-mono">{item.serialNumber} - متاح: {item.quantity}</p>
-                        </div>
-                        <span className="text-xs font-bold text-teal-600">{item.price} ج</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {sparePartResults.length === 0 && sparePartSearch && !searchingSpareParts && (
-                  <p className="text-xs text-slate-400 mt-2">جرب البحث بجزء من الاسم أو السيريال</p>
-                )}
-
-                {/* 🆕 بديل يدوي لو القطعة مش موجودة أصلاً في المخزون (اتجابت خصيصًا مثلاً) */}
-                <details className="mt-3">
-                  <summary className="text-xs font-bold text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-300">
-                    القطعة مش موجودة في المخزون؟ أضفها يدويًا
-                  </summary>
-                  <div className="grid grid-cols-4 gap-3 mt-2">
-                    <input className="col-span-2 border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="اسم القطعة" id="partName" />
-                    <input type="number" className="border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="الكمية" id="partQty" defaultValue="1" />
-                    <input type="number" className="border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="السعر" id="partPrice" />
-                  </div>
-                  <button onClick={() => {
-                    const name = document.getElementById('partName').value;
-                    const qty = parseInt(document.getElementById('partQty').value) || 1;
-                    const price = parseFloat(document.getElementById('partPrice').value) || 0;
-                    if (!name) return showError("يرجى إدخال اسم القطعة");
-                    handleAddSparePart(selectedTicket.id, { name, quantity: qty, price });
-                    document.getElementById('partName').value = '';
-                    document.getElementById('partPrice').value = '';
-                  }} className="mt-2 w-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-white py-2 rounded-lg font-bold text-sm">إضافة يدوية (بدون ربط بالمخزون)</button>
-                </details>
-              </div>
-              
-              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                <h4 className="font-bold mb-3">إضافة دفعة</h4>
-                <div className="flex gap-3">
-                  <input type="number" className="flex-1 border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="المبلغ" id="paymentAmount" />
-                  <button onClick={() => {
-                    const amount = parseFloat(document.getElementById('paymentAmount').value);
-                    if (!amount || amount <= 0) return showError("مبلغ غير صحيح");
-                    handleAddPayment(selectedTicket.id, amount);
-                    document.getElementById('paymentAmount').value = '';
-                  }} className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-bold text-sm">إضافة</button>
-                </div>
-              </div>
-              
-              <button onClick={() => setShowSparePartsModal(false)} className="w-full bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إغلاق</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== مودال سجل التذكرة ===== */}
-      {showHistoryModal && selectedTicket && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-2xl shadow-2xl max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6 border-b pb-4">
-              <h3 className="font-black text-xl">سجل التذكرة #{selectedTicket.ticketNumber}</h3>
-              <button onClick={() => setShowHistoryModal(false)} className="hover:text-rose-600"><X size={24}/></button>
-            </div>
-            <div className="space-y-4">
-              {ticketHistory.map((event, idx) => (
-                <div key={idx} className="relative pr-6 pb-4 border-r-2 border-teal-200 dark:border-teal-800 last:border-0">
-                  <div className="absolute right-[-5px] top-0 w-3 h-3 rounded-full bg-teal-600"></div>
-                  <p className="text-xs text-slate-400">{formatDate(event.timestamp)}</p>
-                  <p className="font-bold">{event.action}</p>
-                  {event.details && <p className="text-sm text-slate-600">{event.details}</p>}
-                  <p className="text-xs text-teal-500 mt-1">بواسطة: {event.by}</p>
-                </div>
-              ))}
-              {ticketHistory.length === 0 && <p className="text-center text-slate-400 py-8">لا يوجد سجل</p>}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== مودال الحذف المجمع ===== */}
-      {showBulkDeleteModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
-            <h3 className="font-black text-lg mb-2 text-rose-600 flex items-center gap-2">
-              <Trash2 size={20}/> حذف مجمع للتذاكر
-            </h3>
-            <p className="text-sm mb-4">حذف <span className="font-bold text-rose-600">{selectedItems.size}</span> تذكرة بشكل نهائي</p>
-            <input className="w-full border p-3 rounded-xl font-bold mb-4 bg-white dark:bg-slate-900" placeholder="اكتب 'حذف' للتأكيد" value={bulkDeleteConfirm} onChange={e => setBulkDeleteConfirm(e.target.value)} />
-            <div className="flex gap-2">
-              <button onClick={handleBulkDelete} disabled={bulkDeleteConfirm !== 'حذف'} className="flex-1 bg-rose-600 text-white py-3 rounded-xl font-bold disabled:opacity-50">تأكيد</button>
-              <button onClick={() => { setShowBulkDeleteModal(false); setBulkDeleteConfirm(''); }} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إلغاء</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== مودال تعديل التذكرة ===== */}
-      {editingTicket && (appUser.permissions?.editTicket || appUser.role === 'admin') && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.75rem] w-full max-w-4xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
-
+            {editingTicket && (appUser.permissions?.editTicket || appUser.role === 'admin') ? (
+              <>
             {/* ===== رأس المودال ===== */}
             <div className="relative bg-teal-600 px-6 py-5 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-3 text-white">
@@ -2879,7 +2282,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
               </div>
               <button
                 type="button"
-                onClick={() => setEditingTicket(null)}
+                onClick={closeEditModal}
                 className="bg-white/10 hover:bg-white/25 text-white p-2 rounded-xl transition-colors"
               >
                 <X size={20}/>
@@ -3436,7 +2839,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
 
             {/* ===== ✨ تذييل ثابت بأزرار الحفظ والإلغاء ===== */}
             <div className="flex gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
-              <button type="button" onClick={() => setEditingTicket(null)} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
+              <button type="button" onClick={closeEditModal} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
                 إلغاء
               </button>
               <button type="submit" className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-lg shadow-teal-600/20">
@@ -3444,7 +2847,622 @@ const loadTickets = useCallback(async (targetPage = 1) => {
               </button>
             </div>
             </form>
+              </>
+            ) : (
+              <>
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <div className="sticky top-0 bg-teal-600 p-6 rounded-t-[1.5rem] z-10 text-white">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-white/80 text-sm font-mono">#{fullTicketView.ticketNumber}</span>
+                    <StatusSelectComp value={fullTicketView.status} onChange={handleUpdateStatus} ticketId={fullTicketView.id} />
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      fullTicketView.priority === 'high' ? 'bg-rose-500 text-white' : 
+                      fullTicketView.priority === 'medium' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'
+                    }`}>
+                      {fullTicketView.priority === 'high' ? 'عالية' : fullTicketView.priority === 'medium' ? 'متوسطة' : 'منخفضة'}
+                    </span>
+                  </div>
+                  <h2 className="text-2xl font-black">{fullTicketView.customerName}</h2>
+                </div>
+                <button onClick={() => setShowFullTicketModal(false)} className="text-white/70 hover:text-white">
+                  <X size={24}/>
+                </button>
+              </div>
+            </div>
 
+            <div className="p-6 space-y-6">
+  {/* معلومات العميل */}
+  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">رقم الهاتف</label>
+      <p className="font-bold font-mono" dir="ltr">{fullTicketView.customerPhone}</p>
+    </div>
+    {fullTicketView.secondPhone && (
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+        <label className="text-xs text-slate-500 block mb-1">رقم ثاني</label>
+        <p className="font-bold font-mono" dir="ltr">{fullTicketView.secondPhone}</p>
+      </div>
+    )}
+    {fullTicketView.landline && (
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+        <label className="text-xs text-slate-500 block mb-1">أرضي</label>
+        <p className="font-bold font-mono" dir="ltr">{fullTicketView.landline}</p>
+      </div>
+    )}
+    {fullTicketView.customerEmail && (
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+        <label className="text-xs text-slate-500 block mb-1">البريد</label>
+        <p className="font-bold text-sm">{fullTicketView.customerEmail}</p>
+      </div>
+    )}
+  </div>
+
+  {/* الجهاز والضمان */}
+  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">الجهاز</label>
+      <p className="font-bold">{fullTicketView.device || '-'}</p>
+    </div>
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">الموديل</label>
+      <p className="font-bold">{fullTicketView.deviceModel || '-'}</p>
+    </div>
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">السيريال</label>
+      <p className="font-bold font-mono">{fullTicketView.deviceSerial || '-'}</p>
+    </div>
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">الضمان</label>
+      <p className="font-bold">{WARRANTY_OPTIONS.find(w => w.value === fullTicketView.warrantyStatus)?.label || '-'}</p>
+    </div>
+    {fullTicketView.productCode && (
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+        <label className="text-xs text-slate-500 block mb-1">كود المنتج</label>
+        <p className="font-bold font-mono">{fullTicketView.productCode}</p>
+      </div>
+    )}
+  </div>
+
+  {/* النوع والمصدر والفرع */}
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">نوع التذكرة</label>
+      <p className="font-bold">{TICKET_TYPES.find(t => t.value === fullTicketView.ticketType)?.label || '-'}</p>
+    </div>
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">المصدر</label>
+      <p className="font-bold">{TICKET_SOURCES.find(s => s.value === fullTicketView.source)?.label || '-'}</p>
+    </div>
+  </div>
+
+  {/* العنوان والمشكلة */}
+  {fullTicketView.customerAddress && (
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">العنوان</label>
+      <p className="font-bold">{fullTicketView.customerAddress}</p>
+    </div>
+  )}
+  
+  <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+    <label className="text-xs text-slate-500 block mb-1">المشكلة</label>
+    <p className="font-bold">{fullTicketView.issue || '-'}</p>
+  </div>
+
+  {/* 🆕 أكواد الأعطال (الأساسي + الإضافية لو موجودة) */}
+  {(fullTicketView.mainFaultCode || (fullTicketView.additionalFaults || []).length > 0) && (
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-2">أكواد الأعطال</label>
+      <div className="space-y-1.5">
+        {fullTicketView.mainFaultCode && (
+          <div className="text-sm font-bold bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-lg p-2">
+            {fullTicketView.mainFaultCode} - {fullTicketView.subFaultCode} ({fullTicketView.subFaultDescription})
+          </div>
+        )}
+        {(fullTicketView.additionalFaults || []).map((f, idx) => (
+          <div key={idx} className="text-sm font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2">
+            {f.mainFaultCode} - {f.subFaultCode} ({f.subFaultDescription})
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+
+  {/* المسؤولون */}
+  <div className="grid grid-cols-3 gap-3">
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">الفني</label>
+      <p className="font-bold">{fullTicketView.assignedTechnician || '-'}</p>
+    </div>
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">مركز الصيانة</label>
+      <p className="font-bold">{fullTicketView.assignedMaintenanceCenter || '-'}</p>
+    </div>
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+      <label className="text-xs text-slate-500 block mb-1">الكول سنتر</label>
+      <p className="font-bold">{fullTicketView.assignedCallCenter || '-'}</p>
+    </div>
+  </div>
+
+  {/* المبالغ */}
+  <div className="grid grid-cols-4 gap-3 text-center">
+    <div className="bg-teal-50 dark:bg-teal-900/30 p-3 rounded-xl">
+      <label className="text-xs block mb-1">التكلفة</label>
+      <p className="font-black text-lg">{(fullTicketView.totalCost || fullTicketView.estimatedCost || 0).toLocaleString()} ج</p>
+    </div>
+    <div className="bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-xl">
+      <label className="text-xs block mb-1">المدفوع</label>
+      <p className="font-black text-lg">{(fullTicketView.totalPaid || 0).toLocaleString()} ج</p>
+    </div>
+    <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-xl">
+      <label className="text-xs block mb-1">المتبقي</label>
+      <p className="font-black text-lg">{((fullTicketView.totalCost || 0) - (fullTicketView.totalPaid || 0)).toLocaleString()} ج</p>
+    </div>
+    <div className="bg-purple-50 dark:bg-purple-900/30 p-3 rounded-xl">
+      <label className="text-xs block mb-1">قطع الغيار</label>
+      <p className="font-black text-lg">{(fullTicketView.spareParts || []).length}</p>
+    </div>
+  </div>
+
+  {/* قطع غيار */}
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+    {fullTicketView.sparePartsWithCost && (
+      <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-xl border border-amber-200 dark:border-amber-800">
+        <label className="text-xs text-amber-600 dark:text-amber-400 block mb-1 font-bold">🛠️ قطع غيار بتكلفة</label>
+        <p className="text-sm whitespace-pre-wrap font-bold">{fullTicketView.sparePartsWithCost}</p>
+      </div>
+    )}
+    {fullTicketView.sparePartsWithoutCost && (
+      <div className="bg-green-50 dark:bg-green-900/30 p-3 rounded-xl border border-green-200 dark:border-green-800">
+        <label className="text-xs text-green-600 dark:text-green-400 block mb-1 font-bold">🔧 قطع غيار بدون تكلفة</label>
+        <p className="text-sm whitespace-pre-wrap font-bold">{fullTicketView.sparePartsWithoutCost}</p>
+      </div>
+    )}
+  </div>
+
+  {/* التواريخ */}
+  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+    {fullTicketView.invoiceDate && (
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+        <label className="text-xs text-slate-500 block mb-1 font-bold">📅 تاريخ الفاتورة</label>
+        <p className="font-bold">{formatDateOnly(fullTicketView.invoiceDate)}</p>
+      </div>
+    )}
+    {(fullTicketView.maintenanceEndDate || fullTicketView.maintenanceEndTime) && (
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+        <label className="text-xs text-slate-500 block mb-1 font-bold">⏰ توقيت انتهاء الصيانة</label>
+        <p className="font-bold">
+          {fullTicketView.maintenanceEndDate ? formatDateOnly(fullTicketView.maintenanceEndDate) : '-'}
+          {fullTicketView.maintenanceEndTime ? ` - ${fullTicketView.maintenanceEndTime}` : ''}
+        </p>
+      </div>
+    )}
+    {(fullTicketView.deliveryDate || fullTicketView.deliveryTime) && (
+      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+        <label className="text-xs text-slate-500 block mb-1 font-bold">📦 توقيت تسليم العميل</label>
+        <p className="font-bold">
+          {fullTicketView.deliveryDate ? formatDateOnly(fullTicketView.deliveryDate) : '-'}
+          {fullTicketView.deliveryTime ? ` - ${fullTicketView.deliveryTime}` : ''}
+        </p>
+      </div>
+    )}
+  </div>
+
+  {/* ===== ✅ قسم Follow up Callcenter - عرض ===== */}
+  {(fullTicketView.followUp?.accessibility > 0 || 
+    fullTicketView.followUp?.maintenanceTime > 0 || 
+    fullTicketView.followUp?.centerDealing > 0 || 
+    fullTicketView.followUp?.deliveryProcedures > 0 || 
+    fullTicketView.followUp?.repurchase) && (
+    
+    <div className="border-t-2 border-teal-200 dark:border-teal-800 pt-4 mt-4">
+      <h4 className="font-black text-lg text-teal-700 dark:text-teal-300 mb-4 flex items-center gap-2">
+        <Headphones size={20} className="text-teal-600" />
+        📋 تقييم خدمة العملاء (Follow up)
+      </h4>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* السؤال 1 */}
+        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">سهولة الوصول الى الشركة</p>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
+              {fullTicketView.followUp?.accessibility || 0}
+            </span>
+            <span className="text-sm text-slate-500">/ 10</span>
+            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
+              <div 
+                className="h-2 bg-teal-600 rounded-full transition-all"
+                style={{ width: `${((fullTicketView.followUp?.accessibility || 0) / 10) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+        
+        {/* السؤال 2 */}
+        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">تقييم وقت الصيانة</p>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
+              {fullTicketView.followUp?.maintenanceTime || 0}
+            </span>
+            <span className="text-sm text-slate-500">/ 10</span>
+            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
+              <div 
+                className="h-2 bg-teal-600 rounded-full transition-all"
+                style={{ width: `${((fullTicketView.followUp?.maintenanceTime || 0) / 10) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+        
+        {/* السؤال 3 */}
+        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">التعامل داخل مركز الصيانة</p>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
+              {fullTicketView.followUp?.centerDealing || 0}
+            </span>
+            <span className="text-sm text-slate-500">/ 10</span>
+            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
+              <div 
+                className="h-2 bg-teal-600 rounded-full transition-all"
+                style={{ width: `${((fullTicketView.followUp?.centerDealing || 0) / 10) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+        
+        {/* السؤال 4 */}
+        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">سهولة اجراءات التسليم والاستلام</p>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-black text-teal-600 dark:text-teal-400">
+              {fullTicketView.followUp?.deliveryProcedures || 0}
+            </span>
+            <span className="text-sm text-slate-500">/ 10</span>
+            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full ml-2">
+              <div 
+                className="h-2 bg-teal-600 rounded-full transition-all"
+                style={{ width: `${((fullTicketView.followUp?.deliveryProcedures || 0) / 10) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+        
+        {/* السؤال 5 */}
+        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl md:col-span-2">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">شراء منتجات نوفال مرة أخرى</p>
+          <div className="flex items-center gap-4">
+            <span className={`text-xl font-black ${fullTicketView.followUp?.repurchase === 'yes' ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {fullTicketView.followUp?.repurchase === 'yes' ? '✅ نعم' : 
+               fullTicketView.followUp?.repurchase === 'no' ? '❌ لا' : 'لم يتم التقييم'}
+            </span>
+          </div>
+        </div>
+        
+        {/* ملاحظات */}
+        {fullTicketView.followUpNotes && (
+          <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl md:col-span-2">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">📝 ملاحظات التقييم</p>
+            <p className="font-bold text-sm">{fullTicketView.followUpNotes}</p>
+          </div>
+        )}
+        
+        {/* معلومات التقييم */}
+        {(fullTicketView.followUpBy || fullTicketView.followUpDate) && (
+          <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl md:col-span-2">
+            <div className="flex flex-wrap gap-4 text-xs text-slate-500">
+              {fullTicketView.followUpBy && (
+                <p>👤 تم التقييم بواسطة: <span className="font-bold text-slate-700">{fullTicketView.followUpBy}</span></p>
+              )}
+              {fullTicketView.followUpDate && (
+                <p>📅 تاريخ التقييم: <span className="font-bold text-slate-700">{formatDate(fullTicketView.followUpDate)}</span></p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )}
+
+  {/* 🆕 الملاحظات العامة - كانت موجودة بس مش ظاهرة إلا لو فتحت وضع التعديل */}
+  {fullTicketView.notes && (
+    <div className="border rounded-xl p-4 bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800">
+      <h3 className="font-bold mb-2 flex items-center gap-2 text-amber-800 dark:text-amber-300">
+        <FileTextIcon size={18}/> ملاحظات
+      </h3>
+      <p className="text-sm whitespace-pre-wrap">{fullTicketView.notes}</p>
+    </div>
+  )}
+
+  {/* التعليقات */}
+  <div className="border rounded-xl p-4">
+    <h3 className="font-bold mb-3 flex items-center gap-2">
+      <MessageSquare size={18} className="text-teal-600"/> التعليقات ({ticketComments.length})
+    </h3>
+    <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+      {ticketComments.map(comment => (
+        <div key={comment.id} className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg">
+          {editingCommentId === comment.id ? (
+            <div className="flex gap-2">
+              <input className="flex-1 border p-2 rounded-lg text-sm" value={editingCommentText} onChange={e => setEditingCommentText(e.target.value)} />
+              <button onClick={() => editComment(comment.id)} className="px-3 py-1 bg-teal-600 text-white rounded text-xs">حفظ</button>
+              <button onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }} className="px-3 py-1 bg-slate-200 rounded text-xs">إلغاء</button>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm">{comment.text}</p>
+              <div className="flex justify-between items-center mt-2">
+                <div>
+                  <span className="text-xs text-slate-500">{comment.createdBy}</span>
+                  <span className="text-xs text-slate-400 mx-2">•</span>
+                  <span className="text-xs text-slate-400">{new Date(comment.createdAt).toLocaleString('ar-EG')}</span>
+                  {comment.editedAt && <span className="text-xs text-amber-500 mr-2">(معدل)</span>}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text); }} className="text-xs text-teal-500">تعديل</button>
+                  <button onClick={() => deleteComment(comment.id)} className="text-xs text-rose-500">حذف</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+    <div className="flex gap-2">
+      <input className="flex-1 border p-2 rounded-lg text-sm" placeholder="أضف تعليقاً..." value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addComment(); }} />
+      <button onClick={addComment} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">إضافة</button>
+    </div>
+  </div>
+
+  {/* ✨ ميزة جديدة: عرض الفاتورة المرتبطة بالتذكرة (لو موجودة) */}
+  {fullTicketView.linkedInvoiceNumber && (
+    <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 flex items-center gap-2">
+      <LinkIcon size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0"/>
+      <span className="text-emerald-700 dark:text-emerald-300 text-sm font-bold">
+        مرتبطة بالفاتورة #{fullTicketView.linkedInvoiceNumber}
+      </span>
+    </div>
+  )}
+
+  {/* أزرار الإجراءات */}
+  <div className="flex flex-wrap gap-2 pt-4 border-t">
+    <button onClick={() => { setSelectedTicket(fullTicketView); setShowAssignModal(true); }} className="px-4 py-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg text-sm font-bold">
+      <Users size={14} className="inline ml-1"/> تعيين مسؤولين
+    </button>
+    {/* 🛠️ FIX (باگ حقيقي): مودال قطع الغيار كان موجود بالكامل في الكود
+        (جدول + بحث + إضافة) بس مفيش أي زرار في كل الملف بيفتحه خالص -
+        يعني الميزة كانت موجودة تقنيًا لكن مستحيل توصلها من الواجهة. */}
+    <button onClick={() => { setSelectedTicket(fullTicketView); setShowSparePartsModal(true); }} className="px-4 py-2 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg text-sm font-bold">
+      <Package size={14} className="inline ml-1"/> قطع الغيار {(fullTicketView.spareParts || []).length > 0 && `(${fullTicketView.spareParts.length})`}
+    </button>
+    <button onClick={() => openEditModal(fullTicketView)} className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-sm font-bold">
+      <Edit size={14} className="inline ml-1"/> تعديل التذكرة
+    </button>
+    <button onClick={() => handleGenerateInvoice(fullTicketView)} className="px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-sm font-bold">
+      <Receipt size={14} className="inline ml-1"/> {fullTicketView.linkedInvoiceNumber ? 'إنشاء فاتورة أخرى' : 'إنشاء فاتورة'}
+    </button>
+    <button onClick={() => window.print()} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold">
+      <Printer size={14} className="inline ml-1"/> طباعة
+    </button>
+    <button onClick={() => setShowFullTicketModal(false)} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold">
+      إغلاق
+    </button>
+  </div>
+
+  <div className="text-xs text-slate-400 space-y-1 border-t pt-4">
+    <p>تاريخ الإنشاء: {formatDate(fullTicketView.createdAt)}</p>
+    <p>آخر تحديث: {formatDate(fullTicketView.updatedAt)}</p>
+    <p>تم الإنشاء بواسطة: {fullTicketView.createdByName}</p>
+    <p>المركز: {warehouseMap?.[fullTicketView.assignedCenter] || fullTicketView.assignedCenter}</p>
+  </div>
+</div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== مودال تعيين مسؤولين ===== */}
+      {showAssignModal && selectedTicket && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
+            <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white">تعيين مسؤولين للتذكرة #{selectedTicket.ticketNumber}</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold mb-1">الفني</label>
+                <select className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" value={assignData.technician} onChange={e => setAssignData({...assignData, technician: e.target.value})}>
+                  <option value="">-- اختر --</option>
+                  {technicians.map((tech, idx) => <option key={idx} value={tech}>{tech}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold mb-1">مركز الصيانة</label>
+                <select className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" value={assignData.center} onChange={e => setAssignData({...assignData, center: e.target.value})}>
+                  <option value="">-- اختر --</option>
+                  {maintenanceCenters.map(center => <option key={center.id} value={center.name}>{center.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold mb-1">الكول سنتر</label>
+                <select className="w-full border p-3 rounded-xl bg-white dark:bg-slate-900 font-bold" value={assignData.callCenter} onChange={e => setAssignData({...assignData, callCenter: e.target.value})}>
+                  <option value="">-- اختر --</option>
+                  {callCenters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-2 pt-4">
+                <button onClick={() => handleAssign(selectedTicket.id)} className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold">حفظ</button>
+                <button onClick={() => { setShowAssignModal(false); setAssignData({ technician: '', center: '', callCenter: '' }); }} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إلغاء</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== مودال قطع الغيار ===== */}
+      {showSparePartsModal && selectedTicket && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6 border-b pb-4">
+              <h3 className="font-black text-xl">قطع غيار التذكرة #{selectedTicket.ticketNumber}</h3>
+              <button onClick={() => setShowSparePartsModal(false)} className="hover:text-rose-600"><X size={24}/></button>
+            </div>
+            <div className="space-y-6">
+              <div className="border rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 dark:bg-slate-900/50">
+                    <tr>
+                      <th className="p-3">القطعة</th>
+                      <th className="p-3 text-center">الكمية</th>
+                      <th className="p-3 text-center">السعر</th>
+                      <th className="p-3 text-center">الإجمالي</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {(selectedTicket.spareParts || []).map((p, i) => (
+                      <tr key={i}>
+                        <td className="p-3 font-bold">{p.name}</td>
+                        <td className="p-3 text-center">{p.quantity}</td>
+                        <td className="p-3 text-center">{p.price} ج</td>
+                        <td className="p-3 text-center font-black">{p.quantity * p.price} ج</td>
+                      </tr>
+                    ))}
+                    {(selectedTicket.spareParts || []).length === 0 && (
+                      <tr>
+                        <td colSpan="4" className="p-6 text-center text-slate-400">لا توجد قطع غيار</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              
+              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                <h4 className="font-bold mb-3">إضافة قطعة غيار من المخزون</h4>
+                <div className="flex gap-2">
+                  <input
+                    className="flex-1 border p-2.5 rounded-lg text-sm bg-white dark:bg-slate-900"
+                    placeholder="ابحث بالاسم أو السيريال..."
+                    value={sparePartSearch}
+                    onChange={e => setSparePartSearch(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSearchSparePart(); } }}
+                  />
+                  <button type="button" onClick={() => handleSearchSparePart()} className="bg-teal-600 text-white px-4 rounded-lg font-bold text-sm flex items-center gap-1">
+                    {searchingSpareParts ? <Loader2 size={14} className="animate-spin"/> : <Search size={14}/>} بحث
+                  </button>
+                </div>
+
+                {sparePartResults.length > 0 && (
+                  <div className="mt-3 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden divide-y divide-slate-100 dark:divide-slate-700 max-h-48 overflow-y-auto">
+                    {sparePartResults.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          handleAddSparePart(selectedTicket.id, {
+                            id: item.id,
+                            serialNumber: item.serialNumber,
+                            name: item.name,
+                            quantity: 1,
+                            price: Number(item.price) || 0,
+                          });
+                          setSparePartResults([]);
+                          setSparePartSearch('');
+                        }}
+                        className="w-full text-right px-3 py-2 hover:bg-teal-50 dark:hover:bg-teal-900/30 flex items-center justify-between gap-2 bg-white dark:bg-slate-900"
+                      >
+                        <div>
+                          <p className="font-bold text-sm">{item.name}</p>
+                          <p className="text-xs text-slate-400 font-mono">{item.serialNumber} - متاح: {item.quantity}</p>
+                        </div>
+                        <span className="text-xs font-bold text-teal-600">{item.price} ج</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {sparePartResults.length === 0 && sparePartSearch && !searchingSpareParts && (
+                  <p className="text-xs text-slate-400 mt-2">جرب البحث بجزء من الاسم أو السيريال</p>
+                )}
+
+                {/* 🆕 بديل يدوي لو القطعة مش موجودة أصلاً في المخزون (اتجابت خصيصًا مثلاً) */}
+                <details className="mt-3">
+                  <summary className="text-xs font-bold text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-300">
+                    القطعة مش موجودة في المخزون؟ أضفها يدويًا
+                  </summary>
+                  <div className="grid grid-cols-4 gap-3 mt-2">
+                    <input className="col-span-2 border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="اسم القطعة" id="partName" />
+                    <input type="number" className="border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="الكمية" id="partQty" defaultValue="1" />
+                    <input type="number" className="border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="السعر" id="partPrice" />
+                  </div>
+                  <button onClick={() => {
+                    const name = document.getElementById('partName').value;
+                    const qty = parseInt(document.getElementById('partQty').value) || 1;
+                    const price = parseFloat(document.getElementById('partPrice').value) || 0;
+                    if (!name) return showError("يرجى إدخال اسم القطعة");
+                    handleAddSparePart(selectedTicket.id, { name, quantity: qty, price });
+                    document.getElementById('partName').value = '';
+                    document.getElementById('partPrice').value = '';
+                  }} className="mt-2 w-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-white py-2 rounded-lg font-bold text-sm">إضافة يدوية (بدون ربط بالمخزون)</button>
+                </details>
+              </div>
+              
+              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                <h4 className="font-bold mb-3">إضافة دفعة</h4>
+                <div className="flex gap-3">
+                  <input type="number" className="flex-1 border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="المبلغ" id="paymentAmount" />
+                  <button onClick={() => {
+                    const amount = parseFloat(document.getElementById('paymentAmount').value);
+                    if (!amount || amount <= 0) return showError("مبلغ غير صحيح");
+                    handleAddPayment(selectedTicket.id, amount);
+                    document.getElementById('paymentAmount').value = '';
+                  }} className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-bold text-sm">إضافة</button>
+                </div>
+              </div>
+              
+              <button onClick={() => setShowSparePartsModal(false)} className="w-full bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إغلاق</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== مودال سجل التذكرة ===== */}
+      {showHistoryModal && selectedTicket && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-2xl shadow-2xl max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6 border-b pb-4">
+              <h3 className="font-black text-xl">سجل التذكرة #{selectedTicket.ticketNumber}</h3>
+              <button onClick={() => setShowHistoryModal(false)} className="hover:text-rose-600"><X size={24}/></button>
+            </div>
+            <div className="space-y-4">
+              {ticketHistory.map((event, idx) => (
+                <div key={idx} className="relative pr-6 pb-4 border-r-2 border-teal-200 dark:border-teal-800 last:border-0">
+                  <div className="absolute right-[-5px] top-0 w-3 h-3 rounded-full bg-teal-600"></div>
+                  <p className="text-xs text-slate-400">{formatDate(event.timestamp)}</p>
+                  <p className="font-bold">{event.action}</p>
+                  {event.details && <p className="text-sm text-slate-600">{event.details}</p>}
+                  <p className="text-xs text-teal-500 mt-1">بواسطة: {event.by}</p>
+                </div>
+              ))}
+              {ticketHistory.length === 0 && <p className="text-center text-slate-400 py-8">لا يوجد سجل</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== مودال الحذف المجمع ===== */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
+            <h3 className="font-black text-lg mb-2 text-rose-600 flex items-center gap-2">
+              <Trash2 size={20}/> حذف مجمع للتذاكر
+            </h3>
+            <p className="text-sm mb-4">حذف <span className="font-bold text-rose-600">{selectedItems.size}</span> تذكرة بشكل نهائي</p>
+            <input className="w-full border p-3 rounded-xl font-bold mb-4 bg-white dark:bg-slate-900" placeholder="اكتب 'حذف' للتأكيد" value={bulkDeleteConfirm} onChange={e => setBulkDeleteConfirm(e.target.value)} />
+            <div className="flex gap-2">
+              <button onClick={handleBulkDelete} disabled={bulkDeleteConfirm !== 'حذف'} className="flex-1 bg-rose-600 text-white py-3 rounded-xl font-bold disabled:opacity-50">تأكيد</button>
+              <button onClick={() => { setShowBulkDeleteModal(false); setBulkDeleteConfirm(''); }} className="flex-1 bg-slate-100 dark:bg-slate-700 py-3 rounded-xl font-bold">إلغاء</button>
+            </div>
           </div>
         </div>
       )}
