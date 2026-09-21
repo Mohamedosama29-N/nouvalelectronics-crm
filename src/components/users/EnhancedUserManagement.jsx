@@ -306,21 +306,15 @@ const WARRANTY_PERIODS = [
      setGlobalLoading(false);
   };
 
-  const handleToggleAllPermissions = (user, category, checked) => {
-    const newPermissions = { ...user.permissions };
-    permissionsByCategory[category].forEach(p => {
-      newPermissions[p.key] = checked;
-    });
-    setEditingUser({ ...user, permissions: newPermissions });
-  };
-
-  const handleCopyPermissions = (sourceUser) => {
-    if (!editingUser) return;
-    setEditingUser({
-      ...editingUser,
+  const handleCopyPermissions = (sourceUserId) => {
+    if (!permissionsUser || !sourceUserId) return;
+    const sourceUser = usersList.find(u => u.id === sourceUserId);
+    if (!sourceUser) return;
+    setPermissionsUser({
+      ...permissionsUser,
       permissions: { ...sourceUser.permissions }
     });
-    showSuccess("تم نسخ الصلاحيات");
+    showSuccess(`تم نسخ صلاحيات ${sourceUser.name} - متنساش تدوس حفظ`);
   };
 
   const handleSavePermissions = async () => {
@@ -707,6 +701,22 @@ const WARRANTY_PERIODS = [
               <button onClick={() => setShowPermissionsModal(false)} className="text-slate-400 hover:text-rose-600">
                 <X size={24}/>
               </button>
+            </div>
+
+            {/* 🆕 نسخ الصلاحيات من موظف تاني - كانت الدالة موجودة في الكود
+                من قبل بس مش متوصّلة بأي زرار خالص، ميزة كانت ضايعة تمامًا */}
+            <div className="mb-6 bg-teal-50/50 dark:bg-teal-900/10 border border-teal-100 dark:border-teal-900/40 rounded-xl p-4 flex flex-wrap items-center gap-3">
+              <label className="text-xs font-bold text-teal-700 dark:text-teal-400 shrink-0">نسخ الصلاحيات من موظف آخر:</label>
+              <select
+                className="flex-1 min-w-[200px] border border-teal-200 dark:border-teal-800 p-2 rounded-lg text-sm bg-white dark:bg-slate-900"
+                defaultValue=""
+                onChange={e => { if (e.target.value) { handleCopyPermissions(e.target.value); e.target.value = ''; } }}
+              >
+                <option value="">-- اختر موظف --</option>
+                {usersList.filter(u => u.id !== permissionsUser.id).map(u => (
+                  <option key={u.id} value={u.id}>{u.name} ({USER_ROLES.find(r => r.key === u.role)?.label || u.role})</option>
+                ))}
+              </select>
             </div>
             
             <div className="space-y-6">

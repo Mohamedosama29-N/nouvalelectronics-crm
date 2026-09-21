@@ -1201,7 +1201,14 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       
       const spareParts = [...(current.spareParts || []), {
         ...part,
-        id: Date.now().toString(),
+        // 🛠️ FIX (باگ حرج): كان بيستبدل معرّف المخزون الحقيقي بمعرّف
+        // مؤقت دايمًا، حتى لو القطعة جاية من بحث حقيقي في المخزون - يعني
+        // أي قطعة اتضافت كده كانت بتفقد ربطها بالمخزون بصمت، وساعة عمل
+        // فاتورة من التذكرة كانت بتتحط في نقطة البيع كـ"خدمة" عادية من
+        // غير خصم فعلي من المخزون، رغم كل الشغل اللي اتعمل عشان الربط ده.
+        // دلوقتي بيحتفظ بالمعرّف الحقيقي لو موجود، ومش بيعمل معرّف مؤقت
+        // إلا للقطع المضافة يدويًا (اللي أصلًا مالهاش معرّف مخزون حقيقي).
+        id: part.id || Date.now().toString(),
         addedAt: new Date().toISOString(),
         addedBy: appUser.name
       }];
@@ -1235,6 +1242,47 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       showError("فشل إضافة قطعة الغيار: " + e.message);
     }
     
+    setGlobalLoading(false);
+  };
+
+  // 🆕 حذف قطعة غيار من التذكرة (كانت غير موجودة خالص - مفيش طريقة
+  // تصحح غلطة لو ضفت قطعة غلط إلا بالدخول على قاعدة البيانات يدويًا)
+  const handleRemoveSparePart = async (ticketId, partId) => {
+    setGlobalLoading(true);
+    try {
+      const ticketRef = doc(db, 'tickets', ticketId);
+      const snap = await getDoc(ticketRef);
+      const current = snap.data();
+
+      const removedPart = (current.spareParts || []).find(p => p.id === partId);
+      const spareParts = (current.spareParts || []).filter(p => p.id !== partId);
+      const totalCost = Math.max(0, (current.totalCost || 0) - ((removedPart?.price || 0) * (removedPart?.quantity || 1)));
+      const remaining = totalCost - (current.totalPaid || 0);
+
+      const history = [...(current.history || []), {
+        action: `حذف قطعة غيار: ${removedPart?.name || ''}`,
+        timestamp: new Date().toISOString(),
+        by: appUser.name
+      }];
+
+      await updateDoc(ticketRef, {
+        spareParts,
+        totalCost,
+        remaining,
+        updatedAt: serverTimestamp(),
+        history
+      });
+
+      showSuccess("تم حذف قطعة الغيار");
+
+      if (fullTicketView?.id === ticketId) {
+        setFullTicketView({ ...fullTicketView, spareParts, totalCost, remaining, history });
+      }
+      setSelectedTicket(prev => prev?.id === ticketId ? { ...prev, spareParts, totalCost, remaining, history } : prev);
+      setEditingTicket(prev => prev?.id === ticketId ? { ...prev, spareParts, totalCost, remaining, history } : prev);
+    } catch (e) {
+      showError("فشل حذف قطعة الغيار: " + e.message);
+    }
     setGlobalLoading(false);
   };
 
@@ -2440,9 +2488,65 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                   <Package size={16} className="text-emerald-600 dark:text-emerald-400" />
                   <h4 className="font-black text-sm text-emerald-700 dark:text-emerald-300">قطع الغيار</h4>
                 </div>
+
+                {/* 🛠️ FIX: كانت خانة البحث عن قطع غيار من المخزون (نفس
+                    الموجودة في فورم إنشاء تذكرة جديدة) مش موجودة هنا خالص -
+                    فورم التعديل كان فيه بس الخانات النصية القديمة تحت. */}
+                <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20">
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">إضافة قطعة غيار من المخزون</label>
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 border p-2.5 rounded-xl text-sm bg-white dark:bg-slate-900"
+                      placeholder="ابحث بالاسم أو السيريال..."
+                      value={sparePartSearch}
+                      onChange={e => setSparePartSearch(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSearchSparePart(); } }}
+                    />
+                    <button type="button" onClick={() => handleSearchSparePart()} className="bg-teal-600 text-white px-4 rounded-xl font-bold text-sm flex items-center gap-1 shrink-0">
+                      {searchingSpareParts ? <Loader2 size={14} className="animate-spin"/> : <Search size={14}/>} بحث
+                    </button>
+                  </div>
+
+                  {sparePartResults.length > 0 && (
+                    <div className="mt-3 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden divide-y divide-slate-100 dark:divide-slate-700 max-h-48 overflow-y-auto">
+                      {sparePartResults.map(item => (
+                        <button
+                          type="button"
+                          key={item.id}
+                          onClick={() => { handleAddSparePart(editingTicket.id, { id: item.id, serialNumber: item.serialNumber, name: item.name, quantity: 1, price: Number(item.price) || 0 }); setSparePartResults([]); setSparePartSearch(''); }}
+                          className="w-full text-right px-3 py-2 hover:bg-teal-50 dark:hover:bg-teal-900/30 flex items-center justify-between gap-2 bg-white dark:bg-slate-900"
+                        >
+                          <div>
+                            <p className="font-bold text-sm">{item.name}</p>
+                            <p className="text-xs text-slate-400 font-mono">{item.serialNumber} - متاح: {item.quantity}</p>
+                          </div>
+                          <span className="text-xs font-bold text-teal-600">{item.price} ج</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {(editingTicket.spareParts || []).length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {editingTicket.spareParts.map(p => (
+                        <div key={p.id} className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-sm truncate">{p.name}</p>
+                            <p className="text-xs text-slate-400 font-mono">{p.serialNumber || '-'} × {p.quantity}</p>
+                          </div>
+                          <span className="text-xs font-bold text-slate-600 dark:text-slate-300 shrink-0">{p.price * p.quantity} ج</span>
+                          <button type="button" onClick={() => handleRemoveSparePart(editingTicket.id, p.id)} className="text-rose-500 hover:text-rose-700 shrink-0">
+                            <X size={16}/>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">🛠️ قطع غيار بتكلفة</label>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">🛠️ قطع غيار بتكلفة (يدوي)</label>
                     <textarea rows="3" className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 transition-colors bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 resize-none" value={editFormData.sparePartsWithCost} onChange={e => setEditFormData({...editFormData, sparePartsWithCost: e.target.value})} />
                   </div>
                   <div>
@@ -3319,6 +3423,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                       <th className="p-3 text-center">الكمية</th>
                       <th className="p-3 text-center">السعر</th>
                       <th className="p-3 text-center">الإجمالي</th>
+                      <th className="p-3"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -3328,11 +3433,16 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                         <td className="p-3 text-center">{p.quantity}</td>
                         <td className="p-3 text-center">{p.price} ج</td>
                         <td className="p-3 text-center font-black">{p.quantity * p.price} ج</td>
+                        <td className="p-3 text-center">
+                          <button onClick={() => handleRemoveSparePart(selectedTicket.id, p.id)} className="text-rose-500 hover:text-rose-700">
+                            <X size={16}/>
+                          </button>
+                        </td>
                       </tr>
                     ))}
                     {(selectedTicket.spareParts || []).length === 0 && (
                       <tr>
-                        <td colSpan="4" className="p-6 text-center text-slate-400">لا توجد قطع غيار</td>
+                        <td colSpan="5" className="p-6 text-center text-slate-400">لا توجد قطع غيار</td>
                       </tr>
                     )}
                   </tbody>
