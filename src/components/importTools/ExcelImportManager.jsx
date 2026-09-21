@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
-  collection, addDoc, getDocs, serverTimestamp
+  collection, addDoc, getDocs, serverTimestamp, updateDoc, doc
 } from 'firebase/firestore';
 import {
   Download,
@@ -18,7 +18,7 @@ export function ExcelImportManager() {
   const [importLog, setImportLog] = useState([]);
   const [previewData, setPreviewData] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
-  const [importStats, setImportStats] = useState({ products: 0, models: 0, mainFaults: 0, subFaults: 0 });
+  const [importStats, setImportStats] = useState({ products: 0, models: 0, mainFaults: 0, subFaults: 0, productCodes: 0 });
 
   // تحميل قالب الاستيراد الجاهز
   const downloadTemplate = () => {
@@ -69,7 +69,7 @@ export function ExcelImportManager() {
     
     setFile(selectedFile);
     setImportLog([]);
-    setImportStats({ products: 0, models: 0, mainFaults: 0, subFaults: 0 });
+    setImportStats({ products: 0, models: 0, mainFaults: 0, subFaults: 0, productCodes: 0 });
     
     const reader = new FileReader();
 
@@ -199,6 +199,8 @@ export function ExcelImportManager() {
     let modelsCreated = 0;
     let mainFaultsCreated = 0;
     let subFaultsCreated = 0;
+    let subFaultsUpdated = 0;
+    let productCodesLinked = 0;
     let errors = [];
     
     try {
@@ -224,9 +226,14 @@ export function ExcelImportManager() {
       });
       
       const existingSubFaultsSnap = await getDocs(collection(db, 'subFaultCodes'));
-      const existingSubFaults = new Set();
-      existingSubFaultsSnap.docs.forEach(doc => {
-        existingSubFaults.add(`${doc.data().mainFaultId}_${doc.data().code}`);
+      const existingSubFaults = new Map();
+      existingSubFaultsSnap.docs.forEach(d => {
+        const data = d.data();
+        existingSubFaults.set(`${data.mainFaultId}_${data.code}`, {
+          id: d.id,
+          description: data.description || '',
+          productCode: data.productCode || ''
+        });
       });
       
       let processed = 0;
@@ -285,7 +292,8 @@ export function ExcelImportManager() {
             // 4. إنشاء كود العطل الفرعي إذا كان موجوداً في البيانات
             if (row.sub_fault_code && row.sub_fault_description) {
               const subFaultKey = `${mainFaultId}_${row.sub_fault_code}`;
-              if (!existingSubFaults.has(subFaultKey)) {
+              const existing = existingSubFaults.get(subFaultKey);
+              if (!existing) {
                 await addDoc(collection(db, 'subFaultCodes'), {
                   mainFaultId: mainFaultId,
                   code: row.sub_fault_code,
@@ -293,11 +301,30 @@ export function ExcelImportManager() {
                   productCode: row.product_code || '',
                   createdAt: serverTimestamp()
                 });
-                existingSubFaults.add(subFaultKey);
+                existingSubFaults.set(subFaultKey, { description: row.sub_fault_description, productCode: row.product_code || '' });
                 subFaultsCreated++;
+                if (row.product_code) productCodesLinked++;
                 addLog(`✅ تم إنشاء كود العطل الفرعي: ${row.sub_fault_code} - ${row.sub_fault_description.substring(0, 30)}...${row.product_code ? ` (كود المنتج: ${row.product_code})` : ''}`, 'success');
               } else {
-                addLog(`⚠️ كود العطل الفرعي ${row.sub_fault_code} موجود مسبقاً`, 'warning');
+                // 🛠️ FIX: كان بيتجاهل الصف تمامًا لو الكود موجود بالفعل،
+                // حتى لو الشيت الجديد فيه كود منتج مضاف أو متغيّر عن
+                // اللي محفوظ - يعني إعادة رفع نفس الشيت بعد إضافة أكواد
+                // المنتجات مكنش بيحدّث أي حاجة في السجلات القديمة خالص.
+                const newProductCode = row.product_code || '';
+                const newDescription = row.sub_fault_description;
+                const needsUpdate = newProductCode !== existing.productCode || newDescription !== existing.description;
+                if (needsUpdate) {
+                  await updateDoc(doc(db, 'subFaultCodes', existing.id), {
+                    description: newDescription,
+                    productCode: newProductCode
+                  });
+                  existingSubFaults.set(subFaultKey, { id: existing.id, description: newDescription, productCode: newProductCode });
+                  subFaultsUpdated++;
+                  if (newProductCode) productCodesLinked++;
+                  addLog(`🔄 تم تحديث كود العطل الفرعي: ${row.sub_fault_code}${newProductCode ? ` (كود المنتج: ${newProductCode})` : ''}`, 'success');
+                } else {
+                  addLog(`⚠️ كود العطل الفرعي ${row.sub_fault_code} موجود بالفعل ومطابق - تم تخطيه`, 'warning');
+                }
               }
             }
           }
@@ -312,20 +339,21 @@ export function ExcelImportManager() {
         products: productsCreated,
         models: modelsCreated,
         mainFaults: mainFaultsCreated,
-        subFaults: subFaultsCreated
+        subFaults: subFaultsCreated,
+        productCodes: productCodesLinked
       });
       
       addLog(`✅ تم اكتمال الاستيراد!`, 'success');
       addLog(`📦 المنتجات: تم إنشاء ${productsCreated} منتج جديد`, 'success');
       addLog(`🔧 الموديلات: تم إنشاء ${modelsCreated} موديل جديد`, 'success');
       addLog(`⚠️ أكواد الأعطال الرئيسية: تم إنشاء ${mainFaultsCreated} كود جديد`, 'success');
-      addLog(`🔹 أكواد الأعطال الفرعية: تم إنشاء ${subFaultsCreated} كود جديد`, 'success');
+      addLog(`🔹 أكواد الأعطال الفرعية: تم إنشاء ${subFaultsCreated} كود جديد، وتحديث ${subFaultsUpdated} كود موجود`, 'success');
       
       if (errors.length > 0) {
         addLog(`⚠️ عدد الأخطاء: ${errors.length}`, 'warning');
       }
       
-      showSuccess(`تم استيراد ${previewData.length} صف بنجاح. تم إنشاء ${productsCreated} منتج، ${modelsCreated} موديل، ${mainFaultsCreated} كود رئيسي، ${subFaultsCreated} كود فرعي.`);
+      showSuccess(`تم استيراد ${previewData.length} صف بنجاح. تم إنشاء ${productsCreated} منتج، ${modelsCreated} موديل، ${mainFaultsCreated} كود رئيسي، ${subFaultsCreated} كود فرعي جديد، وتحديث ${subFaultsUpdated} كود فرعي موجود (منهم ${productCodesLinked} مرتبط بكود منتج).`);
       
       setFile(null);
       setPreviewData([]);
@@ -361,7 +389,7 @@ export function ExcelImportManager() {
       </div>
       
       {/* إحصائيات سريعة */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="bg-teal-50 dark:bg-teal-900/30 p-3 rounded-xl text-center">
           <p className="text-xs text-teal-600 dark:text-teal-400">المنتجات</p>
           <p className="text-xl font-black">{importStats.products}</p>
@@ -377,6 +405,12 @@ export function ExcelImportManager() {
         <div className="bg-purple-50 dark:bg-purple-900/30 p-3 rounded-xl text-center">
           <p className="text-xs text-purple-600 dark:text-purple-400">أكواد فرعية</p>
           <p className="text-xl font-black">{importStats.subFaults}</p>
+        </div>
+        {/* 🆕 خانة خامسة لعدد أكواد المنتج المرتبطة - كانت مش ظاهرة رغم
+            إن العمود الخامس ده أساسي في الشيت دلوقتي */}
+        <div className="bg-rose-50 dark:bg-rose-900/30 p-3 rounded-xl text-center col-span-2 md:col-span-1">
+          <p className="text-xs text-rose-600 dark:text-rose-400">أكواد منتج مرتبطة</p>
+          <p className="text-xl font-black">{importStats.productCodes}</p>
         </div>
       </div>
       

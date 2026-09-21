@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import {
-  collection, addDoc, getDocs, doc, deleteDoc, query, where, serverTimestamp, onSnapshot
+  collection, addDoc, getDocs, doc, deleteDoc, updateDoc, query, where, serverTimestamp, onSnapshot, limit
 } from 'firebase/firestore';
 import {
   Package,
   GitBranch,
   AlertCircle,
-  Layers
+  Layers,
+  Tag
 } from 'lucide-react';
 import { db } from '../../firebase/config';
-import { showConfirm } from '../../utils/alerts';
+import { showConfirm, showError, showSuccess } from '../../utils/alerts';
+import { normalizeSearch, buildQueryTokens } from '../../utils/search';
 
 export function ProductModelManager({}) {
   const [products, setProducts] = useState([]);
@@ -19,11 +21,76 @@ export function ProductModelManager({}) {
   const [selectedProductId, setSelectedProductId] = useState('');
   const [selectedModelId, setSelectedModelId] = useState('');
   const [selectedMainFaultId, setSelectedMainFaultId] = useState('');
+  const [selectedSubFaultId, setSelectedSubFaultId] = useState('');
   
   const [newProduct, setNewProduct] = useState('');
   const [newModel, setNewModel] = useState('');
   const [newMainFault, setNewMainFault] = useState({ code: '', description: '' });
-  const [newSubFault, setNewSubFault] = useState({ code: '', description: '' });
+  const [newSubFault, setNewSubFault] = useState({ code: '', description: '', productCode: '' });
+
+  // 🆕 الخانة الخامسة: ربط كود منتج بكود العطل الفرعي المختار، مع معاينة
+  // حية للصنف المطابق في المخزون قبل الحفظ (نفس منطق البحث المرن
+  // المستخدم في التذاكر - بيجرب تطابق تام الأول، وبعدين بحث بالكلمات).
+  const [productCodeInput, setProductCodeInput] = useState('');
+  const [matchedItem, setMatchedItem] = useState(null);
+  const [searchingMatch, setSearchingMatch] = useState(false);
+  const [savingProductCode, setSavingProductCode] = useState(false);
+
+  useEffect(() => {
+    const current = subFaults.find(f => f.id === selectedSubFaultId);
+    setProductCodeInput(current?.productCode || '');
+    setMatchedItem(null);
+  }, [selectedSubFaultId, subFaults]);
+
+  const lookupProductCodeMatch = async (codeValue) => {
+    if (!codeValue.trim()) {
+      setMatchedItem(null);
+      return;
+    }
+    setSearchingMatch(true);
+    try {
+      const exactSnap = await getDocs(query(
+        collection(db, 'inventory'),
+        where('serialNumber', '==', codeValue.trim()),
+        where('isDeleted', '==', false),
+        limit(1)
+      ));
+      let found = null;
+      if (!exactSnap.empty) {
+        found = { id: exactSnap.docs[0].id, ...exactSnap.docs[0].data() };
+      } else {
+        const term = normalizeSearch(codeValue);
+        const tokens = buildQueryTokens(term);
+        const candidatesSnap = await getDocs(query(
+          collection(db, 'inventory'),
+          where('isDeleted', '==', false),
+          where('searchTokens', 'array-contains-any', tokens.length ? tokens : [term]),
+          limit(10)
+        ));
+        const match = candidatesSnap.docs.find(d => {
+          const data = d.data();
+          return normalizeSearch(data.name || '').includes(term) || normalizeSearch(data.serialNumber || '').includes(term);
+        }) || candidatesSnap.docs[0];
+        if (match) found = { id: match.id, ...match.data() };
+      }
+      setMatchedItem(found);
+    } catch {
+      showError('فشل البحث في المخزون');
+    }
+    setSearchingMatch(false);
+  };
+
+  const saveProductCodeLink = async () => {
+    if (!selectedSubFaultId) return;
+    setSavingProductCode(true);
+    try {
+      await updateDoc(doc(db, 'subFaultCodes', selectedSubFaultId), { productCode: productCodeInput.trim() });
+      showSuccess('تم حفظ كود المنتج بنجاح');
+    } catch {
+      showError('فشل حفظ كود المنتج');
+    }
+    setSavingProductCode(false);
+  };
 
   // تحميل المنتجات
   useEffect(() => {
@@ -150,6 +217,7 @@ export function ProductModelManager({}) {
 
   // تحميل أكواد الأعطال الفرعية عند اختيار كود رئيسي
   useEffect(() => {
+    setSelectedSubFaultId('');
     if (selectedMainFaultId) {
       const q = query(collection(db, 'subFaultCodes'), where('mainFaultId', '==', selectedMainFaultId));
       const unsub = onSnapshot(q, snap => setSubFaults(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -164,9 +232,10 @@ export function ProductModelManager({}) {
     await addDoc(collection(db, 'subFaultCodes'), {
       mainFaultId: selectedMainFaultId,
       code: newSubFault.code.trim(),
-      description: newSubFault.description.trim()
+      description: newSubFault.description.trim(),
+      productCode: newSubFault.productCode.trim()
     });
-    setNewSubFault({ code: '', description: '' });
+    setNewSubFault({ code: '', description: '', productCode: '' });
   };
 
   const deleteSubFault = async (subFaultId) => {
@@ -266,22 +335,76 @@ export function ProductModelManager({}) {
           <p className="text-center text-slate-400 py-8 text-sm">اختر كود عطل رئيسياً أولاً</p>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-2 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4">
               <input className="border p-3 rounded-xl" placeholder="الكود الفرعي" value={newSubFault.code} onChange={e => setNewSubFault({...newSubFault, code: e.target.value})} />
               <input className="border p-3 rounded-xl" placeholder="الوصف" value={newSubFault.description} onChange={e => setNewSubFault({...newSubFault, description: e.target.value})} />
+              <input className="border p-3 rounded-xl" placeholder="كود المنتج (اختياري)" value={newSubFault.productCode} onChange={e => setNewSubFault({...newSubFault, productCode: e.target.value})} />
             </div>
             <button onClick={addSubFault} className="w-full mb-4 bg-purple-600 text-white py-3 rounded-xl font-bold">إضافة كود فرعي</button>
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {subFaults.map(f => (
-                <div key={f.id} className="flex justify-between items-center p-3 rounded-xl hover:bg-slate-50">
-                  <div className="flex-1 text-right">
+                <div key={f.id} className={`flex flex-wrap justify-between items-center gap-2 p-3 rounded-xl cursor-pointer ${selectedSubFaultId === f.id ? 'bg-rose-50 dark:bg-rose-900/30 border-rose-500 border' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                  <button onClick={() => setSelectedSubFaultId(f.id)} className="flex-1 text-right min-w-[140px]">
                     <span className="font-mono font-bold">{f.code}</span> – {f.description}
-                  </div>
+                    {f.productCode && (
+                      <span className="block text-[10px] text-rose-500 dark:text-rose-400 font-mono mt-0.5">كود المنتج: {f.productCode}</span>
+                    )}
+                  </button>
                   <button onClick={() => deleteSubFault(f.id)} className="text-rose-500 p-2">🗑️</button>
                 </div>
               ))}
             </div>
           </>
+        )}
+      </div>
+
+      {/* 🆕 الخانة الخامسة: كود المنتج - ربط كود العطل الفرعي المختار
+          بصنف حقيقي في المخزون، مع معاينة حية قبل الحفظ */}
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border lg:col-span-2">
+        <h3 className="font-bold text-rose-600 mb-4 flex items-center gap-2">
+          <Tag size={18}/> كود المنتج
+        </h3>
+        {!selectedSubFaultId ? (
+          <p className="text-center text-slate-400 py-8 text-sm">اختر كود عطل فرعياً أولاً</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <input
+                className="flex-1 border p-3 rounded-xl font-mono"
+                placeholder="كود المنتج (سيريال أو وصف قريب من صنف في المخزون)"
+                value={productCodeInput}
+                onChange={e => { setProductCodeInput(e.target.value); setMatchedItem(null); }}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); lookupProductCodeMatch(productCodeInput); } }}
+              />
+              <button
+                onClick={() => lookupProductCodeMatch(productCodeInput)}
+                disabled={searchingMatch}
+                className="bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-4 rounded-xl font-bold text-sm"
+              >
+                {searchingMatch ? '...جاري البحث' : 'معاينة'}
+              </button>
+              <button
+                onClick={saveProductCodeLink}
+                disabled={savingProductCode}
+                className="bg-rose-600 text-white px-5 rounded-xl font-bold text-sm disabled:opacity-50"
+              >
+                حفظ
+              </button>
+            </div>
+
+            {matchedItem && (
+              <div className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-sm flex items-center justify-between">
+                <div>
+                  <span className="font-bold">{matchedItem.name}</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono block">{matchedItem.serialNumber}</span>
+                </div>
+                <span className="text-emerald-700 dark:text-emerald-300 font-bold">{matchedItem.price} ج - متاح: {matchedItem.quantity}</span>
+              </div>
+            )}
+            {matchedItem === null && productCodeInput && !searchingMatch && (
+              <p className="text-xs text-slate-400">دوس "معاينة" للتأكد إن الكود ده بيطابق صنف موجود في المخزون فعليًا</p>
+            )}
+          </div>
         )}
       </div>
     </div>
