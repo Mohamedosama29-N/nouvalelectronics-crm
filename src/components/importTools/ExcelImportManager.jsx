@@ -13,7 +13,7 @@ import { db } from '../../firebase/config';
 import { showConfirm, showError, showSuccess } from '../../utils/alerts';
 
 export function ExcelImportManager() {
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [importLog, setImportLog] = useState([]);
   const [previewData, setPreviewData] = useState([]);
@@ -56,51 +56,68 @@ export function ExcelImportManager() {
     showSuccess("تم تحميل قالب الاستيراد (5 مستويات)");
   };
 
-  const handleFileUpload = (e) => {
-    const selectedFile = e.target.files[0];
-    if (!selectedFile) return;
-    
-    const isCSV = selectedFile.name.toLowerCase().endsWith('.csv');
-    const isXLSX = selectedFile.name.toLowerCase().endsWith('.xlsx');
-    if (!isCSV && !isXLSX) {
-      showError("يرجى رفع ملف CSV أو Excel فقط");
+  // 🆕 استيراد أكتر من ملف مرة واحدة - بيتقرأ كل ملف بنفس المنطق
+  // الموجود أصلاً (XLSX أو CSV حسب امتداده)، وبعدين كل صفوف الملفات
+  // بتتجمع في معاينة واحدة وتتستورد مع بعض. منطق الاستيراد نفسه أصلاً
+  // بيتعامل مع البيانات بشكل تراكمي (بيتأكد قبل ما يضيف، وبيحدّث لو لقى
+  // تغيير)، فدمج أكتر من ملف قبل المعالجة آمن تمامًا من غير أي تعارض.
+  const handleFileUpload = async (e) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length === 0) return;
+
+    const invalidFile = selectedFiles.find(f => {
+      const name = f.name.toLowerCase();
+      return !name.endsWith('.csv') && !name.endsWith('.xlsx');
+    });
+    if (invalidFile) {
+      showError(`الملف "${invalidFile.name}" مش CSV ولا Excel - يرجى رفع ملفات CSV أو Excel فقط`);
       return;
     }
-    
-    setFile(selectedFile);
+
+    setFiles(selectedFiles);
     setImportLog([]);
     setImportStats({ products: 0, models: 0, mainFaults: 0, subFaults: 0, productCodes: 0 });
-    
-    const reader = new FileReader();
 
-    // 🛠️ FIX: كان بيقبل ملفات .xlsx في الواجهة، لكن بيقراها بـ readAsText
-    // كأنها نص عادي! ملفات Excel الحقيقية (.xlsx) هي ملفات ثنائية (ZIP)
-    // مش نص، فقراءتها كنص كان بينتج بيانات تالفة (يظهر غالبًا كخطأ
-    // "الأعمدة المطلوبة غير موجودة" أو استيراد بيانات مشوّهة). دلوقتي
-    // بنستخدم SheetJS لقراءة ملفات .xlsx الحقيقية، وبنسيبها CSV زي ما هي.
-    if (isXLSX) {
-      reader.onload = (event) => {
-        try {
-          const workbook = XLSX.read(event.target.result, { type: 'array' });
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const csvText = XLSX.utils.sheet_to_csv(firstSheet);
-          const parsedData = parseCSVData(csvText);
-          setPreviewData(parsedData.slice(0, 100));
-          setShowPreview(true);
-        } catch (error) {
-          console.error('Excel parse error:', error);
-          showError("فشل قراءة ملف Excel، تأكد إن الملف سليم وغير تالف");
-        }
-      };
-      reader.readAsArrayBuffer(selectedFile);
-    } else {
-      reader.onload = (event) => {
-        const text = event.target.result;
-        const parsedData = parseCSVData(text);
-        setPreviewData(parsedData.slice(0, 100));
-        setShowPreview(true);
-      };
-      reader.readAsText(selectedFile, 'UTF-8');
+    const readFileAsRows = (fileToRead) => new Promise((resolve) => {
+      const reader = new FileReader();
+      const isXLSX = fileToRead.name.toLowerCase().endsWith('.xlsx');
+
+      if (isXLSX) {
+        reader.onload = (event) => {
+          try {
+            const workbook = XLSX.read(event.target.result, { type: 'array' });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const csvText = XLSX.utils.sheet_to_csv(firstSheet);
+            resolve(parseCSVData(csvText));
+          } catch (error) {
+            console.error('Excel parse error:', error);
+            showError(`فشل قراءة ملف "${fileToRead.name}"، تأكد إن الملف سليم وغير تالف`);
+            resolve([]);
+          }
+        };
+        reader.readAsArrayBuffer(fileToRead);
+      } else {
+        reader.onload = (event) => {
+          resolve(parseCSVData(event.target.result));
+        };
+        reader.readAsText(fileToRead, 'UTF-8');
+      }
+    });
+
+    const rowsPerFile = await Promise.all(selectedFiles.map(async (f) => {
+      const rows = await readFileAsRows(f);
+      // بنسجل اسم الملف المصدر لكل صف، عشان يبان في المعاينة أي صف جاي منين
+      return rows.map(row => ({ ...row, _sourceFile: f.name }));
+    }));
+
+    const combinedRows = rowsPerFile.flat();
+    // 🛠️ FIX: كان فيه حد أقصى 100 صف بس في المعاينة (`.slice(0, 100)`)،
+    // وده كان هيبقى عائق حقيقي مع استيراد أكتر من ملف مع بعض. اتشال
+    // الحد ده تمامًا.
+    setPreviewData(combinedRows);
+    setShowPreview(combinedRows.length > 0);
+    if (combinedRows.length > 0) {
+      showSuccess(`تم تجهيز ${combinedRows.length} صف من ${selectedFiles.length} ملف للمعاينة`);
     }
   };
 
@@ -355,7 +372,7 @@ export function ExcelImportManager() {
       
       showSuccess(`تم استيراد ${previewData.length} صف بنجاح. تم إنشاء ${productsCreated} منتج، ${modelsCreated} موديل، ${mainFaultsCreated} كود رئيسي، ${subFaultsCreated} كود فرعي جديد، وتحديث ${subFaultsUpdated} كود فرعي موجود (منهم ${productCodesLinked} مرتبط بكود منتج).`);
       
-      setFile(null);
+      setFiles([]);
       setPreviewData([]);
       setShowPreview(false);
       document.getElementById('excelFileInput').value = '';
@@ -424,16 +441,24 @@ export function ExcelImportManager() {
         </button>
         
         <label className="bg-teal-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-teal-700 transition-colors cursor-pointer flex items-center gap-2">
-          <UploadCloud size={18}/> اختيار ملف
+          <UploadCloud size={18}/> اختيار ملف أو أكتر
           <input
             type="file"
             id="excelFileInput"
             accept=".csv,.xlsx"
+            multiple
             onChange={handleFileUpload}
             className="hidden"
           />
         </label>
       </div>
+
+      {files.length > 0 && (
+        <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-3 text-xs text-slate-500 dark:text-slate-400">
+          <span className="font-bold text-slate-700 dark:text-slate-300">الملفات المختارة ({files.length}): </span>
+          {files.map(f => f.name).join('، ')}
+        </div>
+      )}
       
       {/* معاينة البيانات */}
       {showPreview && previewData.length > 0 && (
@@ -451,6 +476,7 @@ export function ExcelImportManager() {
             <table className="w-full text-sm">
               <thead className="bg-slate-100 dark:bg-slate-800">
                 <tr>
+                  {files.length > 1 && <th className="p-2 text-right">الملف</th>}
                   <th className="p-2 text-right">المنتج</th>
                   <th className="p-2 text-right">الموديل</th>
                   <th className="p-2 text-right">الكود الرئيسي</th>
@@ -463,6 +489,7 @@ export function ExcelImportManager() {
               <tbody className="divide-y">
                 {previewData.map((row, idx) => (
                   <tr key={idx}>
+                    {files.length > 1 && <td className="p-2 text-[10px] text-slate-400">{row._sourceFile}</td>}
                     <td className="p-2 font-bold">{row.product_name}</td>
                     <td className="p-2">{row.model_name}</td>
                     <td className="p-2 font-mono text-amber-600">{row.main_fault_code || '-'}</td>
