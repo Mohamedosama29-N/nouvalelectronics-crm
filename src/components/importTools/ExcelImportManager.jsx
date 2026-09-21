@@ -15,6 +15,8 @@ import { showConfirm, showError, showSuccess } from '../../utils/alerts';
 export function ExcelImportManager() {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [readingProgress, setReadingProgress] = useState(null);
+  const [importProgress, setImportProgress] = useState(null);
   const [importLog, setImportLog] = useState([]);
   const [previewData, setPreviewData] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
@@ -77,6 +79,8 @@ export function ExcelImportManager() {
     setFiles(selectedFiles);
     setImportLog([]);
     setImportStats({ products: 0, models: 0, mainFaults: 0, subFaults: 0, productCodes: 0 });
+    setLoading(true);
+    setReadingProgress({ current: 0, total: selectedFiles.length });
 
     const readFileAsRows = (fileToRead) => new Promise((resolve) => {
       const reader = new FileReader();
@@ -104,20 +108,28 @@ export function ExcelImportManager() {
       }
     });
 
-    const rowsPerFile = await Promise.all(selectedFiles.map(async (f) => {
+    // 🛠️ FIX (باگ حقيقي مع عدد كبير من الملفات): كانت كل الملفات بتتقرأ
+    // مع بعض بـ Promise.all من غير أي مؤشر تقدم - مع 125 ملف، المتصفح
+    // كان فعليًا شغال (تحليل XLSX عملية تستهلك معالجة كتير) لكن الشاشة
+    // مكانتش بتوري أي حاجة بتتغيّر، فكانت تبان واقفة تمامًا. دلوقتي
+    // بتتقرأ ملف ملف بالتتابع مع تحديث تقدم واضح ("جاري قراءة الملف 12
+    // من 125")، وده كمان بيدّي فرصة للمتصفح يفضل متجاوب بدل ما يتجمد.
+    const combinedRows = [];
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const f = selectedFiles[i];
+      setReadingProgress({ current: i + 1, total: selectedFiles.length, fileName: f.name });
       const rows = await readFileAsRows(f);
-      // بنسجل اسم الملف المصدر لكل صف، عشان يبان في المعاينة أي صف جاي منين
-      return rows.map(row => ({ ...row, _sourceFile: f.name }));
-    }));
+      rows.forEach(row => combinedRows.push({ ...row, _sourceFile: f.name }));
+    }
 
-    const combinedRows = rowsPerFile.flat();
-    // 🛠️ FIX: كان فيه حد أقصى 100 صف بس في المعاينة (`.slice(0, 100)`)،
-    // وده كان هيبقى عائق حقيقي مع استيراد أكتر من ملف مع بعض. اتشال
-    // الحد ده تمامًا.
+    setReadingProgress(null);
+    setLoading(false);
     setPreviewData(combinedRows);
     setShowPreview(combinedRows.length > 0);
     if (combinedRows.length > 0) {
       showSuccess(`تم تجهيز ${combinedRows.length} صف من ${selectedFiles.length} ملف للمعاينة`);
+    } else {
+      showError('مفيش أي بيانات صالحة في الملفات المختارة');
     }
   };
 
@@ -255,10 +267,15 @@ export function ExcelImportManager() {
       
       let processed = 0;
       const total = previewData.length;
+      setImportProgress({ current: 0, total });
       
       for (const row of previewData) {
         try {
           processed++;
+          // 🛠️ FIX: مع استيراد بيبيانات كتير (آلاف الصفوف)، الشاشة كانت
+          // بتوري رسالة ثابتة "هتاخد شوية ثواني" من غير أي تحديث حقيقي،
+          // فكانت تبان واقفة تمامًا لدقايق. دلوقتي بيتحدث تقدم حقيقي.
+          setImportProgress({ current: processed, total });
           addLog(`جاري معالجة ${processed}/${total}: ${row.product_name} - ${row.model_name}`, 'info');
           
           // 1. إنشاء المنتج إذا لم يكن موجوداً
@@ -384,6 +401,7 @@ export function ExcelImportManager() {
     }
     
     setLoading(false);
+    setImportProgress(null);
   };
   
   return (
@@ -472,6 +490,13 @@ export function ExcelImportManager() {
               إلغاء
             </button>
           </div>
+          {/* 🛠️ عرض أول 300 صف بس في الجدول لتفادي إبطاء المتصفح مع
+              آلاف الصفوف - البيانات كاملة برضه هتتستورد، دي حدود العرض بس */}
+          {previewData.length > 300 && (
+            <p className="px-4 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border-b">
+              بيتم عرض أول 300 صف بس للمعاينة (من أصل {previewData.length}) - كل الصفوف هتتستورد فعليًا عند التأكيد
+            </p>
+          )}
           <div className="overflow-x-auto max-h-60">
             <table className="w-full text-sm">
               <thead className="bg-slate-100 dark:bg-slate-800">
@@ -487,7 +512,7 @@ export function ExcelImportManager() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {previewData.map((row, idx) => (
+                {previewData.slice(0, 300).map((row, idx) => (
                   <tr key={idx}>
                     {files.length > 1 && <td className="p-2 text-[10px] text-slate-400">{row._sourceFile}</td>}
                     <td className="p-2 font-bold">{row.product_name}</td>
@@ -541,10 +566,39 @@ export function ExcelImportManager() {
       {/* حالة التحميل */}
       {loading && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 text-center">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 text-center max-w-sm">
             <Loader2 className="w-12 h-12 animate-spin text-teal-600 mx-auto mb-4" />
-            <p className="text-lg font-bold">جاري استيراد البيانات...</p>
-            <p className="text-sm text-slate-500">يرجى الانتظار، قد تستغرق العملية بضع ثوانٍ</p>
+            {readingProgress ? (
+              <>
+                <p className="text-lg font-bold">جاري قراءة الملفات...</p>
+                <p className="text-sm text-slate-500 mb-3">
+                  ملف {readingProgress.current} من {readingProgress.total}
+                  {readingProgress.fileName ? ` - ${readingProgress.fileName}` : ''}
+                </p>
+                <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-teal-600 h-full transition-all"
+                    style={{ width: `${(readingProgress.current / readingProgress.total) * 100}%` }}
+                  />
+                </div>
+              </>
+            ) : importProgress ? (
+              <>
+                <p className="text-lg font-bold">جاري استيراد البيانات...</p>
+                <p className="text-sm text-slate-500 mb-3">صف {importProgress.current} من {importProgress.total}</p>
+                <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-teal-600 h-full transition-all"
+                    style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-bold">جاري استيراد البيانات...</p>
+                <p className="text-sm text-slate-500">يرجى الانتظار، قد تستغرق العملية بضع ثوانٍ</p>
+              </>
+            )}
           </div>
         </div>
       )}
