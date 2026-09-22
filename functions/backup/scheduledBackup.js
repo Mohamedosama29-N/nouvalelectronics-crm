@@ -1,8 +1,27 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { v1 } from '@google-cloud/firestore';
+import pkg from '@google-cloud/firestore';
 import { logger } from 'firebase-functions';
 
-const firestoreAdminClient = new v1.FirestoreAdminClient();
+// 🛠️ FIX: الاستيراد المسمّى { v1 } من @google-cloud/firestore (حزمة
+// CommonJS) مش مضمون يشتغل بشكل موثوق مع ESM - اتأكد ده فعليًا بمحاولة
+// تحميل حقيقية للملف رجّعت بالظبط الخطأ ده. الاستيراد الافتراضي بعده
+// استخراج v1 هو الطريقة الموصى بيها من Node نفسه لما بيحصل الموقف ده.
+const { v1 } = pkg;
+
+// 🛠️ FIX: إنشاء عميل Firestore Admin (اتصال gRPC) كان بيحصل وقت تحميل
+// الملف نفسه (خارج الفانكشن) - ده بالظبط اللي بيسبب خطأ النشر "Cannot
+// determine backend specification. Timeout after 10000" لأن أداة Firebase
+// بتحمّل كل ملفات الفانكشنز وتحللها وقت النشر، ولو ملف فيه تهيئة تقيلة
+// على المستوى العام ده بياخد وقت طويل أو يعلّق، العملية كلها بتفشل بتايم
+// آوت. الحل الموصى بيه من جوجل نفسها (رابط موجود في رسالة الخطأ): تأجيل
+// أي تهيئة تقيلة لحد ما الفانكشن فعليًا تتنفذ، مش وقت تحميل الملف.
+let firestoreAdminClient = null;
+const getFirestoreAdminClient = () => {
+  if (!firestoreAdminClient) {
+    firestoreAdminClient = new v1.FirestoreAdminClient();
+  }
+  return firestoreAdminClient;
+};
 
 // ==========================================================================
 // 💾 نسخ احتياطي تلقائي يومي لقاعدة البيانات كاملة
@@ -16,13 +35,14 @@ const firestoreAdminClient = new v1.FirestoreAdminClient();
 //     تحويلها لـ JSON عادي.
 //   - ممكن تستخدمه لاستعادة قاعدة البيانات كاملة بأمر واحد لو احتجت.
 //
-// ⚠️ قبل التفعيل، لازم:
-//   1. تنشئوا Cloud Storage bucket مخصص للنسخ الاحتياطية (أو تستخدموا
-//      الافتراضي بتاع المشروع).
-//   2. تدّوا الـ service account بتاع Cloud Functions صلاحية
-//      "Cloud Datastore Import Export Admin" من IAM في Google Cloud Console.
-//   3. تظبطوا BACKUP_BUCKET تحت كمتغير بيئة أو تغيروه هنا مباشرة.
-const BACKUP_BUCKET = process.env.BACKUP_BUCKET || 'gs://YOUR_PROJECT_ID-backups';
+// ⚠️ قبل التفعيل، لازم خطوة واحدة بس:
+//   تدّوا الـ service account بتاع Cloud Functions صلاحية
+//   "Cloud Datastore Import Export Admin" من IAM في Google Cloud Console.
+//   (مفيش حاجة تانية مطلوبة - بيستخدم bucket التخزين الافتراضي بتاع
+//   المشروع نفسه تلقائيًا، تقدروا تغيروه بمتغير بيئة BACKUP_BUCKET لو
+//   حابين تستخدموا bucket مخصص بدل الافتراضي).
+const getBackupBucket = (projectId) =>
+  process.env.BACKUP_BUCKET || `gs://${projectId}.appspot.com`;
 
 export const scheduledFirestoreBackup = onSchedule(
   {
@@ -33,12 +53,14 @@ export const scheduledFirestoreBackup = onSchedule(
   },
   async () => {
     const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
+    const firestoreAdminClient = getFirestoreAdminClient();
     const databaseName = firestoreAdminClient.databasePath(projectId, '(default)');
+    const backupBucket = getBackupBucket(projectId);
 
     try {
       const [operation] = await firestoreAdminClient.exportDocuments({
         name: databaseName,
-        outputUriPrefix: `${BACKUP_BUCKET}/${new Date().toISOString().split('T')[0]}`,
+        outputUriPrefix: `${backupBucket}/${new Date().toISOString().split('T')[0]}`,
         // فاضية = كل الكوليكشنز. لو حابب تستثني كوليكشن معين (زي activity_logs
         // الكبيرة نسبيًا)، ضيف اسمه في مصفوفة الاستثناء بدل كده.
         collectionIds: [],

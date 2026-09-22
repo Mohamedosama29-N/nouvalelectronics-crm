@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp
+  collection, getDocs, doc, updateDoc, query, where, serverTimestamp
 } from 'firebase/firestore';
 import {
   Package,
@@ -14,7 +14,6 @@ import {
   Cloud,
   EyeOff
 } from 'lucide-react';
-import { ROLE_DEFAULT_PERMISSIONS } from '../../constants/roles';
 import { db } from '../../firebase/config';
 import { logUserActivity } from '../../utils/activityLog';
 import { showError, showSuccess } from '../../utils/alerts';
@@ -171,38 +170,29 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
     try {
       const q = query(collection(db, 'employees'), where('email', '==', email.trim().toLowerCase()));
       const snap = await getDocs(q);
+
+      // 🛠️ FIX أمني: لو أكتر من موظف عندهم نفس الإيميل بالظبط، الاستعلام
+      // مش بيضمن ترتيب ثابت للنتايج - يعني ممكن يفتح حساب مختلف كل مرة
+      // تسجل دخول بنفس البيانات بالظبط (بالظبط المشكلة اللي حصلت مع
+      // حساب مكرر بصلاحيات أدمن). بدل ما نختار حساب عشوائي بصمت، بنوقف
+      // الدخول ونطلب تصحيح المشكلة يدويًا - أأمن بكتير من فتح حساب غلط.
+      if (snap.docs.length > 1) {
+        setError("فيه أكتر من حساب مسجل بنفس البريد الإلكتروني - تواصل مع مدير النظام لتصحيح المشكلة قبل تسجيل الدخول.");
+        showError("فيه أكتر من حساب مسجل بنفس البريد الإلكتروني - تواصل مع مدير النظام.");
+        setLoading(false);
+        return;
+      }
       
       if (snap.empty) {
-        const allUsers = await getDocs(collection(db, 'employees'));
-        if (allUsers.empty) {
-          const newAdmin = {
-            email: email.trim().toLowerCase(),
-            pass: hashPassword(pass),
-            name: 'مدير النظام',
-            role: 'admin',
-            assignedWarehouseId: 'main',
-            permissions: ROLE_DEFAULT_PERMISSIONS.admin,
-            createdAt: serverTimestamp(),
-            lastLogin: serverTimestamp()
-          };
-          const docRef = await addDoc(collection(db, 'employees'), newAdmin);
-          
-          if (rememberMe) {
-            localStorage.setItem('last_email', email);
-          }
-          
-          const userData = { id: docRef.id, ...newAdmin, permissions: newAdmin.permissions };
-          
-          await logUserLogin(userData);
-          
-          saveUserToStorage(userData);
-          onLoginSuccess(userData);
-          showSuccess("مرحباً! تم تفعيل حسابك كمدير للنظام بنجاح.");
-        } else {
-          registerFailedAttempt(email);
-          setError("هذا البريد الإلكتروني غير مسجل في النظام.");
-          showError("هذا البريد الإلكتروني غير مسجل في النظام.");
-        }
+        // 🛠️ FIX أمني حرج: كان فيه مسار بيعمل حساب "مدير نظام" تلقائيًا
+        // بأي إيميل/باسورد لو كوليكشن employees بدا فاضي وقت السجيل دخول -
+        // ده منطقي للحظة إعداد النظام لأول مرة، لكن خطير جدًا لنظام شغال
+        // فعليًا بموظفين حقيقيين: أي ظرف عابر (خطأ إملائي، مشكلة اتصال
+        // لحظية، أي حاجة) يخلي الفحص يفشل بيمنح صلاحيات مدير كاملة لأي
+        // حد كتب أي إيميل وباسورد في اللحظة دي. اتقفل المسار ده تمامًا.
+        registerFailedAttempt(email);
+        setError("هذا البريد الإلكتروني غير مسجل في النظام.");
+        showError("هذا البريد الإلكتروني غير مسجل في النظام.");
       } else {
         const userDoc = snap.docs[0];
         const userData = userDoc.data();

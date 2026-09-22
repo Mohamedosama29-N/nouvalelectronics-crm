@@ -21,12 +21,15 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
   const [activeTab, setActiveTab] = useState('pending');
   const [transfers, setTransfers] = useState([]);
   const [inventory, setInventory] = useState([]);
-  const [mainInventory, setMainInventory] = useState([]);
   
   const [searchProduct, setSearchProduct] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [reqQty, setReqQty] = useState(1);
   const [toWarehouseId, setToWarehouseId] = useState('');
+  // 🆕 الفرع المطلوب منه التحويل - افتراضيًا المخزن الرئيسي زي ما كان،
+  // بس دلوقتي تقدر تختار أي فرع تاني تطلب منه مباشرة
+  const [requestFromWarehouseId, setRequestFromWarehouseId] = useState('main');
+  const [sourceInventory, setSourceInventory] = useState([]);
   const [rejectingReq, setRejectingReq] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [selectedWarehouse, setSelectedWarehouse] = useState('all');
@@ -39,8 +42,20 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
 
   const currentWarehouseId = appUser.assignedWarehouseId || 'main';
   const isMainWarehouse = currentWarehouseId === 'main' || appUser.role === 'admin' || appUser.role === 'main_warehouse_manager';
-  const canApprove = appUser.permissions?.approveTransfer || isMainWarehouse;
   const canReject = appUser.permissions?.rejectTransfer || isMainWarehouse;
+
+  // 🆕 هل المستخدم يقدر يوافق/يرفض على طلب تحويل معين بالذات - مش بس
+  // المخزن الرئيسي/الأدمن، دلوقتي أي فرع هو نفسه "من مخزن" الطلب (يعني
+  // مطلوب منه يبعت) يقدر يوافق أو يرفض طلبات موجهة له مباشرة.
+  const canActOnTransfer = (transfer) =>
+    isMainWarehouse ||
+    appUser.permissions?.approveTransfer ||
+    transfer.fromWarehouseId === currentWarehouseId;
+
+  // 🆕 طلبات "واردة" للفرع (fromWarehouseId == currentWarehouseId) -
+  // منفصلة عن طلباته هو، عشان يقدر يشوف ويوافق/يرفض على طلبات فروع
+  // تانية موجهة له مباشرة، مش بس طلباته الشخصية.
+  const [incomingTransfers, setIncomingTransfers] = useState([]);
 
   useEffect(() => {
     let q = query(collection(db, 'transfers'), orderBy('createdAt', 'desc'));
@@ -54,9 +69,16 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
     }
 
     const unsub = onSnapshot(query(q, limit(150)), snap => {
-      const fetched = snap.docs.map(d => ({id: d.id, ...d.data()}));
-      setTransfers(fetched);
+      setTransfers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
+
+    let incomingUnsub = () => {};
+    if (!isMainWarehouse && !appUser.permissions?.viewAllWarehouses) {
+      const incomingQ = query(collection(db, 'transfers'), where('fromWarehouseId', '==', currentWarehouseId), orderBy('createdAt', 'desc'), limit(150));
+      incomingUnsub = onSnapshot(incomingQ, snap => {
+        setIncomingTransfers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+    }
 
     const invQ = isMainWarehouse 
       ? query(collection(db, 'inventory'), where('warehouseId', '==', 'main'), where('isDeleted', '==', false))
@@ -70,36 +92,44 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
       setInventory(snap.docs.map(d => ({id: d.id, ...d.data()})));
     });
 
-    // 🆕 لو المستخدم مش في المخزن الرئيسي، محتاج يقدر يدوّر على أي صنف
-    // موجود في المخزن الرئيسي (حتى لو مش عنده هو أصلًا) عشان يطلبه منه -
-    // مش بس الأصناف الموجودة في مخزنه هو.
-    let mainInvUnsub = () => {};
+    // 🆕 مصدر البحث لطلب تحويل جديد - بيتغيّر حسب الفرع اللي تختاره من
+    // القائمة المنسدلة (مش المخزن الرئيسي بس زي قبل كده)
+    let sourceInvUnsub = () => {};
     if (!isMainWarehouse) {
-      mainInvUnsub = onSnapshot(
-        query(collection(db, 'inventory'), where('warehouseId', '==', 'main'), where('isDeleted', '==', false), limit(1000)),
-        snap => setMainInventory(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      sourceInvUnsub = onSnapshot(
+        query(collection(db, 'inventory'), where('warehouseId', '==', requestFromWarehouseId), where('isDeleted', '==', false), limit(1000)),
+        snap => setSourceInventory(snap.docs.map(d => ({ id: d.id, ...d.data() })))
       );
     }
 
-    return () => { unsub(); invUnsub(); mainInvUnsub(); };
-  }, [appUser, currentWarehouseId, isMainWarehouse]);
+    return () => { unsub(); incomingUnsub(); invUnsub(); sourceInvUnsub(); };
+  }, [appUser, currentWarehouseId, isMainWarehouse, requestFromWarehouseId]);
 
   useEffect(() => {
+    // 🆕 دمج طلبات المستخدم الشخصية مع الطلبات الواردة له كمصدر (لو فرع
+    // عادي)، بدون تكرار
+    const merged = [...transfers, ...incomingTransfers].reduce((acc, t) => {
+      acc.set(t.id, t);
+      return acc;
+    }, new Map());
+    const allTransfers = Array.from(merged.values())
+      .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+
     if (selectedWarehouse === 'all') {
-      setFilteredTransfers(transfers);
+      setFilteredTransfers(allTransfers);
     } else {
-      setFilteredTransfers(transfers.filter(t => 
+      setFilteredTransfers(allTransfers.filter(t => 
         t.toWarehouseId === selectedWarehouse || t.fromWarehouseId === selectedWarehouse
       ));
     }
-  }, [transfers, selectedWarehouse]);
+  }, [transfers, incomingTransfers, selectedWarehouse]);
 
   // 🆕 مصدر البحث يختلف حسب دور المستخدم:
   // - مستخدم فرع عادي: بيدوّر في مخزون المخزن الرئيسي (عشان يقدر يطلب
   //   صنف مش عنده هو أصلًا، والمخزن الرئيسي يوافق ويحوّله له).
   // - مستخدم المخزن الرئيسي: بيدوّر في مخزون المخزن الرئيسي نفسه (عشان
   //   يختار صنف يبعته بنفسه لفرع معين - تحويل بالدفع مش بالطلب).
-  const searchSource = isMainWarehouse ? inventory : mainInventory;
+  const searchSource = isMainWarehouse ? inventory : sourceInventory;
 
   const [searchResults, setSearchResults] = useState([]);
 
@@ -122,7 +152,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
     );
 
     if (matches.length === 0) {
-      showError(isMainWarehouse ? "لم يتم العثور على المنتج في مخزنك" : "لم يتم العثور على المنتج في المخزن الرئيسي");
+      showError(isMainWarehouse ? "لم يتم العثور على المنتج في مخزنك" : `لم يتم العثور على المنتج في ${warehouseMap[requestFromWarehouseId] || "المخزن المختار"}`);
       setSearchResults([]);
     } else if (matches.length === 1) {
       selectProduct(matches[0]);
@@ -134,7 +164,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
 
   const selectProduct = (item) => {
     if (item.quantity <= 0) {
-      showError(isMainWarehouse ? "المنتج غير متوفر بالكمية المطلوبة في مخزنك" : "المنتج غير متوفر حاليًا في المخزن الرئيسي");
+      showError(isMainWarehouse ? "المنتج غير متوفر بالكمية المطلوبة في مخزنك" : `المنتج غير متوفر حاليًا في ${warehouseMap[requestFromWarehouseId] || "المخزن المختار"}`);
       return;
     }
     setSelectedProduct(item);
@@ -148,12 +178,13 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
     if (isMainWarehouse && !toWarehouseId) return showError("اختر المخزن المرسل إليه");
     if (reqQty <= 0) return showError("الكمية غير صالحة");
     if (reqQty > selectedProduct.quantity) {
-      return showError(isMainWarehouse ? "الكمية المطلوبة أكبر من المتاح في مخزنك!" : "الكمية المطلوبة أكبر من المتاح في المخزن الرئيسي!");
+      return showError(isMainWarehouse ? "الكمية المطلوبة أكبر من المتاح في مخزنك!" : `الكمية المطلوبة أكبر من المتاح في ${warehouseMap[requestFromWarehouseId] || "المخزن المختار"}!`);
     }
 
-    // 🆕 فرع عادي: بيطلب من المخزن الرئيسي لنفسه (fromWarehouseId='main').
+    // 🆕 فرع عادي: بيطلب من أي فرع يختاره (مش المخزن الرئيسي بس زي قبل
+    // كده - requestFromWarehouseId افتراضيًا 'main' لكن قابل للتغيير).
     // المخزن الرئيسي: بيبعت من مخزنه هو لأي فرع يختاره (زي ما كان قبل كده).
-    const fromWarehouseId = isMainWarehouse ? currentWarehouseId : 'main';
+    const fromWarehouseId = isMainWarehouse ? currentWarehouseId : requestFromWarehouseId;
     const destinationWarehouseId = isMainWarehouse ? toWarehouseId : currentWarehouseId;
 
     setGlobalLoading(true);
@@ -469,13 +500,32 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
             <div className="bg-teal-50 dark:bg-teal-900/30 p-5 rounded-2xl border border-teal-100 dark:border-teal-800 text-teal-800 dark:text-teal-300 font-bold text-sm leading-relaxed shadow-sm">
               {isMainWarehouse
                 ? 'ابحث عن المنتج في مخزنك واختر الكمية والفرع المرسل إليه.'
-                : 'ابحث عن أي منتج موجود في المخزن الرئيسي حتى لو مش موجود عندك، وهيتحول لمخزنك بعد موافقة المخزن الرئيسي - سواء كصنف جديد أو زيادة في الكمية الموجودة.'}
+                : 'ابحث عن أي منتج موجود في الفرع اللي تختاره تحت حتى لو مش موجود عندك، وهيتحول لمخزنك بعد الموافقة - سواء كصنف جديد أو زيادة في الكمية الموجودة.'}
             </div>
+
+            {/* 🆕 اختيار الفرع المطلوب منه التحويل - مش المخزن الرئيسي
+                بس زي قبل كده، تقدر تطلب من أي فرع تاني مباشرة */}
+            {!isMainWarehouse && (
+              <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">اطلب من</label>
+                <select
+                  className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900 outline-none focus:border-teal-500"
+                  value={requestFromWarehouseId}
+                  onChange={e => { setRequestFromWarehouseId(e.target.value); setSelectedProduct(null); setSearchResults([]); setSearchProduct(''); }}
+                >
+                  {Object.entries(warehouseMap)
+                    .filter(([id]) => id !== currentWarehouseId)
+                    .map(([id, name]) => (
+                      <option key={id} value={id}>{name}</option>
+                    ))}
+                </select>
+              </div>
+            )}
             
             <form onSubmit={handleSearchProduct} className="flex gap-3">
               <input 
                 className="flex-1 border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none font-bold text-right bg-white dark:bg-slate-900 focus:border-teal-500" 
-                placeholder={isMainWarehouse ? "ابحث بالاسم أو السيريال..." : "ابحث بالاسم أو السيريال في المخزن الرئيسي..."} 
+                placeholder={isMainWarehouse ? "ابحث بالاسم أو السيريال..." : `ابحث بالاسم أو السيريال في ${warehouseMap[requestFromWarehouseId] || "الفرع المختار"}...`} 
                 value={searchProduct} 
                 onChange={e=>setSearchProduct(e.target.value)} 
               />
@@ -652,12 +702,12 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
                           </button>
                         </td>
                         <td className="p-4 text-center">
-                          {canApprove ? (
+                          {canActOnTransfer(req) ? (
                             <div className="flex justify-center gap-2">
                               <button onClick={()=>handleApprove(req)} className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 p-2 rounded-xl hover:bg-emerald-500 dark:hover:bg-emerald-800 hover:text-white" title="موافقة">
                                 <Check size={18}/>
                               </button>
-                              {canReject && (
+                              {(canReject || req.fromWarehouseId === currentWarehouseId) && (
                                 <button onClick={()=>setRejectingReq(req)} className="bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 p-2 rounded-xl hover:bg-rose-500 dark:hover:bg-rose-800 hover:text-white" title="رفض">
                                   <X size={18}/>
                                 </button>
