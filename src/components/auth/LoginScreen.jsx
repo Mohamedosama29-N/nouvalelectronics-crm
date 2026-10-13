@@ -22,6 +22,7 @@ import { apiLimiter } from '../../utils/rateLimiter';
 import { hashPassword, verifyPassword } from '../../utils/security';
 import { saveUserToStorage } from '../../utils/userStorage';
 import { requestPasswordReset } from '../../utils/passwordReset';
+import { loginWithServer, shouldUseLegacyFallback } from '../../utils/authSession';
 
 export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry, isConnecting, firebaseError }) {
   const [email, setEmail] = useState('');
@@ -167,6 +168,40 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
     }
     
     setLoading(true);
+
+    // 🆕 الدخول الحقيقي: السيرفر (Cloud Function) بيتحقق من الباسورد ويعمل
+    // الجلسة. الدخول القديم تحت بيشتغل بس لو الدالة مش منشورة (فترة الانتقال).
+    try {
+      const userWithId = await loginWithServer(email.trim().toLowerCase(), pass);
+      clearLockState(email);
+      if (rememberMe) localStorage.setItem('last_email', email);
+      await logUserLogin(userWithId);
+      saveUserToStorage(userWithId);
+      onLoginSuccess(userWithId);
+      showSuccess(`أهلاً بك مجدداً يا ${userWithId.name}`);
+      await logUserActivity(userWithId, 'تسجيل دخول', 'قام بتسجيل الدخول إلى النظام');
+      setLoading(false);
+      return;
+    } catch (serverErr) {
+      if (!shouldUseLegacyFallback(serverErr)) {
+        const code = serverErr?.code || '';
+        let msg = serverErr?.message || 'فشل تسجيل الدخول';
+        if (code === 'functions/unauthenticated') {
+          registerFailedAttempt(email);
+          msg = 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+        } else if (code === 'functions/resource-exhausted' || code === 'functions/permission-denied' || code === 'functions/failed-precondition') {
+          // الرسالة جاية جاهزة من السيرفر (قفل / حساب موقوف / إيميل مكرر)
+        } else if (code === 'functions/unavailable' || code === 'functions/not-found' || code === 'functions/internal') {
+          msg = 'خدمة تسجيل الدخول غير متاحة حاليًا. حاول مرة أخرى بعد قليل.';
+        }
+        setError(msg);
+        showError(msg);
+        setLoading(false);
+        return;
+      }
+      console.warn('customLogin غير متاحة - استخدام الدخول القديم مؤقتًا:', serverErr?.code);
+    }
+
     try {
       const q = query(collection(db, 'employees'), where('email', '==', email.trim().toLowerCase()));
       const snap = await getDocs(q);

@@ -12,9 +12,11 @@ import {
   Image as ImageIcon,
   UserPlus,
   Link2 as LinkIcon,
-  CheckCircle
+  CheckCircle,
+  ScanLine
 } from 'lucide-react';
 import { InvoiceRenderer } from './InvoiceRenderer';
+import { BarcodeScannerModal } from '../common/BarcodeScannerModal';
 import { db } from '../../firebase/config';
 import { useDebounce } from '../../hooks/useDebounce';
 import { logUserActivity } from '../../utils/activityLog';
@@ -24,6 +26,7 @@ import { buildQueryTokens, buildSearchTokens, normalizePhone, normalizeSearch } 
 export function POSManager({ appUser, systemSettings, setGlobalLoading, prefillFromTicket, onConsumeTicketPrefill }) { 
   const [sellQty, setSellQty] = useState(1);
   const [search, setSearch] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
   const [foundItem, setFoundItem] = useState(null);
   const [invoice, setInvoice] = useState({ 
     customerName: '', 
@@ -43,6 +46,10 @@ export function POSManager({ appUser, systemSettings, setGlobalLoading, prefillF
     ticketNumber: ''
   });
   const [invoiceData, setInvoiceData] = useState(null);
+  // 🆕 دفعة جزئية (تقسيط) - افتراضيًا الفاتورة بتتدفع بالكامل زي ما كان،
+  // لكن تقدر تفعّل الخيار ده لو العميل هيدفع جزء بس دلوقتي
+  const [isPartialPayment, setIsPartialPayment] = useState(false);
+  const [amountPaidNow, setAmountPaidNow] = useState('');
   const [recentCustomers, setRecentCustomers] = useState([]);
   const [searchHistory, setSearchHistory] = useState([]);
   const [quickAmounts] = useState([100, 200, 500, 1000, 2000, 5000]);
@@ -263,15 +270,16 @@ export function POSManager({ appUser, systemSettings, setGlobalLoading, prefillF
   // ==========================================================================
   // 🔍 البحث عن المنتج وإضافته للسلة مع دعم الضمان
   // ==========================================================================
-  const handleSearch = async (e) => {
-    e.preventDefault();
-    if (!search.trim()) return;
+  const handleSearch = async (e, overrideTerm) => {
+    e?.preventDefault?.();
+    const rawTerm = typeof overrideTerm === 'string' ? overrideTerm : search;
+    if (!rawTerm.trim()) return;
 
-    setSearchHistory(prev => [search, ...prev.slice(0, 4)]);
+    setSearchHistory(prev => [rawTerm, ...prev.slice(0, 4)]);
     setGlobalLoading(true);
 
     try {
-      const searchTerm = search.trim().toLowerCase();
+      const searchTerm = rawTerm.trim().toLowerCase();
 
       // ✅ البحث في المخزون
       const q = query(
@@ -448,6 +456,20 @@ const handleCheckout = async () => {
   if (cart.length === 0 && !foundItem) return showError("السلة فارغة");
   if (!invoice.customerName) return showError("يرجى إدخال اسم العميل");
   if (calculations.finalTotal < 0) return showError("الإجمالي لا يمكن أن يكون سالباً");
+
+  // 🆕 التحقق من صحة الدفعة الجزئية قبل إتمام البيع
+  let totalPaidNow = calculations.finalTotal;
+  if (isPartialPayment) {
+    const paidValue = Number(amountPaidNow);
+    if (!amountPaidNow || paidValue <= 0) {
+      return showError("أدخل المبلغ المدفوع الآن");
+    }
+    if (paidValue >= calculations.finalTotal) {
+      return showError("المبلغ المدفوع أكبر من أو يساوي الإجمالي - شيل خيار الدفعة الجزئية لو هتدفع بالكامل");
+    }
+    totalPaidNow = paidValue;
+  }
+  const remainingAmount = calculations.finalTotal - totalPaidNow;
   
   const confirmed = await showConfirm(
     'تأكيد البيع',
@@ -537,6 +559,18 @@ const handleCheckout = async () => {
                        invoice.paymentMethod === 'transfer' ? { bankTransferDetails: invoice.bankTransferDetails } : {},
         notes: invoice.notes,
         type: 'sell', 
+        // 🆕 تقسيط/دفعة جزئية - لو الفاتورة اتدفعت بالكامل، totalPaid
+        // بيساوي finalTotal وremaining بيبقى صفر (زي ما كانت الحالة
+        // الوحيدة قبل كده)
+        totalPaid: totalPaidNow,
+        remaining: remainingAmount,
+        paymentStatus: remainingAmount > 0.01 ? 'partial' : 'paid',
+        paymentHistory: [{
+          amount: totalPaidNow,
+          method: invoice.paymentMethod,
+          date: new Date().toISOString(),
+          by: appUser.name
+        }],
         // ✨ ميزة جديدة: ربط الفاتورة بتذكرة الصيانة (لو الفاتورة دي طالعة من تذكرة)
         ticketId: invoice.ticketId || null,
         ticketNumber: invoice.ticketNumber || null,
@@ -624,6 +658,8 @@ const handleCheckout = async () => {
     });
     
     handleClearCart();
+    setIsPartialPayment(false);
+    setAmountPaidNow('');
     setInvoice({ 
       customerName: '', 
       phone: '', 
@@ -853,6 +889,14 @@ const handleCheckout = async () => {
               value={sellQty}
               onChange={e => setSellQty(Number(e.target.value) || 1)}
             />
+            <button
+              type="button"
+              onClick={() => setShowScanner(true)}
+              className="bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-4 rounded-xl font-bold text-sm hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center gap-2"
+              title="مسح باركود بالكاميرا"
+            >
+              <ScanLine size={18}/> مسح
+            </button>
             <button 
               type="submit" 
               className="bg-teal-600 text-white px-6 rounded-xl font-bold text-sm shadow-sm hover:bg-teal-700 transition-colors flex items-center gap-2"
@@ -860,6 +904,12 @@ const handleCheckout = async () => {
               <Search size={18}/> إضافة
             </button>
           </form>
+          {showScanner && (
+            <BarcodeScannerModal
+              onDetected={(code) => { setShowScanner(false); setSearch(code); handleSearch(null, code); }}
+              onClose={() => setShowScanner(false)}
+            />
+          )}
 
           {/* ===== السلة ===== */}
           <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
@@ -1137,6 +1187,35 @@ const handleCheckout = async () => {
               <span className="text-4xl font-black text-emerald-400 tracking-tighter">
                 {calculations.finalTotal.toLocaleString()} <span className="text-sm font-normal">ج.م</span>
               </span>
+            </div>
+
+            {/* 🆕 دفعة جزئية (تقسيط) - العميل يدفع جزء دلوقتي والباقي بعدين */}
+            <div className="border-t border-teal-800 pt-3 space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isPartialPayment}
+                  onChange={e => { setIsPartialPayment(e.target.checked); setAmountPaidNow(''); }}
+                  className="w-4 h-4 accent-emerald-500"
+                />
+                <span className="text-xs font-bold text-teal-200">دفعة جزئية (تقسيط) - العميل يدفع جزء دلوقتي بس</span>
+              </label>
+              {isPartialPayment && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max={calculations.finalTotal}
+                    placeholder="المبلغ المدفوع الآن"
+                    value={amountPaidNow}
+                    onChange={e => setAmountPaidNow(e.target.value)}
+                    className="flex-1 bg-teal-950/60 border border-teal-800 text-white placeholder-teal-400 p-2.5 rounded-lg text-sm outline-none focus:border-emerald-500"
+                  />
+                  <span className="text-xs text-amber-300 font-bold whitespace-nowrap shrink-0">
+                    متبقي: {Math.max(0, calculations.finalTotal - (Number(amountPaidNow) || 0)).toLocaleString()} ج
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2 pt-1">

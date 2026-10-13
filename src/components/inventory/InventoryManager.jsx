@@ -18,9 +18,13 @@ import {
   RefreshCw,
   DownloadCloud as DownloadIcon,
   RefreshCcw,
-  Trash as TrashIcon
+  Trash as TrashIcon,
+  ScanLine,
+  History as HistoryIcon
 } from 'lucide-react';
 import { VirtualTable } from '../common/VirtualTable';
+import { BarcodeScannerModal } from '../common/BarcodeScannerModal';
+import { ItemMovementModal } from './ItemMovementModal';
 import { db } from '../../firebase/config';
 import { useDebounce } from '../../hooks/useDebounce';
 import { tagManager } from '../../utils/TagManager';
@@ -33,6 +37,8 @@ import { validators } from '../../utils/validators';
 
 export function InventoryManager({ appUser, warehouses, setGlobalLoading, warehouseMap }) {
   const [items, setItems] = useState([]);
+  const [movementItem, setMovementItem] = useState(null);
+  const [showScanner, setShowScanner] = useState(false);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 700);
   const [editingItem, setEditingItem] = useState(null);
@@ -1027,9 +1033,16 @@ useEffect(() => {
     },
     {
       field: 'actions',
-      width: '8%',
+      width: '9%',
       render: (item) => (
         <div className="flex justify-center gap-2">
+          <button
+            onClick={()=>setMovementItem(item)}
+            className="p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-400 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all"
+            title="حركة الصنف"
+          >
+            <HistoryIcon size={14}/>
+          </button>
           <button 
             onClick={()=>setEditingItem(item)} 
             className="p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-teal-600 dark:text-teal-400 rounded-md hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-all"
@@ -1053,6 +1066,16 @@ useEffect(() => {
 
   return (
     <div className="space-y-6 text-right" dir="rtl">
+
+      {movementItem && (
+        <ItemMovementModal item={movementItem} warehouseMap={warehouseMap} onClose={() => setMovementItem(null)} />
+      )}
+      {showScanner && (
+        <BarcodeScannerModal
+          onDetected={(code) => { setSearch(code); setShowScanner(false); }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
       
       {/* مودال الحذف المجمع */}
       {showBulkDeleteModal && (
@@ -1505,6 +1528,14 @@ useEffect(() => {
                   id="inventory-search"
                 />
               </div>
+              <button
+                type="button"
+                onClick={() => setShowScanner(true)}
+                className="px-3 py-2.5 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 rounded-lg text-sm font-bold hover:bg-teal-100 flex items-center gap-1"
+                title="مسح باركود بالكاميرا"
+              >
+                <ScanLine size={16} /> مسح
+              </button>
               
               <select 
                 className="border border-slate-200 dark:border-slate-700 p-2.5 rounded-lg text-sm font-bold bg-white dark:bg-slate-900"

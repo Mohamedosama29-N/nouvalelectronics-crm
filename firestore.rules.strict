@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==========================================================================
+    // 🔐 النسخة الصارمة - لا تنشرها قبل ما تتبع خطوات FIREBASE_AUTH_MIGRATION.md.
+    // ==========================================================================
+    // الفرق عن firestore.rules الحالية: مفيش وصول بالدخول المجهول خالص. أي طلب
+    // لازم يكون من موظف سجّل دخول بـ customLogin (مطالبات: emp, role, wh, um).
+    // الصلاحيات الدقيقة (viewInventory...) لسه بتتفحص في الواجهة، لكن دلوقتي
+    // الزائر العادي مبقاش يقدر يقرا أو يكتب أي حاجة، والعمليات الحساسة
+    // (الموظفين، مفاتيح API، أسرار التحويل) مقيّدة بالدور هنا في الـ rules.
+    // ==========================================================================
+
+    function isEmployee() {
+      return request.auth != null && request.auth.token.get('emp', false) == true;
+    }
+    function role() { return request.auth.token.get('role', ''); }
+    function isAdmin() { return isEmployee() && role() == 'admin'; }
+    function isMainWarehouseStaff() {
+      return isEmployee() && (request.auth.token.get('wh', '') == 'main' || role() == 'admin' || role() == 'main_warehouse_manager');
+    }
+    function canManageUsers() { return isEmployee() && request.auth.token.get('um', false) == true; }
+
+    // الموظفين: القراءة لأي موظف مسجّل. الإنشاء/التعديل/الحذف لمدير النظام أو
+    // اللي معاه صلاحية إدارة المستخدمين، بشرط إنه ميمنحش دور "admin" إلا لو
+    // هو نفسه admin. الموظف يقدر يعدّل بياناته هو (زي الباسورد والصورة) بس
+    // مش دوره أو صلاحياته أو تعطيل حسابه أو مخزنه أو إيميله.
+    match /employees/{userId} {
+      allow read: if isEmployee();
+      allow create: if (isAdmin() || canManageUsers()) && (isAdmin() || request.resource.data.get('role', '') != 'admin');
+      allow update: if isAdmin()
+                    || (canManageUsers() && request.resource.data.get('role', '') != 'admin' && resource.data.get('role', '') != 'admin')
+                    || (request.auth.uid == userId
+                        && !request.resource.data.diff(resource.data).affectedKeys()
+                            .hasAny(['role', 'permissions', 'isDisabled', 'assignedWarehouseId', 'email']));
+      allow delete: if isAdmin() || (canManageUsers() && resource.data.get('role', '') != 'admin');
+    }
+
+    // مفاتيح API وسجلات الدخول: للأدمن بس (السجل ممكن أي موظف يكتب فيه وقت دخوله)
+    match /api_keys/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /login_history/{id} {
+      allow create: if isEmployee();
+      allow read: if isAdmin() || canManageUsers();
+      allow update, delete: if false;
+    }
+
+    // محاولات الدخول وتوكنز الاستعادة: السيرفر (Admin SDK) بس
+    match /loginThrottle/{id} { allow read, write: if false; }
+    match /password_resets/{id} { allow read, write: if false; }
+
+    // كود استلام التحويلات: المخزن الرئيسي/الأدمن بس (الفرع المستلم ميقراش الكود)
+    match /transferSecrets/{id} {
+      allow read, write: if isMainWarehouseStaff();
+    }
+
+    // الفواتير الضريبية: قراءة فقط من الواجهة، الكتابة من Cloud Function
+    match /einvoices/{id} {
+      allow read: if isEmployee();
+      allow write: if false;
+    }
+
+    // باقي الكوليكشنز: أي موظف مسجّل (زي الوضع الحالي، من غير الدخول المجهول)
+    match /{document=**} {
+      allow read, write: if isEmployee();
+    }
+  }
+}

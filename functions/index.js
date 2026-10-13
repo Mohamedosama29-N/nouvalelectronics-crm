@@ -10,6 +10,7 @@ import { submitETADocument } from './eta/submit.js';
 export { onNewTicket, onLowStockCrossed } from './notifications/triggers.js';
 export { scheduledFirestoreBackup } from './backup/scheduledBackup.js';
 export { dailySummaryReport } from './reports/dailySummary.js';
+export { customLogin, getTicketForRating, submitTicketRating, requestPasswordReset, validateResetToken, confirmPasswordReset } from './auth/auth.js';
 
 initializeApp();
 const db = getFirestore();

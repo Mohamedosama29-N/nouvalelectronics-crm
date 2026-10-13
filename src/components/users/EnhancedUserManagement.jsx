@@ -182,8 +182,24 @@ const WARRANTY_PERIODS = [
   const handleUpdateUser = async (e) => {
      e.preventDefault(); 
      if (!editingUser) return;
+     const newEmail = String(editingUser.email || '').trim().toLowerCase();
+     const newPass = String(editingUser.newPass || '');
+     const oldEmail = String(usersList.find(u => u.id === editingUser.id)?.email || '').toLowerCase();
+     const emailChanged = appUser.role === 'admin' && newEmail !== oldEmail;
+     if (appUser.role === 'admin') {
+       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) { showError('البريد الإلكتروني غير صحيح'); return; }
+       if (newPass && newPass.length < 6) { showError('كلمة السر لازم تكون 6 حروف على الأقل'); return; }
+     }
      setGlobalLoading(true);
      try {
+        if (emailChanged) {
+          const dup = await getDocs(query(collection(db, 'employees'), where('email', '==', newEmail)));
+          if (dup.docs.some(d => d.id !== editingUser.id)) {
+            showError('البريد ده مستخدم عند موظف تاني');
+            setGlobalLoading(false);
+            return;
+          }
+        }
         const dataToUpdate = {
             name: editingUser.name,
             phone: editingUser.phone || '',
@@ -197,8 +213,12 @@ const WARRANTY_PERIODS = [
             isDisabled: editingUser.isDisabled || false,
             permissions: editingUser.permissions || {}
         };
+        if (appUser.role === 'admin') {
+          dataToUpdate.email = newEmail;
+          if (newPass) dataToUpdate.pass = hashPassword(newPass);
+        }
         await updateDoc(doc(db, 'employees', editingUser.id), dataToUpdate);
-        await logUserActivity(appUser, 'تعديل بيانات موظف', `تعديل صلاحيات أو بيانات الموظف: ${editingUser.name}`);
+        await logUserActivity(appUser, 'تعديل بيانات موظف', `تعديل بيانات الموظف: ${editingUser.name}${newPass ? ' (تغيير كلمة السر)' : ''}${emailChanged ? ' (تغيير البريد)' : ''}`);
         showSuccess("تم حفظ الإعدادات"); 
         setEditingUser(null);
      } catch(e) { 
@@ -426,10 +446,26 @@ const WARRANTY_PERIODS = [
                      <input 
                        type="email"
                        className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
-                       value={editingUser.email} 
-                       disabled
+                       value={editingUser.email || ''} 
+                       disabled={appUser.role !== 'admin'}
+                       dir="ltr"
+                       onChange={e=>setEditingUser({...editingUser, email:e.target.value})}
                      />
                   </div>
+                  {appUser.role === 'admin' && (
+                    <div>
+                       <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">كلمة سر جديدة (سيبها فاضية لو مش عايز تغيّرها)</label>
+                       <input
+                         type="text"
+                         autoComplete="new-password"
+                         className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500"
+                         placeholder="6 حروف على الأقل"
+                         dir="ltr"
+                         value={editingUser.newPass || ''}
+                         onChange={e=>setEditingUser({...editingUser, newPass:e.target.value})}
+                       />
+                    </div>
+                  )}
                   <div>
                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">رقم الهاتف</label>
                      <input 

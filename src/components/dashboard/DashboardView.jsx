@@ -1,7 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-  collection, getDocs, query, where, orderBy, limit
-} from 'firebase/firestore';
+import React, { useState, useMemo } from 'react';
 import {
   Package,
   Receipt,
@@ -11,66 +8,34 @@ import {
   Calendar,
   Activity,
   Award,
-  RefreshCcw,
   Layers
 } from 'lucide-react';
 import { AdvancedCharts } from '../common/AdvancedCharts';
+import { LiveBadge } from '../common/LiveBadge';
 import { LoadingSkeleton } from '../common/LoadingSkeleton';
-import { TICKET_STATUSES } from '../../constants/tickets';
-import { db } from '../../firebase/config';
-import { showError } from '../../utils/alerts';
+import { TICKET_STATUSES, TICKET_TERMINAL_STATUSES } from '../../constants/tickets';
+import { useLiveSources } from '../../hooks/useLiveSources';
 import { getDashboardWidgetConfig } from '../../utils/dashboardHelpers';
 import { formatDate } from '../../utils/format';
+import {
+  buildInventoryStats, buildReturnsStats, buildSalesSeries, buildSalesStats, buildTicketStats,
+  buildTransferStats, canSeeWarehouse, startOfDay, addDays, topProductsFrom
+} from '../../utils/liveStats';
 import { getTicketSLAInfo } from '../../utils/ticketHelpers';
 
+const DAY = 24 * 60 * 60 * 1000;
+const SOURCE_LABELS = { inventory: 'المخزون', transactions: 'المبيعات', activity: 'النشاطات', tickets: 'التذاكر', transfers: 'التحويلات', returns: 'المرتجعات' };
+
 export function DashboardView({ appUser, warehouses, onNavigateToInventory, systemSettings }) {
-  const [stats, setStats] = useState({ 
-    totalItems: 0, 
-    itemsCount: 0,
-    totalValue: 0, 
-    lowStockCount: 0, 
-    salesToday: 0,
-    salesWeek: 0,
-    salesMonth: 0,
-    salesYear: 0,
-    totalTrend: 0,
-    valueTrend: 0,
-    salesTrend: 0,
-    lowStockTrend: 0,
-    topProducts: [],
-    topCustomers: [],
-    recentTransactions: [],
-    dailySales: [],
-    monthlySales: [],
-    categoryDistribution: [],
-    warehouseDistribution: []
-  });
-  
-  const [ticketStats, setTicketStats] = useState({ 
-    today: 0, 
-    week: 0, 
-    month: 0, 
-    closed: 0, 
-    waitingApproval: 0,
-    highPriority: 0,
-    overdueSLA: 0,
-    byStatus: [],
-    byPriority: []
-  });
-  
-  const [loading, setLoading] = useState(true);
-  const [lowStockItems, setLowStockItems] = useState([]);
-  const [recentActivities, setRecentActivities] = useState([]);
-  const [showInventoryValue, setShowInventoryValue] = useState(false);
-  const [error, setError] = useState(null);
-  const [selectedChart, setSelectedChart] = useState('line');
   const [dateRange, setDateRange] = useState('week');
-  const [refreshKey, setRefreshKey] = useState(0);
   const [selectedWarehouse, setSelectedWarehouse] = useState('all');
   const [chartType, setChartType] = useState('sales');
 
+  const isScoped = !(appUser?.role === 'admin' || appUser?.permissions?.viewAllWarehouses);
+  const scopeWarehouse = appUser?.assignedWarehouseId || 'main';
+  const warehouseName = (id) => warehouses.find(w => w.id === id)?.name || id;
+
   // 🎛️ تخصيص الداشبورد: ترتيب وإظهار/إخفاء العناصر حسب إعدادات المستخدم
-  // الحالي (اللي بيضبطها المدير من صفحة "فريق العمل والصلاحيات")
   const widgetConfig = useMemo(() => getDashboardWidgetConfig(appUser), [appUser]);
   const isWidgetVisible = (id) => {
     const w = widgetConfig.find(x => x.id === id);
@@ -78,280 +43,86 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
     if (w.permission && !(appUser.role === 'admin' || appUser.permissions?.[w.permission])) return false;
     return true;
   };
-  const widgetOrder = (id) => widgetConfig.findIndex(x => x.id === id);
 
-  const handleRefresh = () => {
-    setRefreshKey(prev => prev + 1);
+  // 📡 اشتراكات لحظية: أي بيع/تذكرة/تحويل جديد بيظهر في الأرقام والرسوم فوراً من غير تحديث.
+  // النوافذ الزمنية محدودة لتقليل القراءات: سنة للمبيعات، 90 يوم للتحويلات والمرتجعات.
+  // sinceMs بيتقرّب لأول اليوم عشان الاشتراك ميتعادش كل ثانية.
+  const dayStart = startOfDay(new Date()).getTime();
+  const specs = useMemo(() => {
+    const s = [
+      { key: 'inventory', collection: 'inventory', wheres: isScoped ? [['warehouseId', '==', scopeWarehouse]] : [] },
+      { key: 'transactions', collection: 'transactions', timeField: 'timestamp', sinceMs: dayStart - 364 * DAY, max: 20000 },
+      { key: 'activity', collection: 'activity_logs', timeField: 'timestamp', sinceMs: dayStart - 30 * DAY, max: 20 }
+    ];
+    if (appUser?.role === 'admin' || appUser?.permissions?.manageTickets) {
+      s.push({ key: 'tickets', collection: 'tickets', timeField: 'createdAt', sinceMs: dayStart - 365 * DAY, max: 10000 });
+    }
+    if (appUser?.role === 'admin' || appUser?.permissions?.viewTransfers) {
+      s.push({ key: 'transfers', collection: 'transfers', timeField: 'createdAt', sinceMs: dayStart - 90 * DAY, max: 1000 });
+    }
+    if (appUser?.role === 'admin' || appUser?.permissions?.viewReturns) {
+      s.push({ key: 'returns', collection: 'returns', timeField: 'createdAt', sinceMs: dayStart - 90 * DAY, max: 1000 });
+    }
+    return s;
+  }, [appUser, isScoped, scopeWarehouse, dayStart]);
+
+  const { data, errors, loading, updatedAt, truncated } = useLiveSources(specs, !!appUser);
+
+  // فلترة المخازن (على العميل عشان نتجنب Composite Indexes)
+  const inScope = (wid) => (isScoped ? canSeeWarehouse(appUser, wid) : (selectedWarehouse === 'all' || wid === selectedWarehouse));
+  const txs = useMemo(() => (data.transactions || []).filter(t => inScope(t.warehouseId)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.transactions, selectedWarehouse, isScoped, appUser]);
+  const tickets = useMemo(() => (data.tickets || []).filter(t => inScope(t.warehouseId)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.tickets, selectedWarehouse, isScoped, appUser]);
+  const transfers = useMemo(() => (data.transfers || []).filter(t => inScope(t.fromWarehouseId) || inScope(t.toWarehouseId)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.transfers, selectedWarehouse, isScoped, appUser]);
+  const returns = useMemo(() => (data.returns || []).filter(r => inScope(r.fromWarehouse)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.returns, selectedWarehouse, isScoped, appUser]);
+
+  // تغيير المخزن المختار بيفلتر محلياً بدون إعادة الاشتراك (عشان منقرأش المبيعات من الأول)
+  const inv = useMemo(() => buildInventoryStats((data.inventory || []).filter(i => inScope(i.warehouseId)), warehouseName),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.inventory, warehouses, selectedWarehouse]);
+  const sales = useMemo(() => buildSalesStats(txs), [txs]);
+  const salesSeries = useMemo(() => buildSalesSeries(txs, dateRange), [txs, dateRange]);
+  const monthlySeries = useMemo(() => buildSalesSeries(txs, 'year'), [txs]);
+  const topProducts = useMemo(() => topProductsFrom(txs.filter(t => {
+    const d = t.timestamp?.toDate ? t.timestamp.toDate() : new Date(t.timestamp);
+    const days = dateRange === 'day' ? 0 : dateRange === 'week' ? 6 : dateRange === 'month' ? 29 : 364;
+    return d >= addDays(startOfDay(new Date()), -days);
+  }), 10), [txs, dateRange]);
+  const ticketStats = useMemo(() => buildTicketStats(tickets, {
+    isOverdue: (t) => getTicketSLAInfo(t, systemSettings?.ticketSLA)?.level === 'overdue',
+    statusLabel: (s) => TICKET_STATUSES.find(x => x.value === s)?.label || s,
+    terminal: TICKET_TERMINAL_STATUSES
+  }), [tickets, systemSettings]);
+  const transferStats = useMemo(() => buildTransferStats(transfers, warehouseName),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [transfers, warehouses]);
+  const returnStats = useMemo(() => buildReturnsStats(returns), [returns]);
+
+  const stats = {
+    totalItems: inv.totalQty,
+    itemsCount: inv.skuCount,
+    totalValue: inv.totalValue,
+    lowStockCount: inv.lowStock.length,
+    salesToday: sales.today,
+    salesTrend: sales.trendVsYesterday,
+    salesWeek: sales.week,
+    salesMonth: sales.month,
+    salesYear: sales.year,
+    avgInvoice: sales.avgInvoice,
+    topProducts,
+    categoryDistribution: inv.byCategory,
+    warehouseDistribution: inv.byWarehouse
   };
-
-  useEffect(() => {
-    if(!appUser) return;
-    let isMounted = true;
-
-    const fetchDashboardStats = async () => {
-       setLoading(true);
-       setError(null);
-       try {
-           let invSnap;
-           try {
-             let q = collection(db, 'inventory');
-             if (selectedWarehouse !== 'all') {
-               q = query(q, where('warehouseId', '==', selectedWarehouse));
-             }
-             invSnap = await getDocs(q);
-           } catch (err) {
-             console.warn("Inventory access error:", err);
-             invSnap = { docs: [] };
-           }
-           
-           let totalQty = 0;
-           let itemsCount = 0; // 🔢 FIX: عدد الأصناف الفعلي (عدد المستندات) مش مجموع القطع
-           let totalVal = 0;
-           let lowStock = 0;
-           let lowStockList = [];
-           let categoryCount = {};
-           let warehouseCount = {};
-
-           invSnap.docs.forEach(doc => {
-             const data = doc.data();
-             // ✨ FIX: توحيد الشرط مع باقي السيستم (where('isDeleted','==',false))
-             // بدل !data.isDeleted، عشان أي صنف قديم ناقصه الحقل ميتحسبش هنا
-             // بينما هو مختفي فعليًا من كل مكان تاني (المخزون، البحث، الجرد).
-             if (data.isDeleted === false) {
-                if (appUser.role === 'admin' || appUser.permissions?.viewAllWarehouses || data.warehouseId === (appUser.assignedWarehouseId || 'main')) {
-                   const qty = Number(data.quantity ?? 0);
-                   const price = Number(data.price ?? 0);
-                   const minStock = Number(data.minStock ?? 0);
-                   
-                   totalQty += qty;
-                   itemsCount += 1;
-                   totalVal += qty * price;
-                   
-                   warehouseCount[data.warehouseId] = (warehouseCount[data.warehouseId] || 0) + qty;
-                   
-                   const category = data.category || 'عام';
-                   categoryCount[category] = (categoryCount[category] || 0) + qty;
-                   
-                   if (minStock > 0 && qty <= minStock) {
-                     lowStock++;
-                     lowStockList.push({
-                       id: doc.id,
-                       name: data.name,
-                       serialNumber: data.serialNumber,
-                       quantity: qty,
-                       minStock: minStock,
-                       warehouseId: data.warehouseId,
-                       category: category
-                     });
-                   }
-                }
-             }
-           });
-
-           setShowInventoryValue(appUser.permissions?.viewInventoryValue || false);
-
-           const categoryDistribution = Object.entries(categoryCount).map(([name, count]) => ({
-             name,
-             value: count
-           }));
-
-           const warehouseDistribution = Object.entries(warehouseCount).map(([id, count]) => ({
-             name: warehouses.find(w => w.id === id)?.name || id,
-             value: count
-           }));
-
-           let salesToday = 0;
-           let salesWeek = 0;
-           let salesMonth = 0;
-           let salesYear = 0;
-           let salesYesterday = 0;
-           let dailySalesData = [];
-           let monthlySalesData = [];
-           let productSales = {};
-           
-           try {
-             const now = new Date();
-             const today = new Date(now.setHours(0,0,0,0));
-             const yesterday = new Date(today);
-             yesterday.setDate(yesterday.getDate() - 1);
-             const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-             const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-             const yearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-             
-             let salesQuery = collection(db, 'transactions');
-             if (selectedWarehouse !== 'all') {
-               salesQuery = query(salesQuery, where('warehouseId', '==', selectedWarehouse));
-             }
-             
-             const salesSnap = await getDocs(query(
-               salesQuery, 
-               where('timestamp', '>=', yearAgo),
-               where('type', '==', 'sell')
-             ));
-             
-             const dailyTotals = {};
-             const monthlyTotals = {};
-             
-             salesSnap.docs.forEach(doc => {
-                const data = doc.data();
-                if (appUser.role === 'admin' || appUser.permissions?.viewAllWarehouses || data.warehouseId === (appUser.assignedWarehouseId || 'main')) {
-                   const amount = Number(data.finalTotal || data.total || 0);
-                   const date = data.timestamp?.toDate?.() || new Date(data.timestamp);
-                   const dateStr = date.toISOString().split('T')[0];
-                   const monthStr = date.toISOString().slice(0, 7);
-                   
-                   dailyTotals[dateStr] = (dailyTotals[dateStr] || 0) + amount;
-                   monthlyTotals[monthStr] = (monthlyTotals[monthStr] || 0) + amount;
-                   
-                   if (date >= today) salesToday += amount;
-                   if (date >= yesterday && date < today) salesYesterday += amount;
-                   if (date >= weekAgo) salesWeek += amount;
-                   if (date >= monthAgo) salesMonth += amount;
-                   if (date >= yearAgo) salesYear += amount;
-                   
-                   const productName = data.itemName;
-                   productSales[productName] = (productSales[productName] || 0) + amount;
-                }
-             });
-
-             dailySalesData = Object.entries(dailyTotals)
-               .sort((a, b) => a[0].localeCompare(b[0]))
-               .slice(-30)
-               .map(([date, total]) => ({ date, total }));
-
-             monthlySalesData = Object.entries(monthlyTotals)
-               .sort((a, b) => a[0].localeCompare(b[0]))
-               .slice(-12)
-               .map(([month, total]) => ({ month, total }));
-             
-           } catch (err) {
-             console.warn("Sales access error:", err);
-           }
-
-           const topProducts = Object.entries(productSales)
-             .sort((a, b) => b[1] - a[1])
-             .slice(0, 10)
-             .map(([name, value]) => ({ name, value }));
-
-           let todayTickets = 0, weekTickets = 0, monthTickets = 0, closedTickets = 0, 
-               waitingApprovalTickets = 0, highPriorityTickets = 0, overdueSLATickets = 0;
-           let statusCount = {};
-           let priorityCount = { high: 0, medium: 0, low: 0 };
-           
-           try {
-             let ticketsQuery = collection(db, 'tickets');
-             if (selectedWarehouse !== 'all') {
-               ticketsQuery = query(ticketsQuery, where('warehouseId', '==', selectedWarehouse));
-             }
-             
-             const ticketsSnap = await getDocs(ticketsQuery);
-             
-             const now = new Date();
-             const today = new Date(now.setHours(0,0,0,0));
-             const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-             const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-             
-             ticketsSnap.docs.forEach(doc => {
-                const data = doc.data();
-                const createdDate = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
-                
-                if (createdDate >= today) todayTickets++;
-                if (createdDate >= weekAgo) weekTickets++;
-                if (createdDate >= monthAgo) monthTickets++;
-                
-                if (data.status === 'delivered_to_customer' || data.status === 'closed') closedTickets++;
-                if (data.status === 'waiting_customer_approval_cost') waitingApprovalTickets++;
-
-                // ✨ ميزة جديدة: تتبع SLA - عدد التذاكر المتأخرة
-                if (getTicketSLAInfo({ ...data, id: doc.id }, systemSettings?.ticketSLA)?.level === 'overdue') {
-                  overdueSLATickets++;
-                }
-                
-                if (data.priority === 'high') {
-                  highPriorityTickets++;
-                  priorityCount.high++;
-                } else if (data.priority === 'medium') {
-                  priorityCount.medium++;
-                } else {
-                  priorityCount.low++;
-                }
-                
-                statusCount[data.status] = (statusCount[data.status] || 0) + 1;
-             });
-           } catch (err) {
-             console.warn("Tickets access error:", err);
-           }
-           
-           const ticketsByStatus = Object.entries(statusCount).map(([status, count]) => ({
-             name: TICKET_STATUSES.find(s => s.value === status)?.label || status,
-             count,
-             status
-           })).sort((a, b) => b.count - a.count);
-
-           const ticketsByPriority = Object.entries(priorityCount).map(([priority, count]) => ({
-             name: priority === 'high' ? 'عالية' : priority === 'medium' ? 'متوسطة' : 'منخفضة',
-             count
-           }));
-
-           let recentActs = [];
-           try {
-             const activitiesSnap = await getDocs(query(
-               collection(db, 'activity_logs'),
-               orderBy('timestamp', 'desc'),
-               limit(20)
-             ));
-             recentActs = activitiesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-           } catch (err) {
-             console.warn("Activities access error:", err);
-           }
-
-           if (isMounted) {
-               setStats({
-                  totalItems: totalQty,
-                  itemsCount: itemsCount,
-                  totalValue: totalVal,
-                  lowStockCount: lowStock,
-                  salesToday: salesToday,
-                  salesWeek: salesWeek,
-                  salesMonth: salesMonth,
-                  salesYear: salesYear,
-                  totalTrend: salesYesterday > 0 ? Math.round((salesToday - salesYesterday) / salesYesterday * 100) : 0,
-                  valueTrend: 3,
-                  salesTrend: salesYesterday > 0 ? Math.round((salesToday - salesYesterday) / salesYesterday * 100) : 0,
-                  lowStockTrend: -2,
-                  topProducts: topProducts,
-                  dailySales: dailySalesData,
-                  monthlySales: monthlySalesData,
-                  categoryDistribution,
-                  warehouseDistribution
-               });
-               setTicketStats({
-                 today: todayTickets,
-                 week: weekTickets,
-                 month: monthTickets,
-                 closed: closedTickets,
-                 waitingApproval: waitingApprovalTickets,
-                 highPriority: highPriorityTickets,
-                 overdueSLA: overdueSLATickets,
-                 byStatus: ticketsByStatus,
-                 byPriority: ticketsByPriority
-               });
-               setLowStockItems(lowStockList);
-               setRecentActivities(recentActs);
-           }
-       } catch(e) {
-           console.error("Dashboard Stats Fetch Error:", e);
-           setError(e.message);
-           if (isMounted) {
-             showError("حدث خطأ في تحميل بيانات لوحة التحكم");
-           }
-       }
-       if (isMounted) setLoading(false);
-    };
-
-    fetchDashboardStats();
-    return () => { isMounted = false; };
-  }, [appUser, warehouses, refreshKey, selectedWarehouse]);
+  const recentActivities = data.activity || [];
+  const errorList = Object.entries(errors).filter(([, v]) => v);
+  const rangeLabel = { day: 'اليوم (بالساعة)', week: 'آخر 7 أيام', month: 'آخر 30 يوم', year: 'آخر 12 شهر' }[dateRange];
 
   const handleStatClick = (type) => {
 
@@ -415,13 +186,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
              <option value="year">السنة</option>
            </select>
            
-           <button
-             onClick={handleRefresh}
-             className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600"
-             title="تحديث"
-           >
-             <RefreshCcw size={18} />
-           </button>
+           <LiveBadge updatedAt={updatedAt} loading={loading} />
            
            <div className="bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-4 py-1.5 rounded-lg font-bold text-xs flex items-center gap-2">
               <Calendar size={14}/> 
@@ -430,13 +195,20 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
          </div>
       </div>
 
-      {error && (
-        <div className="bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 rounded-2xl p-4 text-rose-700 dark:text-rose-300 text-sm font-bold flex items-center gap-2">
-          <AlertTriangle size={20} />
+      {errorList.length > 0 && (
+        <div className="bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 rounded-2xl p-4 text-rose-700 dark:text-rose-300 text-sm font-bold flex items-start gap-2">
+          <AlertTriangle size={20} className="shrink-0 mt-0.5" />
           <div>
-            <p>خطأ في تحميل البيانات: {error}</p>
-            <p className="text-xs mt-1">تأكد من إعدادات قواعد الأمان في Firebase Console.</p>
+            {errorList.map(([k, v]) => (
+              <p key={k}>تعذّر تحميل «{SOURCE_LABELS[k] || k}»: {v}</p>
+            ))}
+            <p className="text-xs mt-1 font-normal">باقي الأقسام بتشتغل عادي. لو المشكلة في الصلاحيات راجع قواعد الأمان في Firebase.</p>
           </div>
+        </div>
+      )}
+      {Object.entries(truncated || {}).some(([, v]) => v) && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-3 text-amber-800 dark:text-amber-300 text-xs font-bold">
+          عدد السجلات وصل للحد الأقصى للعرض الحي، فالأرقام ممكن تكون ناقصة للفترات الأقدم. استخدم صفحة التقارير للتفاصيل الكاملة.
         </div>
       )}
 
@@ -464,10 +236,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">إجمالي القطع بالمخزن</p>
                 <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.totalItems.toLocaleString()}</p>
                 <div className="flex items-center gap-1 mt-2">
-                  <span className={`text-[9px] font-bold ${stats.totalTrend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                    {stats.totalTrend > 0 ? '+' : ''}{stats.totalTrend}%
-                  </span>
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500">عن الأمس</span>
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500">مجموع الكميات (لحظي)</span>
                 </div>
               </div>
             </button>
@@ -498,10 +267,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">قيمة المخزون الإجمالية</p>
                 <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.totalValue.toLocaleString()} ج</p>
                 <div className="flex items-center gap-1 mt-2">
-                  <span className={`text-[9px] font-bold ${stats.valueTrend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                    {stats.valueTrend > 0 ? '+' : ''}{stats.valueTrend}%
-                  </span>
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500">عن الأمس</span>
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500">الكمية × السعر (لحظي)</span>
                 </div>
               </div>
             </div>
@@ -515,10 +281,16 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">مبيعات اليوم</p>
                 <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.salesToday.toLocaleString()} ج</p>
                 <div className="flex items-center gap-1 mt-2">
-                  <span className={`text-[9px] font-bold ${stats.salesTrend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                    {stats.salesTrend > 0 ? '+' : ''}{stats.salesTrend}%
-                  </span>
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500">عن الأمس</span>
+                  {stats.salesTrend === null ? (
+                    <span className="text-[9px] text-slate-400 dark:text-slate-500">{sales.todayCount} فاتورة · لا مبيعات أمس للمقارنة</span>
+                  ) : (
+                    <>
+                      <span className={`text-[9px] font-bold ${stats.salesTrend >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        {stats.salesTrend > 0 ? '+' : ''}{stats.salesTrend}%
+                      </span>
+                      <span className="text-[9px] text-slate-400 dark:text-slate-500">عن الأمس · {sales.todayCount} فاتورة</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -553,7 +325,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
           salesWeek: () => xsCard('from-blue-50 to-teal-50 dark:from-blue-900/30 dark:to-teal-900/30', 'border-blue-100 dark:border-blue-800', 'text-blue-800 dark:text-blue-300', 'مبيعات الأسبوع', `${stats.salesWeek.toLocaleString()} ج`),
           salesMonth: () => xsCard('from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30', 'border-green-100 dark:border-green-800', 'text-green-800 dark:text-green-300', 'مبيعات الشهر', `${stats.salesMonth.toLocaleString()} ج`),
           salesYear: () => xsCard('from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30', 'border-purple-100 dark:border-purple-800', 'text-purple-800 dark:text-purple-300', 'مبيعات السنة', `${stats.salesYear.toLocaleString()} ج`),
-          avgInvoice: () => xsCard('from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30', 'border-amber-100 dark:border-amber-800', 'text-amber-800 dark:text-amber-300', 'متوسط الفاتورة', `${stats.salesWeek > 0 ? Math.round(stats.salesWeek / (stats.salesWeek / 1000)).toLocaleString() : 0} ج`),
+          avgInvoice: () => xsCard('from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30', 'border-amber-100 dark:border-amber-800', 'text-amber-800 dark:text-amber-300', 'متوسط الفاتورة (آخر 7 أيام)', `${stats.avgInvoice.toLocaleString()} ج`),
           ticketsToday: () => xsCard('from-blue-50 to-teal-50 dark:from-blue-900/30 dark:to-teal-900/30', 'border-blue-100 dark:border-blue-800', 'text-blue-800 dark:text-blue-300', 'تذاكر اليوم', ticketStats.today),
           ticketsWeek: () => xsCard('from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30', 'border-green-100 dark:border-green-800', 'text-green-800 dark:text-green-300', 'تذاكر الأسبوع', ticketStats.week),
           ticketsMonth: () => xsCard('from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30', 'border-purple-100 dark:border-purple-800', 'text-purple-800 dark:text-purple-300', 'تذاكر الشهر', ticketStats.month),
@@ -604,24 +376,47 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
                 >
                   المخزون
                 </button>
+                <button
+                  onClick={() => setChartType('operations')}
+                  className={`px-4 py-2 rounded-lg font-bold text-sm ${chartType === 'operations' ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                >
+                  التحويلات والمرتجعات
+                </button>
               </div>
 
               {chartType === 'sales' && (
                 <>
-                  <AdvancedCharts data={stats.dailySales.map(d => ({ name: d.date, value: d.total }))} type="line" title="المبيعات اليومية (آخر 30 يوم)" height={300} />
-                  <AdvancedCharts data={stats.monthlySales.map(d => ({ name: d.month, value: d.total }))} type="bar" title="المبيعات الشهرية (آخر 12 شهر)" height={300} />
+                  <AdvancedCharts
+                    data={salesSeries}
+                    series={[{ key: 'sales', name: 'المبيعات', color: '#0d9488' }, { key: 'returns', name: 'المرتجعات', color: '#f43f5e' }]}
+                    type="line" title={`المبيعات والمرتجعات - ${rangeLabel}`} height={300}
+                  />
+                  <AdvancedCharts
+                    data={monthlySeries}
+                    series={[{ key: 'net', name: 'صافي المبيعات', color: '#10b981' }]}
+                    type="bar" title="صافي المبيعات الشهري (آخر 12 شهر)" height={300}
+                  />
                 </>
               )}
               {chartType === 'tickets' && (
                 <>
-                  <AdvancedCharts data={ticketStats.byStatus.map(s => ({ name: s.name, value: s.count }))} type="pie" title="توزيع حالات التذاكر" height={300} />
-                  <AdvancedCharts data={ticketStats.byPriority.map(p => ({ name: p.name, value: p.count }))} type="bar" title="توزيع أولويات التذاكر" height={300} />
+                  <AdvancedCharts data={ticketStats.perDay} type="line" title="تذاكر جديدة يومياً (آخر 30 يوم)" height={300} />
+                  <AdvancedCharts data={ticketStats.byStatus} type="pie" title="توزيع حالات التذاكر" height={300} />
+                  <AdvancedCharts data={ticketStats.byPriority} type="bar" title="توزيع أولويات التذاكر" height={300} />
                 </>
               )}
               {chartType === 'inventory' && (
                 <>
-                  <AdvancedCharts data={stats.categoryDistribution} type="pie" title="توزيع الأصناف حسب التصنيف" height={300} />
-                  <AdvancedCharts data={stats.warehouseDistribution} type="bar" title="توزيع الأصناف حسب المخزن" height={300} />
+                  <AdvancedCharts data={stats.categoryDistribution} type="pie" title="توزيع القطع حسب التصنيف" height={300} />
+                  <AdvancedCharts data={stats.warehouseDistribution} type="bar" title="توزيع القطع حسب المخزن" height={300} />
+                </>
+              )}
+              {chartType === 'operations' && (
+                <>
+                  <AdvancedCharts data={transferStats.byStatus} type="pie" title="التحويلات حسب الحالة (آخر 90 يوم)" height={300} />
+                  <AdvancedCharts data={transferStats.perDay} type="line" title="طلبات التحويل يومياً (آخر 30 يوم)" height={300} />
+                  <AdvancedCharts data={returnStats.byStatus} type="pie" title="المرتجعات حسب الحالة (آخر 90 يوم)" height={300} />
+                  <AdvancedCharts data={returnStats.byReason} type="bar" title="المرتجعات حسب السبب" height={300} />
                 </>
               )}
             </div>
@@ -677,10 +472,3 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
     </div>
   );
 }
-
-
-
-
-// ==========================================================================
-// 📦 مدير المخزون المحسن (مع Virtual Scrolling واستيراد 10000 صنف)
-// ==========================================================================

@@ -21,8 +21,11 @@ import { showError, showSuccess } from '../../utils/alerts';
 import { exportToCSV, exportToExcel } from '../../utils/exportUtils';
 import { formatDate } from '../../utils/format';
 import { exportToPDF } from '../../utils/pdfExport';
+import { LiveReportsHub } from './LiveReportsHub';
+import { MonthlyComparison } from './MonthlyComparison';
 
-export function ReportsManager({ appUser }) {
+export function ReportsManager({ appUser, systemSettings }) {
+  const [reportsTab, setReportsTab] = useState('live');
   // 🆕 مركز التصدير الشامل: تصدير Excel لأي مصدر بيانات في السيستم، مش
   // بس المبيعات (اللي كانت الصفحة دي مقتصرة عليها قبل كده)
   const [exportSource, setExportSource] = useState('transactions');
@@ -64,7 +67,7 @@ export function ReportsManager({ appUser }) {
           'تاريخ الإنشاء': formatDate(data.createdAt), 'آخر تحديث': formatDate(data.updatedAt), 'ملاحظات': data.notes || '-'
         };
       case 'transfers':
-        return { 'من مخزن': data.fromWarehouseId || '-', 'إلى مخزن': data.toWarehouseId || '-', 'الحالة': data.status || '-', 'عدد الأصناف': (data.items || []).length, 'تاريخ الطلب': formatDate(data.createdAt) };
+        return { 'من مخزن': data.fromWarehouseId || '-', 'إلى مخزن': data.toWarehouseId || '-', 'الحالة': data.status || '-', 'عدد الأصناف': (data.items || []).length || (data.serialNumber ? 1 : 0), 'تاريخ الطلب': formatDate(data.createdAt) };
       case 'invoices':
         return { 'رقم الفاتورة': data.invoiceNumber || '-', 'العميل': data.customerName || '-', 'الإجمالي': data.finalTotal || data.total || 0, 'التاريخ': formatDate(data.timestamp || data.createdAt) };
       case 'users':
@@ -249,7 +252,12 @@ export function ReportsManager({ appUser }) {
         await exportToPDF(
           exportData,
           'تقرير المبيعات',
-          ['رقم الفاتورة', 'التاريخ', 'نوع العملية', 'الصنف', 'العميل', 'الصافي', 'البائع']
+          ['رقم الفاتورة', 'التاريخ', 'نوع العملية', 'الصنف', 'العميل', 'الصافي', 'البائع'],
+          { summary: [
+            { label: 'إجمالي المبيعات', value: `${summary.total.toLocaleString('ar-EG')} ج` },
+            { label: 'عدد المعاملات', value: String(summary.count) },
+            { label: 'متوسط المعاملة', value: `${Math.round(summary.avg).toLocaleString('ar-EG')} ج` }
+          ] }
         );
         showSuccess("تم تصدير PDF بنجاح");
       }
@@ -297,10 +305,35 @@ export function ReportsManager({ appUser }) {
     </div>
   );
 
+  const tabsBar = (
+    <div className="flex gap-2 mb-5 print:hidden" dir="rtl">
+      {[['live', 'التقارير الحية لكل الأقسام'], ['log', 'سجل المبيعات والتصدير والمقارنة']].map(([id, label]) => (
+        <button
+          key={id}
+          onClick={() => setReportsTab(id)}
+          className={`px-4 py-2 rounded-lg text-sm font-bold ${reportsTab === id ? 'bg-teal-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (reportsTab === 'live') {
+    return (
+      <>
+        {tabsBar}
+        <LiveReportsHub appUser={appUser} warehouses={warehouses} systemSettings={systemSettings} />
+      </>
+    );
+  }
+
   if (loading && transactions.length === 0) {
     return (
       <>
+        {tabsBar}
         {exportCenterPanel}
+        <MonthlyComparison warehouses={warehouses} />
         <LoadingSkeleton type="table" count={5} />
       </>
     );
@@ -308,7 +341,9 @@ export function ReportsManager({ appUser }) {
 
   return (
     <>
+    {tabsBar}
     {exportCenterPanel}
+    <MonthlyComparison warehouses={warehouses} />
     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden text-right" dir="rtl">
        <div className="p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
          <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">

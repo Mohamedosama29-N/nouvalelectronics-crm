@@ -35,7 +35,8 @@ import {
 } from 'lucide-react';
 import { StatusSelectComp } from './StatusSelectComp';
 import { EGYPT_GOVERNORATES } from '../../constants/misc';
-import { TICKET_STATUSES } from '../../constants/tickets';
+import { TICKET_STATUSES, TICKET_TERMINAL_STATUSES } from '../../constants/tickets';
+import { SignatureModal } from '../common/SignaturePad';
 import { db } from '../../firebase/config';
 import { useDebounce } from '../../hooks/useDebounce';
 import { showConfirm, showError, showInfo, showSuccess } from '../../utils/alerts';
@@ -187,10 +188,19 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
   const [showOverdueOnly, setShowOverdueOnly] = useState(false);
 
   // ✨ ميزة جديدة: فلترة التذاكر المتأخرة عن SLA فقط
+  // 🆕 تذكيرات المتابعة المستحقة (ميعادها جه ولسه متعملتش، والتذكرة لسه مفتوحة)
+  const [showDueRemindersOnly, setShowDueRemindersOnly] = useState(false);
+  const [signatureFor, setSignatureFor] = useState(null); // { ticketId, newStatus } - مودال توقيع التسليم
+  const [reminderAtInput, setReminderAtInput] = useState('');
+  const [reminderNoteInput, setReminderNoteInput] = useState('');
+  const isReminderDue = (t) => !!t.reminderAt && !t.reminderDone && !TICKET_TERMINAL_STATUSES.includes(t.status) && new Date(t.reminderAt) <= new Date();
+  const dueReminders = useMemo(() => tickets.filter(isReminderDue), [tickets]);
   const displayedTickets = useMemo(() => {
-    if (!showOverdueOnly) return tickets;
-    return tickets.filter(t => getTicketSLAInfo(t, systemSettings?.ticketSLA)?.level === 'overdue');
-  }, [tickets, showOverdueOnly, systemSettings?.ticketSLA]);
+    let list = tickets;
+    if (showOverdueOnly) list = list.filter(t => getTicketSLAInfo(t, systemSettings?.ticketSLA)?.level === 'overdue');
+    if (showDueRemindersOnly) list = list.filter(isReminderDue);
+    return list;
+  }, [tickets, showOverdueOnly, showDueRemindersOnly, systemSettings?.ticketSLA]);
   // قائمة دايمًا بالتذاكر المتأخرة (مش متأثرة بفلتر العرض) - لاستخدامها في زرار إرسال التنبيه
   const overdueTickets = useMemo(() => {
     return tickets.filter(t => getTicketSLAInfo(t, systemSettings?.ticketSLA)?.level === 'overdue');
@@ -344,7 +354,7 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
             showInfo(`تم ربط قطعة الغيار "${found.name}" تلقائيًا بكود العطل ده`);
           }
         } else {
-          showInfo(`كود المنتج "${selected.productCode}" مش مطابق لأي صنف في المخزون - أضف القطعة يدويًا لو محتاجها`);
+          showInfo(`كود المنتج "${selected.productCode}" مش مطابق بشكل مؤكد لصنف واحد في المخزون - ابحث عن القطعة يدويًا واختارها بنفسك`);
         }
       }
     }
@@ -415,33 +425,60 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
   const lookupInventoryByProductCode = async (productCode) => {
     if (!productCode) return null;
     try {
-      // أول محاولة: تطابق تام مع السيريال (لو كود المنتج هو نفسه سيريال حقيقي)
-      let matchDoc = null;
-      const exactSnap = await getDocs(query(
-        collection(db, 'inventory'),
-        where('serialNumber', '==', productCode),
-        where('isDeleted', '==', false),
-        limit(1)
-      ));
-      if (!exactSnap.empty) {
-        matchDoc = exactSnap.docs[0];
-      } else {
-        // 🛠️ FIX: كود المنتج أحيانًا بيكون وصف كامل ("الفرشة كبيرة -4403A")
-        // مش سيريال نضيف، فالتطابق التام كان دايمًا بيفشل من غير أي سبب
-        // ظاهر. دلوقتي بندوّر بنفس أسلوب البحث اليدوي (بحث مرن بالكلمات).
-        const term = normalizeSearch(productCode);
+      const myWarehouse = appUser?.assignedWarehouseId || 'main';
+      const pickBest = (docs) =>
+        docs.find(d => d.data().warehouseId === myWarehouse) ||
+        docs.find(d => d.data().warehouseId === 'main') ||
+        docs[0] || null;
+
+      const fetchBySerial = async (serial) => {
+        const snap = await getDocs(query(
+          collection(db, 'inventory'),
+          where('serialNumber', '==', serial),
+          where('isDeleted', '==', false),
+          limit(10)
+        ));
+        return pickBest(snap.docs);
+      };
+
+      // 🛠️ FIX (باگ حقيقي): كان لو مفيش تطابق دقيق بياخد "أقرب نتيجة بحث"
+      // (candidates[0]) فكان بيربط قطعة تانية خالص بكود مختلف. دلوقتي الربط
+      // التلقائي مش بيحصل غير لو التطابق مؤكد، ولو مش متأكد بنسيب المستخدم
+      // يختار القطعة بنفسه بدل ما نخمّن.
+      const raw = String(productCode).trim();
+      let matchDoc = await fetchBySerial(raw);
+
+      // كود المنتج ساعات بيبقى وصف + سيريال ("الفرشة كبيرة -4403A"): نجرب
+      // أجزاء الكود اللي شكلها سيريال (فيها أرقام) كتطابق تام مع السيريال.
+      if (!matchDoc) {
+        const codeLike = [...new Set(raw.match(/[A-Za-z0-9][A-Za-z0-9._\/-]*\d[A-Za-z0-9._\/-]*|\d[A-Za-z0-9._\/-]*/g) || [])]
+          .filter(t => t.length >= 3 && t !== raw);
+        for (const token of codeLike) {
+          matchDoc = await fetchBySerial(token);
+          if (matchDoc) break;
+        }
+      }
+
+      // آخر محاولة: تطابق تام مع الاسم، أو نتيجة وحيدة بس تحتوي الكود كامل
+      if (!matchDoc) {
+        const term = normalizeSearch(raw);
         const tokens = buildQueryTokens(term);
         const candidatesSnap = await getDocs(query(
           collection(db, 'inventory'),
           where('isDeleted', '==', false),
           where('searchTokens', 'array-contains-any', tokens.length ? tokens : [term]),
-          limit(10)
+          limit(20)
         ));
-        const candidates = candidatesSnap.docs;
-        matchDoc = candidates.find(d => {
-          const data = d.data();
-          return normalizeSearch(data.name || '').includes(term) || normalizeSearch(data.serialNumber || '').includes(term);
-        }) || candidates[0] || null;
+        const exactName = candidatesSnap.docs.filter(d => normalizeSearch(d.data().name || '') === term || normalizeSearch(d.data().serialNumber || '') === term);
+        if (exactName.length) {
+          matchDoc = pickBest(exactName);
+        } else {
+          const containing = candidatesSnap.docs.filter(d =>
+            normalizeSearch(d.data().name || '').includes(term) || normalizeSearch(d.data().serialNumber || '').includes(term)
+          );
+          const distinct = new Set(containing.map(d => d.data().serialNumber));
+          if (distinct.size === 1) matchDoc = pickBest(containing);
+        }
       }
 
       if (!matchDoc) return null;
@@ -476,7 +513,7 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
           setNewTicketSpareParts(prev => prev.some(p => p.id === found.id) ? prev : [...prev, found]);
           showInfo(`تم ربط قطعة الغيار "${found.name}" تلقائيًا بكود العطل ده`);
         } else {
-          showInfo(`كود المنتج "${selected.productCode}" مش مطابق لأي صنف في المخزون - أضف القطعة يدويًا لو محتاجها`);
+          showInfo(`كود المنتج "${selected.productCode}" مش مطابق بشكل مؤكد لصنف واحد في المخزون - ابحث عن القطعة يدويًا واختارها بنفسك`);
         }
       }
     }
@@ -922,6 +959,8 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     followUpBy: ticket.followUpBy || ''
   });
   
+  setReminderAtInput(ticket.reminderAt || '');
+  setReminderNoteInput(ticket.reminderNote || '');
   setTicketComments(ticket.comments || []);
   setNewComment('');
   setEditingCommentId(null);
@@ -1133,7 +1172,24 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   };
 
   // ========== تحديث حالة التذكرة ==========
+  // 🆕 التسليم للعميل بيطلب توقيع المستلم الأول (ممكن يتخطّاه). باقي الحالات بتتغير مباشرة.
+  const SIGNATURE_STATUSES = ['delivered_to_customer', 'rejected_and_delivered', 'delivered_asc'];
   const handleUpdateStatus = async (ticketId, newStatus) => {
+    const t = tickets.find(x => x.id === ticketId) || (fullTicketView?.id === ticketId ? fullTicketView : null);
+    if (SIGNATURE_STATUSES.includes(newStatus) && !t?.deliverySignature) {
+      setSignatureFor({ ticketId, newStatus });
+      return;
+    }
+    return applyStatusChange(ticketId, newStatus);
+  };
+
+  const makeRatingToken = () => {
+    const a = new Uint8Array(12);
+    crypto.getRandomValues(a);
+    return Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+
+  const applyStatusChange = async (ticketId, newStatus, extra = {}) => {
     setGlobalLoading(true);
     
     try {
@@ -1153,11 +1209,15 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         by: appUser.name
       }];
       
+      // 🆕 أول ما التذكرة توصل لحالة نهائية، بنجهّز توكن رابط تقييم العميل
+      const ratingExtra = TICKET_TERMINAL_STATUSES.includes(newStatus) && !current.ratingToken ? { ratingToken: makeRatingToken() } : {};
+      const extraFields = { ...extra, ...ratingExtra };
       await updateDoc(ticketRef, {
         status: newStatus,
         updatedAt: serverTimestamp(),
         statusHistory,
-        history
+        history,
+        ...extraFields
       });
       
       showSuccess("تم تحديث حالة التذكرة");
@@ -1179,15 +1239,80 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       }
 
       if (fullTicketView?.id === ticketId) {
-        setFullTicketView({ ...fullTicketView, status: newStatus, statusHistory, history });
+        setFullTicketView({ ...fullTicketView, status: newStatus, statusHistory, history, ...extraFields });
       }
       
-      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: newStatus } : t));
+      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: newStatus, ...extraFields } : t));
     } catch(e) {
       showError("فشل تحديث الحالة: " + e.message);
     }
     
     setGlobalLoading(false);
+  };
+
+  const confirmSignature = (ticketId, newStatus, signature, receiverName) => {
+    setSignatureFor(null);
+    return applyStatusChange(ticketId, newStatus, signature ? {
+      deliverySignature: signature,
+      deliveredToName: receiverName || '',
+      deliveredAt: new Date().toISOString(),
+      deliverySignedBy: appUser.name
+    } : {});
+  };
+
+  // ========== تذكيرات المتابعة ==========
+  const patchTicket = async (ticketId, fields, historyAction) => {
+    const ticketRef = doc(db, 'tickets', ticketId);
+    const snap = await getDoc(ticketRef);
+    const history = [...(snap.data()?.history || []), { action: historyAction, timestamp: new Date().toISOString(), by: appUser.name }];
+    await updateDoc(ticketRef, { ...fields, history, updatedAt: serverTimestamp() });
+    setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, ...fields } : t));
+    setFullTicketView(prev => prev && prev.id === ticketId ? { ...prev, ...fields } : prev);
+  };
+
+  const saveReminder = async () => {
+    if (!fullTicketView || !reminderAtInput) return showError('حدد ميعاد التذكير');
+    try {
+      await patchTicket(fullTicketView.id, { reminderAt: reminderAtInput, reminderNote: reminderNoteInput.trim(), reminderDone: false },
+        `تحديد تذكير متابعة في ${new Date(reminderAtInput).toLocaleString('ar-EG')}${reminderNoteInput.trim() ? ` - ${reminderNoteInput.trim()}` : ''}`);
+      showSuccess('تم حفظ التذكير');
+    } catch (e) { showError('فشل حفظ التذكير: ' + e.message); }
+  };
+
+  const completeReminder = async (ticketId) => {
+    try {
+      await patchTicket(ticketId, { reminderDone: true }, 'تم تنفيذ تذكير المتابعة');
+      showSuccess('تم تسجيل المتابعة');
+    } catch (e) { showError('فشل التحديث: ' + e.message); }
+  };
+
+  // ========== رابط تقييم العميل ==========
+  const getRatingLink = async (ticket) => {
+    let token = ticket.ratingToken;
+    if (!token) {
+      token = makeRatingToken();
+      await patchTicket(ticket.id, { ratingToken: token }, 'إنشاء رابط تقييم العميل');
+    }
+    return `${window.location.origin}/?rate=${ticket.id}&k=${token}`;
+  };
+
+  const copyRatingLink = async (ticket) => {
+    try {
+      const link = await getRatingLink(ticket);
+      await navigator.clipboard.writeText(link);
+      showSuccess('تم نسخ رابط التقييم');
+    } catch (e) { showError('تعذر إنشاء الرابط: ' + e.message); }
+  };
+
+  const sendRatingWhatsApp = async (ticket) => {
+    try {
+      const link = await getRatingLink(ticket);
+      let phone = String(ticket.customerPhone || '').replace(/\D/g, '');
+      if (!phone) return showError('مفيش رقم هاتف للعميل');
+      if (phone.startsWith('0')) phone = '20' + phone.slice(1);
+      const text = `أهلاً ${ticket.customerName || ''}، شكرًا لتعاملك مع Nouval. يهمنا رأيك في خدمة الصيانة (تذكرة ${ticket.ticketNumber}):\n${link}`;
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+    } catch (e) { showError('تعذر إنشاء الرابط: ' + e.message); }
   };
 
   // ========== إضافة قطعة غيار ==========
@@ -3041,6 +3166,59 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     </div>
   </div>
 
+  {/* 🆕 تذكير المتابعة + توقيع التسليم + تقييم العميل */}
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <div className="bg-amber-50/60 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/40 p-3 rounded-xl space-y-2">
+      <label className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1"><Bell size={13}/> تذكير متابعة</label>
+      <input type="datetime-local" className="w-full border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" value={reminderAtInput} onChange={e => setReminderAtInput(e.target.value)} />
+      <input className="w-full border p-2 rounded-lg text-sm bg-white dark:bg-slate-900" placeholder="مثال: الاتصال بالعميل لتأكيد الموافقة" value={reminderNoteInput} onChange={e => setReminderNoteInput(e.target.value)} />
+      <div className="flex gap-2">
+        <button type="button" onClick={saveReminder} className="flex-1 bg-amber-600 text-white py-2 rounded-lg text-xs font-bold">حفظ التذكير</button>
+        {fullTicketView.reminderAt && !fullTicketView.reminderDone && (
+          <button type="button" onClick={() => completeReminder(fullTicketView.id)} className="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-xs font-bold">تمت المتابعة</button>
+        )}
+      </div>
+      {fullTicketView.reminderAt && (
+        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+          {fullTicketView.reminderDone ? '✅ تمت المتابعة' : `⏰ ${new Date(fullTicketView.reminderAt).toLocaleString('ar-EG')}`}
+        </p>
+      )}
+    </div>
+
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl space-y-2">
+      <label className="text-xs font-bold text-slate-500 block">توقيع الاستلام</label>
+      {fullTicketView.deliverySignature ? (
+        <div>
+          <img src={fullTicketView.deliverySignature} alt="توقيع العميل" className="w-full max-h-28 object-contain bg-white rounded-lg border" />
+          <p className="text-[10px] text-slate-500 mt-1">
+            {fullTicketView.deliveredToName ? `المستلم: ${fullTicketView.deliveredToName} - ` : ''}{fullTicketView.deliveredAt ? new Date(fullTicketView.deliveredAt).toLocaleString('ar-EG') : ''}
+          </p>
+        </div>
+      ) : (
+        <p className="text-xs text-slate-400">لا يوجد توقيع - بيتطلب تلقائيًا عند تغيير الحالة إلى "تم التسليم".</p>
+      )}
+
+      {TICKET_TERMINAL_STATUSES.includes(fullTicketView.status) && (
+        <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+          <label className="text-xs font-bold text-slate-500 block mb-1">تقييم العميل</label>
+          {fullTicketView.customerRating?.submittedAt ? (
+            <div className="text-xs space-y-0.5">
+              {[['accessibility','سهولة الوصول'],['maintenanceTime','سرعة الصيانة'],['centerDealing','التعامل'],['deliveryProcedures','التسليم']].map(([k,l]) => (
+                <p key={k}>{l}: <span className="text-amber-500">{'★'.repeat(fullTicketView.customerRating[k] || 0)}{'☆'.repeat(5 - (fullTicketView.customerRating[k] || 0))}</span></p>
+              ))}
+              {fullTicketView.customerRating.comment && <p className="text-slate-500">"{fullTicketView.customerRating.comment}"</p>}
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <button type="button" onClick={() => sendRatingWhatsApp(fullTicketView)} className="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-xs font-bold">إرسال واتساب</button>
+              <button type="button" onClick={() => copyRatingLink(fullTicketView)} className="flex-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 py-2 rounded-lg text-xs font-bold">نسخ الرابط</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  </div>
+
   {/* العنوان والمشكلة */}
   {fullTicketView.customerAddress && (
     <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
@@ -3577,6 +3755,16 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         </div>
       )}
 
+      {signatureFor && (
+        <SignatureModal
+          title="توقيع العميل على الاستلام"
+          subtitle={`تذكرة ${(tickets.find(t => t.id === signatureFor.ticketId) || fullTicketView)?.ticketNumber || ''}`}
+          onSave={(sig, name) => confirmSignature(signatureFor.ticketId, signatureFor.newStatus, sig, name)}
+          onSkip={() => confirmSignature(signatureFor.ticketId, signatureFor.newStatus, null, '')}
+          onCancel={() => setSignatureFor(null)}
+        />
+      )}
+
       {/* ===== رأس الصفحة ===== */}
       <div className="p-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
         <div className="flex items-center gap-2">
@@ -3595,6 +3783,15 @@ const loadTickets = useCallback(async (targetPage = 1) => {
           >
             ⏰ {showOverdueOnly ? 'إلغاء فلتر المتأخرة' : 'المتأخرة فقط'}
           </button>
+          {dueReminders.length > 0 && (
+            <button
+              onClick={() => setShowDueRemindersOnly(prev => !prev)}
+              className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors ${showDueRemindersOnly ? 'bg-amber-600 text-white' : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-100'}`}
+              title="تذكيرات المتابعة المستحقة"
+            >
+              <Bell size={12}/> {showDueRemindersOnly ? 'إلغاء فلتر التذكيرات' : `${dueReminders.length} تذكير متابعة`}
+            </button>
+          )}
           {/* ✨ ميزة جديدة: إرسال تنبيه بالتذاكر المتأخرة عن SLA لأي شخص مسؤول (نفس رابط تنبيهات التذاكر) */}
           {systemSettings?.ticketNotifications?.webhookUrl && overdueTickets.length > 0 && (
             <button

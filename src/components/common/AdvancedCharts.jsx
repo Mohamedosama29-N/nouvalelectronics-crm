@@ -11,7 +11,17 @@ import { useTheme } from './ThemeProvider';
 // الوضع الليلي، وده كان بيبقى شكله غريب على خلفية غامقة).
 const CHART_COLORS = ['#0d9488', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#0ea5e9'];
 
-export function AdvancedCharts({ data, type = 'line', title, height = 300 }) {
+const compact = (n) => {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return n;
+  if (Math.abs(v) >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
+  if (Math.abs(v) >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+  return v;
+};
+
+// series (اختياري): [{ key, name, color }] لرسم أكتر من خط/عمود في نفس الرسم.
+// لو مش متحدد، الرسم بيشتغل زي الأول (قيمة واحدة لكل عنصر).
+export function AdvancedCharts({ data, type = 'line', title, height = 300, series, subtitle }) {
   const { darkMode } = useTheme();
   const gridColor = darkMode ? '#334155' : '#e2e8f0';
   const textColor = darkMode ? '#94a3b8' : '#64748b';
@@ -23,10 +33,13 @@ export function AdvancedCharts({ data, type = 'line', title, height = 300 }) {
     return <div className="text-center text-slate-400 dark:text-slate-500 py-8">لا توجد بيانات</div>;
   }
 
-  const chartData = data.map(item => ({
-    name: item.name || item.label || item.date,
-    value: item.value || item.count || item.total
-  }));
+  const multi = Array.isArray(series) && series.length > 0 && type !== 'pie';
+  const chartData = multi
+    ? data.map(item => ({ ...item, name: item.name || item.label || item.date }))
+    : data.map(item => ({
+        name: item.name || item.label || item.date,
+        value: item.value ?? item.count ?? item.total ?? 0
+      }));
 
   const renderChart = () => {
     switch(type) {
@@ -35,10 +48,12 @@ export function AdvancedCharts({ data, type = 'line', title, height = 300 }) {
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
             <XAxis dataKey="name" stroke={textColor} tick={{ fill: textColor, fontSize: 12 }} />
-            <YAxis stroke={textColor} tick={{ fill: textColor, fontSize: 12 }} />
+            <YAxis stroke={textColor} tick={{ fill: textColor, fontSize: 12 }} tickFormatter={compact} />
             <Tooltip contentStyle={tooltipStyle} />
-            <Legend wrapperStyle={{ color: textColor }} />
-            <Line type="monotone" dataKey="value" stroke={CHART_COLORS[0]} strokeWidth={2} dot={{ fill: CHART_COLORS[0], r: 3 }} />
+            {multi && <Legend wrapperStyle={{ color: textColor }} />}
+            {(multi ? series : [{ key: 'value', name: 'القيمة' }]).map((sr, i) => (
+              <Line key={sr.key} type="monotone" dataKey={sr.key} name={sr.name} stroke={sr.color || CHART_COLORS[i % CHART_COLORS.length]} strokeWidth={2} dot={{ r: 2 }} isAnimationActive={false} />
+            ))}
           </LineChart>
         );
       case 'bar':
@@ -46,10 +61,12 @@ export function AdvancedCharts({ data, type = 'line', title, height = 300 }) {
           <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
             <XAxis dataKey="name" stroke={textColor} tick={{ fill: textColor, fontSize: 12 }} />
-            <YAxis stroke={textColor} tick={{ fill: textColor, fontSize: 12 }} />
+            <YAxis stroke={textColor} tick={{ fill: textColor, fontSize: 12 }} tickFormatter={compact} />
             <Tooltip contentStyle={tooltipStyle} cursor={{ fill: darkMode ? '#33415580' : '#f1f5f980' }} />
-            <Legend wrapperStyle={{ color: textColor }} />
-            <Bar dataKey="value" fill={CHART_COLORS[0]} radius={[6, 6, 0, 0]} />
+            {multi && <Legend wrapperStyle={{ color: textColor }} />}
+            {(multi ? series : [{ key: 'value', name: 'القيمة' }]).map((sr, i) => (
+              <Bar key={sr.key} dataKey={sr.key} name={sr.name} fill={sr.color || CHART_COLORS[i % CHART_COLORS.length]} radius={[6, 6, 0, 0]} isAnimationActive={false} />
+            ))}
           </BarChart>
         );
       case 'pie':
@@ -63,6 +80,7 @@ export function AdvancedCharts({ data, type = 'line', title, height = 300 }) {
               label={entry => entry.name}
               outerRadius={80}
               dataKey="value"
+              isAnimationActive={false}
             >
               {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
@@ -78,7 +96,8 @@ export function AdvancedCharts({ data, type = 'line', title, height = 300 }) {
 
   return (
     <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-      {title && <h3 className="font-bold text-lg mb-4 text-slate-800 dark:text-white">{title}</h3>}
+      {title && <h3 className={`font-bold text-lg text-slate-800 dark:text-white ${subtitle ? 'mb-1' : 'mb-4'}`}>{title}</h3>}
+      {subtitle && <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-3">{subtitle}</p>}
       <ResponsiveContainer width="100%" height={height}>
         {renderChart()}
       </ResponsiveContainer>

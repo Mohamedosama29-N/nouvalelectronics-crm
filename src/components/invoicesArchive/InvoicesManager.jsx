@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  collection, getDocs, query, where, orderBy, limit, startAfter
+  collection, getDocs, query, where, orderBy, limit, startAfter, doc, updateDoc, serverTimestamp
 } from 'firebase/firestore';
 import {
   Download
@@ -30,6 +30,46 @@ export function InvoicesManager({ systemSettings, appUser }) {
   const [warehouses, setWarehouses] = useState([]);
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
+  // 🆕 تسجيل دفعة إضافية على فاتورة دفعت جزئيًا
+  const [payingInvoice, setPayingInvoice] = useState(null);
+  const [payAmount, setPayAmount] = useState('');
+
+  const handleAddInvoicePayment = async () => {
+    if (!payingInvoice) return;
+    const amount = Number(payAmount);
+    if (!payAmount || amount <= 0) {
+      showError("أدخل مبلغ صحيح");
+      return;
+    }
+    if (amount > payingInvoice.remaining) {
+      showError(`المبلغ أكبر من المتبقي (${payingInvoice.remaining.toLocaleString()} ج)`);
+      return;
+    }
+    try {
+      const newTotalPaid = (payingInvoice.totalPaid || 0) + amount;
+      const newRemaining = Math.max(0, (payingInvoice.finalTotal || 0) - newTotalPaid);
+      await updateDoc(doc(db, 'transactions', payingInvoice.id), {
+        totalPaid: newTotalPaid,
+        remaining: newRemaining,
+        paymentStatus: newRemaining > 0.01 ? 'partial' : 'paid',
+        paymentHistory: [...(payingInvoice.paymentHistory || []), {
+          amount,
+          method: 'cash',
+          date: new Date().toISOString(),
+          by: appUser.name
+        }],
+        updatedAt: serverTimestamp()
+      });
+      setInvoices(prev => prev.map(inv => inv.id === payingInvoice.id
+        ? { ...inv, totalPaid: newTotalPaid, remaining: newRemaining, paymentStatus: newRemaining > 0.01 ? 'partial' : 'paid' }
+        : inv));
+      showSuccess("تم تسجيل الدفعة بنجاح");
+      setPayingInvoice(null);
+      setPayAmount('');
+    } catch (e) {
+      showError("فشل تسجيل الدفعة: " + e.message);
+    }
+  };
 
   useEffect(() => {
     const loadWarehouses = async () => {
@@ -287,6 +327,7 @@ export function InvoicesManager({ systemSettings, appUser }) {
                 <th className="p-3">العميل</th>
                 <th className="p-3">الهاتف</th>
                 <th className="p-3">الإجمالي</th>
+                <th className="p-3">حالة الدفع</th>
                 <th className="p-3">الخصم</th>
                 <th className="p-3">طريقة الدفع</th>
                 <th className="p-3">الفرع</th>
@@ -310,6 +351,25 @@ export function InvoicesManager({ systemSettings, appUser }) {
                   <td className="p-3 font-bold text-emerald-600 dark:text-emerald-400">
                     {(inv.finalTotal || 0).toLocaleString()} ج
                   </td>
+                  <td className="p-3">
+                    {inv.paymentStatus === 'partial' ? (
+                      <div className="flex items-center gap-2">
+                        <span className="bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-2 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap">
+                          متبقي {(inv.remaining || 0).toLocaleString()} ج
+                        </span>
+                        <button
+                          onClick={() => setPayingInvoice(inv)}
+                          className="text-teal-600 dark:text-teal-400 hover:underline text-[10px] font-bold whitespace-nowrap"
+                        >
+                          + دفعة
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-2 py-1 rounded-lg text-[10px] font-bold">
+                        مدفوعة بالكامل
+                      </span>
+                    )}
+                  </td>
                   <td className="p-3 text-rose-500">
                     {inv.discountAmount > 0 ? `${inv.discountAmount.toLocaleString()} ج` : '-'}
                   </td>
@@ -332,7 +392,7 @@ export function InvoicesManager({ systemSettings, appUser }) {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan="9" className="p-8 text-center text-slate-400">لا توجد فواتير مطابقة</td>
+                  <td colSpan="10" className="p-8 text-center text-slate-400">لا توجد فواتير مطابقة</td>
                 </tr>
               )}
             </tbody>
@@ -348,6 +408,42 @@ export function InvoicesManager({ systemSettings, appUser }) {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* 🆕 مودال تسجيل دفعة إضافية على فاتورة دفعت جزئيًا */}
+      {payingInvoice && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+            <h3 className="font-black text-lg text-slate-800 dark:text-white">
+              تسجيل دفعة - فاتورة #{payingInvoice.invoiceNumber}
+            </h3>
+            <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 text-sm space-y-1">
+              <p className="flex justify-between"><span className="text-slate-500">الإجمالي</span><span className="font-bold">{(payingInvoice.finalTotal || 0).toLocaleString()} ج</span></p>
+              <p className="flex justify-between"><span className="text-slate-500">مدفوع حتى الآن</span><span className="font-bold text-emerald-600">{(payingInvoice.totalPaid || 0).toLocaleString()} ج</span></p>
+              <p className="flex justify-between"><span className="text-slate-500">المتبقي</span><span className="font-bold text-amber-600">{(payingInvoice.remaining || 0).toLocaleString()} ج</span></p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">المبلغ المدفوع دلوقتي</label>
+              <input
+                type="number"
+                min="0"
+                max={payingInvoice.remaining}
+                autoFocus
+                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold text-center outline-none focus:border-teal-500 bg-slate-50 dark:bg-slate-900"
+                value={payAmount}
+                onChange={e => setPayAmount(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { setPayingInvoice(null); setPayAmount(''); }} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600">
+                إلغاء
+              </button>
+              <button onClick={handleAddInvoicePayment} className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700">
+                حفظ الدفعة
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { signInAnonymously } from 'firebase/auth';
+
 import {
   collection, getDoc, doc, onSnapshot
 } from 'firebase/firestore';
@@ -31,6 +31,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { LoginScreen } from './components/auth/LoginScreen';
+import { REQUIRE_REAL_AUTH, initFirebaseAuth, isRealSession, endSession } from './utils/authSession';
 import { ThemeProvider } from './components/common/ThemeProvider';
 import { USER_ROLES } from './constants/roles';
 import { auth, db } from './firebase/config';
@@ -65,6 +66,7 @@ const SettingsManager = lazyPage(() => import('./components/settings/SettingsMan
 const EnhancedWarehouseManager = lazyPage(() => import('./components/warehouses/EnhancedWarehouseManager'), 'EnhancedWarehouseManager');
 const EnhancedUserManagement = lazyPage(() => import('./components/users/EnhancedUserManagement'), 'EnhancedUserManagement');
 const EmployeeProfileView = lazyPage(() => import('./components/users/EmployeeProfileView'), 'EmployeeProfileView');
+const PublicRatingPage = React.lazy(() => import('./components/tickets/PublicRatingPage'));
 const ResetPasswordScreen = lazyPage(() => import('./components/auth/ResetPasswordScreen'), 'ResetPasswordScreen');
 
 function PageLoadingFallback() {
@@ -213,7 +215,8 @@ useEffect(() => {
 
   // استعادة المستخدم من localStorage عند تحميل التطبيق
   useEffect(() => {
-    const savedUser = loadUserFromStorage();
+    // في الوضع الصارم الاستعادة بتتم بعد التأكد من جلسة Firebase (فوق)
+    const savedUser = REQUIRE_REAL_AUTH ? null : loadUserFromStorage();
     if (savedUser) {
       setAppUser(savedUser);
     }
@@ -221,6 +224,12 @@ useEffect(() => {
   }, []);
 
   useEffect(() => {
+    // الوضع الصارم: القواعد بتمنع القراءة قبل تسجيل الدخول، فاختبار الاتصال
+    // بيتأجل لحد ما الموظف يدخل (أخطاء الاتصال هتظهر في شاشة الدخول نفسها).
+    if (REQUIRE_REAL_AUTH) {
+      setIsConnecting(false);
+      return;
+    }
     testFirebaseConnection();
   }, []);
 
@@ -316,7 +325,17 @@ useEffect(() => {
   useEffect(() => {
     const initAuth = async () => {
        try {
-           await signInAnonymously(auth);
+           await initFirebaseAuth();
+           // الوضع الصارم: بنرجّع المستخدم المحفوظ بس لو جلسة Firebase الحقيقية
+           // لسه شغالة ولنفس الموظف، وإلا لازم يسجل دخول من جديد.
+           if (REQUIRE_REAL_AUTH) {
+             const saved = loadUserFromStorage();
+             if (saved && isRealSession() && auth.currentUser.uid === saved.id) {
+               setAppUser(saved);
+             } else if (saved) {
+               clearUserFromStorage();
+             }
+           }
        } catch(e) {
            console.error("Firebase Auth Initialization Failed", e);
        } finally {
@@ -365,6 +384,7 @@ useEffect(() => {
 
   const handleLogout = () => {
      clearUserFromStorage();
+     endSession();
      setAppUser(null);
      setCurrentView('dashboard');
      showSuccess("تم تسجيل الخروج بنجاح");
@@ -416,6 +436,16 @@ useEffect(() => {
             window.location.reload();
           }}
         />
+      </React.Suspense>
+    );
+  }
+
+  // 🆕 رابط تقييم العميل (?rate=<ticketId>&k=<token>) - صفحة عامة من غير تسجيل دخول
+  const rateParams = new URLSearchParams(window.location.search);
+  if (rateParams.get('rate') && rateParams.get('k')) {
+    return (
+      <React.Suspense fallback={<PageLoadingFallback />}>
+        <PublicRatingPage ticketId={rateParams.get('rate')} token={rateParams.get('k')} />
       </React.Suspense>
     );
   }
@@ -748,6 +778,11 @@ useEffect(() => {
           {/* Main Content */}
           <main className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar">
              <div key={currentView} className="max-w-7xl mx-auto h-full pb-10 print:pb-0 animate-fade-in">
+                {appUser.role === 'admin' && !isRealSession() && (
+                  <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs font-bold print:hidden">
+                    ⚠️ الدخول الآمن (Firebase Auth) غير مفعّل على هذه الجلسة - النظام شغال بالجلسة المجهولة القديمة. راجع FIREBASE_AUTH_MIGRATION.md (نشر الدوال وصلاحية Token Creator) ثم سجّل خروج ودخول من جديد.
+                  </div>
+                )}
                 
                 {/* الصفحات المختلفة - كل صفحة بتتحمّل عند الحاجة فقط (React.lazy) */}
                 <React.Suspense fallback={<PageLoadingFallback />}>
@@ -804,7 +839,7 @@ useEffect(() => {
 )}
 
                 {currentView === 'reports' && appUser.permissions?.viewReports && 
-                  <ReportsManager notify={notify} appUser={appUser} />
+                  <ReportsManager notify={notify} appUser={appUser} systemSettings={systemSettings} />
                 }
 
                 {currentView === 'finance' && (appUser.permissions?.viewFinance || appUser.role === 'admin') && 
