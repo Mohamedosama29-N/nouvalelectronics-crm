@@ -396,22 +396,39 @@ useEffect(() => {
     const minutes = Number(systemSettings?.autoLogoutMinutes) || 0;
     if (!appUser || minutes <= 0) return;
 
-    let timer;
-    const resetTimer = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
+    // 🛠️ FIX: المؤقت القديم (setTimeout) كان بيتأخر أو بيتوقف لو التبويب في الخلفية أو
+    // الجهاز دخل sleep. دلوقتي بنسجّل وقت آخر نشاط وبنفحصه كل 20 ثانية بالساعة الفعلية،
+    // وبنفحصه كمان أول ما التبويب يرجع للواجهة - فالخروج بيحصل صح حتى بعد الـ sleep.
+    const limitMs = minutes * 60 * 1000;
+    const KEY = 'erp_last_activity';
+    const touch = () => { try { localStorage.setItem(KEY, String(Date.now())); } catch { /* تجاهل */ } };
+    const lastActivity = () => { try { return Number(localStorage.getItem(KEY)) || Date.now(); } catch { return Date.now(); } };
+    let fired = false;
+    const check = () => {
+      if (fired) return;
+      if (Date.now() - lastActivity() >= limitMs) {
+        fired = true;
         showWarning("تم تسجيل خروجك تلقائيًا بسبب عدم النشاط لفترة طويلة");
         handleLogout();
-      }, minutes * 60 * 1000);
+      }
     };
 
-    const activityEvents = ['mousedown', 'keydown', 'touchstart', 'scroll'];
-    activityEvents.forEach(evt => window.addEventListener(evt, resetTimer));
-    resetTimer();
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'touchstart', 'scroll', 'wheel', 'click'];
+    let lastTouch = 0;
+    const onActivity = () => {
+      const now = Date.now();
+      if (now - lastTouch > 1000) { lastTouch = now; touch(); } // نخفف الكتابة في localStorage
+    };
+    activityEvents.forEach(evt => window.addEventListener(evt, onActivity, { passive: true }));
+    const onVisible = () => { if (document.visibilityState === 'visible') check(); };
+    document.addEventListener('visibilitychange', onVisible);
+    touch();
+    const interval = setInterval(check, 20000);
 
     return () => {
-      clearTimeout(timer);
-      activityEvents.forEach(evt => window.removeEventListener(evt, resetTimer));
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      activityEvents.forEach(evt => window.removeEventListener(evt, onActivity));
     };
   }, [appUser, systemSettings?.autoLogoutMinutes]);
 
@@ -778,7 +795,7 @@ useEffect(() => {
           {/* Main Content */}
           <main className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar">
              <div key={currentView} className="max-w-7xl mx-auto h-full pb-10 print:pb-0 animate-fade-in">
-                {appUser.role === 'admin' && !isRealSession() && (
+                {REQUIRE_REAL_AUTH && appUser.role === 'admin' && !isRealSession() && (
                   <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs font-bold print:hidden">
                     ⚠️ الدخول الآمن (Firebase Auth) غير مفعّل على هذه الجلسة - النظام شغال بالجلسة المجهولة القديمة. راجع FIREBASE_AUTH_MIGRATION.md (نشر الدوال وصلاحية Token Creator) ثم سجّل خروج ودخول من جديد.
                   </div>

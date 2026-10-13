@@ -51,7 +51,6 @@ export function EnhancedWarehouseManager({ warehouses, appUser, setGlobalLoading
    const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState('');
    const [showTransferModal, setShowTransferModal] = useState(false);
    const [transferData, setTransferData] = useState({ toWarehouse: '', items: [] });
-   const [reports, setReports] = useState([]);
 
    useEffect(() => {
      if (selectedWarehouse) {

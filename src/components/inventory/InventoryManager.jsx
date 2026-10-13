@@ -56,7 +56,7 @@ export function InventoryManager({ appUser, warehouses, setGlobalLoading, wareho
   });
   const fileInputRef = useRef(null);
   
-  const [lastDoc, setLastDoc] = useState(null);
+  const [, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
   // 📄 FIX: تحويل التمرير المتراكم ("تحميل المزيد") لصفحات حقيقية بأرقام
@@ -74,7 +74,6 @@ export function InventoryManager({ appUser, warehouses, setGlobalLoading, wareho
   const [importErrors, setImportErrors] = useState([]);
   
   const [searchFilters, setSearchFilters] = useState({});
-  const [selectedCategory, setSelectedCategory] = useState('');
   const [categories, setCategories] = useState([]);
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);

@@ -51,8 +51,7 @@ export function POSManager({ appUser, systemSettings, setGlobalLoading, prefillF
   const [isPartialPayment, setIsPartialPayment] = useState(false);
   const [amountPaidNow, setAmountPaidNow] = useState('');
   const [recentCustomers, setRecentCustomers] = useState([]);
-  const [searchHistory, setSearchHistory] = useState([]);
-  const [quickAmounts] = useState([100, 200, 500, 1000, 2000, 5000]);
+  const [, setSearchHistory] = useState([]);
   const [cart, setCart] = useState([]);
 
   // ✨ ميزة جديدة: تعبئة نقطة البيع تلقائيًا لما الفاتورة جاية من تذكرة صيانة
@@ -376,7 +375,7 @@ export function POSManager({ appUser, systemSettings, setGlobalLoading, prefillF
 
     setGlobalLoading(true);
     try {
-      const docRef = await addDoc(collection(db, 'customers'), {
+      await addDoc(collection(db, 'customers'), {
         ...newCustomer,
         createdAt: serverTimestamp(),
         createdBy: appUser.id,

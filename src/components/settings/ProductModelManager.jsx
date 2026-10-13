@@ -13,7 +13,7 @@ import { db } from '../../firebase/config';
 import { showConfirm, showError, showSuccess } from '../../utils/alerts';
 import { normalizeSearch, buildQueryTokens } from '../../utils/search';
 
-export function ProductModelManager({}) {
+export function ProductModelManager() {
   const [products, setProducts] = useState([]);
   const [models, setModels] = useState([]);
   const [mainFaults, setMainFaults] = useState([]);
@@ -92,15 +92,15 @@ export function ProductModelManager({}) {
     setSavingProductCode(false);
   };
 
-  // تحميل المنتجات
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
   const loadProducts = async () => {
     const snap = await getDocs(collection(db, 'products'));
     setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
   };
+
+  // تحميل المنتجات
+  useEffect(() => {
+    loadProducts();
+  }, []);
 
   const addProduct = async () => {
     if (!newProduct.trim()) return;

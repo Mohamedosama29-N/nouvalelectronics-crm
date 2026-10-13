@@ -46,11 +46,6 @@ export function ReturnsManager({ appUser, setGlobalLoading, warehouses, warehous
   const [foundProduct, setFoundProduct] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
 
-  // ========== تحميل المرتجعات ==========
-  useEffect(() => {
-    loadReturns();
-  }, []);
-
   const loadReturns = async () => {
     setLoading(true);
     try {
@@ -74,6 +69,11 @@ export function ReturnsManager({ appUser, setGlobalLoading, warehouses, warehous
     }
     setLoading(false);
   };
+
+  // ========== تحميل المرتجعات ==========
+  useEffect(() => {
+    loadReturns();
+  }, []);
 
   // ========== البحث عن المنتج بالسيريال ==========
   const handleSearchProduct = async (e) => {
@@ -191,7 +191,7 @@ export function ReturnsManager({ appUser, setGlobalLoading, warehouses, warehous
         deductedInventoryId: (foundProduct && foundProduct.id) ? foundProduct.id : null
       };
 
-      const docRef = await addDoc(collection(db, 'returns'), returnData);
+      await addDoc(collection(db, 'returns'), returnData);
       
       // ✅ إذا كان المنتج موجوداً في المخزون، قم بتحديث كميته
       if (foundProduct && foundProduct.id) {

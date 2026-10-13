@@ -174,13 +174,12 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
   
 
   const TICKETS_PAGE_SIZE = 30;
-  const [lastDoc, setLastDoc] = useState(null);
+  const [, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   // 🆕 ترقيم صفحات حقيقي بدل "تحميل المزيد" - بنخزن مؤشر (cursor) لكل صفحة
   // زرناها عشان نقدر نرجع لأي صفحة سابقة بسرعة من غير ما نعيد تحميلها من الأول
   const [currentTicketsPage, setCurrentTicketsPage] = useState(1);
   const ticketsPageCursorsRef = useRef({ 1: null });
-  const [totalTicketsCount, setTotalTicketsCount] = useState(null);
   const [loadingData, setLoadingData] = useState(false);
   const [exportingTickets, setExportingTickets] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
@@ -206,7 +205,7 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
     return tickets.filter(t => getTicketSLAInfo(t, systemSettings?.ticketSLA)?.level === 'overdue');
   }, [tickets, systemSettings?.ticketSLA]);
   const [filterTechnician, setFilterTechnician] = useState('all');
-  const [filterTag, setFilterTag] = useState('all');
+  const [, setFilterTag] = useState('all');
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
 
   // ========== الثوابت ==========
@@ -451,7 +450,7 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
       // كود المنتج ساعات بيبقى وصف + سيريال ("الفرشة كبيرة -4403A"): نجرب
       // أجزاء الكود اللي شكلها سيريال (فيها أرقام) كتطابق تام مع السيريال.
       if (!matchDoc) {
-        const codeLike = [...new Set(raw.match(/[A-Za-z0-9][A-Za-z0-9._\/-]*\d[A-Za-z0-9._\/-]*|\d[A-Za-z0-9._\/-]*/g) || [])]
+        const codeLike = [...new Set(raw.match(/[A-Za-z0-9][A-Za-z0-9._/-]*\d[A-Za-z0-9._/-]*|\d[A-Za-z0-9._/-]*/g) || [])]
           .filter(t => t.length >= 3 && t !== raw);
         for (const token of codeLike) {
           matchDoc = await fetchBySerial(token);

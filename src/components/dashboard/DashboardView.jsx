@@ -15,16 +15,17 @@ import { LiveBadge } from '../common/LiveBadge';
 import { LoadingSkeleton } from '../common/LoadingSkeleton';
 import { TICKET_STATUSES, TICKET_TERMINAL_STATUSES } from '../../constants/tickets';
 import { useLiveSources } from '../../hooks/useLiveSources';
+import { useSalesAggregates } from '../../hooks/useSalesAggregates';
 import { getDashboardWidgetConfig } from '../../utils/dashboardHelpers';
 import { formatDate } from '../../utils/format';
 import {
   buildInventoryStats, buildReturnsStats, buildSalesSeries, buildSalesStats, buildTicketStats,
-  buildTransferStats, canSeeWarehouse, startOfDay, addDays, topProductsFrom
+  buildTransferStats, canSeeWarehouse, countBy, startOfDay, addDays, topProductsFrom
 } from '../../utils/liveStats';
 import { getTicketSLAInfo } from '../../utils/ticketHelpers';
 
 const DAY = 24 * 60 * 60 * 1000;
-const SOURCE_LABELS = { inventory: 'المخزون', transactions: 'المبيعات', activity: 'النشاطات', tickets: 'التذاكر', transfers: 'التحويلات', returns: 'المرتجعات' };
+const SOURCE_LABELS = { aggregates: 'إجماليات السنة', ticketsOpen: 'التذاكر المفتوحة', ticketsRecent: 'التذاكر الحديثة', inventory: 'المخزون', transactions: 'المبيعات', activity: 'النشاطات', tickets: 'التذاكر', transfers: 'التحويلات', returns: 'المرتجعات' };
 
 export function DashboardView({ appUser, warehouses, onNavigateToInventory, systemSettings }) {
   const [dateRange, setDateRange] = useState('week');
@@ -45,17 +46,20 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
   };
 
   // 📡 اشتراكات لحظية: أي بيع/تذكرة/تحويل جديد بيظهر في الأرقام والرسوم فوراً من غير تحديث.
-  // النوافذ الزمنية محدودة لتقليل القراءات: سنة للمبيعات، 90 يوم للتحويلات والمرتجعات.
+  // لتقليل القراءات: الاشتراك اللحظي على آخر 34 يوم بس (يغطي اليوم/الأسبوع/الشهر)،
+  // وإجماليات الشهور اللي فاتت (السنة) بتيجي من السيرفر كأرقام مجمّعة (useSalesAggregates)
+  // بدل ما نقرأ آلاف الفواتير. التذاكر: المفتوحة كلها + المنشأة آخر 34 يوم فقط.
   // sinceMs بيتقرّب لأول اليوم عشان الاشتراك ميتعادش كل ثانية.
   const dayStart = startOfDay(new Date()).getTime();
   const specs = useMemo(() => {
     const s = [
       { key: 'inventory', collection: 'inventory', wheres: isScoped ? [['warehouseId', '==', scopeWarehouse]] : [] },
-      { key: 'transactions', collection: 'transactions', timeField: 'timestamp', sinceMs: dayStart - 364 * DAY, max: 20000 },
-      { key: 'activity', collection: 'activity_logs', timeField: 'timestamp', sinceMs: dayStart - 30 * DAY, max: 20 }
+      { key: 'transactions', collection: 'transactions', timeField: 'timestamp', sinceMs: dayStart - 34 * DAY, max: 5000 },
+      { key: 'activity', collection: 'activity_logs', timeField: 'timestamp', sinceMs: dayStart - 30 * DAY, max: 20, soft: true }
     ];
     if (appUser?.role === 'admin' || appUser?.permissions?.manageTickets) {
-      s.push({ key: 'tickets', collection: 'tickets', timeField: 'createdAt', sinceMs: dayStart - 365 * DAY, max: 10000 });
+      s.push({ key: 'ticketsOpen', collection: 'tickets', wheres: [['status', 'not-in', TICKET_TERMINAL_STATUSES]] });
+      s.push({ key: 'ticketsRecent', collection: 'tickets', timeField: 'createdAt', sinceMs: dayStart - 34 * DAY, max: 5000 });
     }
     if (appUser?.role === 'admin' || appUser?.permissions?.viewTransfers) {
       s.push({ key: 'transfers', collection: 'transfers', timeField: 'createdAt', sinceMs: dayStart - 90 * DAY, max: 1000 });
@@ -67,15 +71,20 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
   }, [appUser, isScoped, scopeWarehouse, dayStart]);
 
   const { data, errors, loading, updatedAt, truncated } = useLiveSources(specs, !!appUser);
+  const aggWarehouse = isScoped ? scopeWarehouse : (selectedWarehouse !== 'all' ? selectedWarehouse : null);
+  const agg = useSalesAggregates(aggWarehouse, !!appUser);
 
   // فلترة المخازن (على العميل عشان نتجنب Composite Indexes)
   const inScope = (wid) => (isScoped ? canSeeWarehouse(appUser, wid) : (selectedWarehouse === 'all' || wid === selectedWarehouse));
   const txs = useMemo(() => (data.transactions || []).filter(t => inScope(t.warehouseId)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data.transactions, selectedWarehouse, isScoped, appUser]);
-  const tickets = useMemo(() => (data.tickets || []).filter(t => inScope(t.warehouseId)),
+  const tickets = useMemo(() => {
+    const byId = new Map();
+    [...(data.ticketsOpen || []), ...(data.ticketsRecent || [])].forEach(t => byId.set(t.id, t));
+    return [...byId.values()].filter(t => inScope(t.warehouseId));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data.tickets, selectedWarehouse, isScoped, appUser]);
+  }, [data.ticketsOpen, data.ticketsRecent, selectedWarehouse, isScoped, appUser]);
   const transfers = useMemo(() => (data.transfers || []).filter(t => inScope(t.fromWarehouseId) || inScope(t.toWarehouseId)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data.transfers, selectedWarehouse, isScoped, appUser]);
@@ -88,11 +97,17 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data.inventory, warehouses, selectedWarehouse]);
   const sales = useMemo(() => buildSalesStats(txs), [txs]);
-  const salesSeries = useMemo(() => buildSalesSeries(txs, dateRange), [txs, dateRange]);
-  const monthlySeries = useMemo(() => buildSalesSeries(txs, 'year'), [txs]);
+  // آخر 12 شهر = 11 شهر سابق (إجماليات من السيرفر) + الشهر الحالي (من الاشتراك اللحظي)
+  const monthlySeries = useMemo(() => {
+    const cur = buildSalesSeries(txs, 'year').slice(-1)[0];
+    const past = agg.months.map(m => ({ name: m.key, sales: m.total, returns: 0, net: m.total }));
+    return [...past, cur];
+  }, [txs, agg.months]);
+  const yearTotal = useMemo(() => monthlySeries.reduce((sum, m) => sum + m.sales, 0), [monthlySeries]);
+  const salesSeries = useMemo(() => (dateRange === 'year' ? monthlySeries : buildSalesSeries(txs, dateRange)), [txs, dateRange, monthlySeries]);
   const topProducts = useMemo(() => topProductsFrom(txs.filter(t => {
     const d = t.timestamp?.toDate ? t.timestamp.toDate() : new Date(t.timestamp);
-    const days = dateRange === 'day' ? 0 : dateRange === 'week' ? 6 : dateRange === 'month' ? 29 : 364;
+    const days = dateRange === 'day' ? 0 : dateRange === 'week' ? 6 : 29; // أقصى مدى لأفضل المنتجات 30 يوم (نافذة اللحظي)
     return d >= addDays(startOfDay(new Date()), -days);
   }), 10), [txs, dateRange]);
   const ticketStats = useMemo(() => buildTicketStats(tickets, {
@@ -100,6 +115,12 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
     statusLabel: (s) => TICKET_STATUSES.find(x => x.value === s)?.label || s,
     terminal: TICKET_TERMINAL_STATUSES
   }), [tickets, systemSettings]);
+  const openByStatus = useMemo(() => countBy(
+    (data.ticketsOpen || []).filter(t => inScope(t.warehouseId)),
+    t => t.status, st => TICKET_STATUSES.find(x => x.value === st)?.label || st
+  ),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [data.ticketsOpen, selectedWarehouse, isScoped, appUser]);
   const transferStats = useMemo(() => buildTransferStats(transfers, warehouseName),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [transfers, warehouses]);
@@ -114,14 +135,14 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
     salesTrend: sales.trendVsYesterday,
     salesWeek: sales.week,
     salesMonth: sales.month,
-    salesYear: sales.year,
+    salesYear: yearTotal,
     avgInvoice: sales.avgInvoice,
     topProducts,
     categoryDistribution: inv.byCategory,
     warehouseDistribution: inv.byWarehouse
   };
   const recentActivities = data.activity || [];
-  const errorList = Object.entries(errors).filter(([, v]) => v);
+  const errorList = [...Object.entries(errors).filter(([, v]) => v), ...(agg.error ? [['aggregates', agg.error]] : [])];
   const rangeLabel = { day: 'اليوم (بالساعة)', week: 'آخر 7 أيام', month: 'آخر 30 يوم', year: 'آخر 12 شهر' }[dateRange];
 
   const handleStatClick = (type) => {
@@ -324,7 +345,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
         const xsRenderers = {
           salesWeek: () => xsCard('from-blue-50 to-teal-50 dark:from-blue-900/30 dark:to-teal-900/30', 'border-blue-100 dark:border-blue-800', 'text-blue-800 dark:text-blue-300', 'مبيعات الأسبوع', `${stats.salesWeek.toLocaleString()} ج`),
           salesMonth: () => xsCard('from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30', 'border-green-100 dark:border-green-800', 'text-green-800 dark:text-green-300', 'مبيعات الشهر', `${stats.salesMonth.toLocaleString()} ج`),
-          salesYear: () => xsCard('from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30', 'border-purple-100 dark:border-purple-800', 'text-purple-800 dark:text-purple-300', 'مبيعات السنة', `${stats.salesYear.toLocaleString()} ج`),
+          salesYear: () => xsCard('from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30', 'border-purple-100 dark:border-purple-800', 'text-purple-800 dark:text-purple-300', 'مبيعات آخر 12 شهر', `${stats.salesYear.toLocaleString()} ج`),
           avgInvoice: () => xsCard('from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30', 'border-amber-100 dark:border-amber-800', 'text-amber-800 dark:text-amber-300', 'متوسط الفاتورة (آخر 7 أيام)', `${stats.avgInvoice.toLocaleString()} ج`),
           ticketsToday: () => xsCard('from-blue-50 to-teal-50 dark:from-blue-900/30 dark:to-teal-900/30', 'border-blue-100 dark:border-blue-800', 'text-blue-800 dark:text-blue-300', 'تذاكر اليوم', ticketStats.today),
           ticketsWeek: () => xsCard('from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30', 'border-green-100 dark:border-green-800', 'text-green-800 dark:text-green-300', 'تذاكر الأسبوع', ticketStats.week),
@@ -338,7 +359,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
           topProducts: () => stats.topProducts.length > 0 ? (
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
               <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2">
-                <Award className="text-amber-500" size={20}/> أفضل المنتجات مبيعاً
+                <Award className="text-amber-500" size={20}/> أفضل المنتجات مبيعاً <span className="text-[10px] font-normal text-slate-400">({dateRange === 'day' ? 'اليوم' : dateRange === 'week' ? 'آخر 7 أيام' : 'آخر 30 يوم'})</span>
               </h3>
               <div className="space-y-3">
                 {stats.topProducts.slice(0, 5).map((product, idx) => (
@@ -401,7 +422,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
               {chartType === 'tickets' && (
                 <>
                   <AdvancedCharts data={ticketStats.perDay} type="line" title="تذاكر جديدة يومياً (آخر 30 يوم)" height={300} />
-                  <AdvancedCharts data={ticketStats.byStatus} type="pie" title="توزيع حالات التذاكر" height={300} />
+                  <AdvancedCharts data={openByStatus} type="pie" title="حالات التذاكر المفتوحة" height={300} />
                   <AdvancedCharts data={ticketStats.byPriority} type="bar" title="توزيع أولويات التذاكر" height={300} />
                 </>
               )}

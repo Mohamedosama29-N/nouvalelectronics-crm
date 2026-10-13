@@ -41,7 +41,7 @@ const sinceMs = (ctx) => startOfDay(ctx.now).getTime() - (ctx.rangeDays - 1) * D
 // --------------------------------------------------------------------------
 const sales = {
   id: 'sales', label: 'المبيعات', icon: 'receipt', permission: null, timeBound: true,
-  sources: (ctx) => [{ key: 'transactions', collection: 'transactions', timeField: 'timestamp', sinceMs: sinceMs(ctx), max: 20000 }],
+  sources: (ctx) => [{ key: 'transactions', collection: 'transactions', timeField: 'timestamp', sinceMs: sinceMs(ctx), max: 10000 }],
   build: ({ transactions = [] }, ctx) => {
     const txs = transactions.filter((t) => ctx.scope(t.warehouseId));
     const sold = txs.filter(isSale);
@@ -265,7 +265,7 @@ const finance = {
   id: 'finance', label: 'المالية والمصروفات', icon: 'wallet', permission: 'viewFinance', timeBound: true,
   sources: (ctx) => [
     { key: 'expenses', collection: 'expenses', timeField: 'date', sinceMs: sinceMs(ctx), max: 10000 },
-    { key: 'transactions', collection: 'transactions', timeField: 'timestamp', sinceMs: sinceMs(ctx), max: 20000 }
+    { key: 'transactions', collection: 'transactions', timeField: 'timestamp', sinceMs: sinceMs(ctx), max: 10000 }
   ],
   build: ({ expenses = [], transactions = [] }, ctx) => {
     const ex = expenses.filter((e) => ctx.scope(e.warehouseId));
@@ -299,7 +299,7 @@ const finance = {
 // --------------------------------------------------------------------------
 const invoices = {
   id: 'invoices', label: 'الفواتير', icon: 'file', permission: 'viewInvoices', timeBound: true,
-  sources: (ctx) => [{ key: 'transactions', collection: 'transactions', timeField: 'timestamp', sinceMs: sinceMs(ctx), max: 20000 }],
+  sources: (ctx) => [{ key: 'transactions', collection: 'transactions', timeField: 'timestamp', sinceMs: sinceMs(ctx), max: 10000 }],
   build: ({ transactions = [] }, ctx) => {
     const inv = transactions.filter((t) => isSale(t) && ctx.scope(t.warehouseId));
     const total = inv.reduce((s, t) => s + amountOf(t), 0);
@@ -402,7 +402,7 @@ const warehousesReport = {
   id: 'warehouses', label: 'المخازن والفروع', icon: 'building', permission: 'admin', timeBound: true,
   sources: (ctx) => [
     { key: 'inventory', collection: 'inventory' },
-    { key: 'transactions', collection: 'transactions', timeField: 'timestamp', sinceMs: sinceMs(ctx), max: 20000 },
+    { key: 'transactions', collection: 'transactions', timeField: 'timestamp', sinceMs: sinceMs(ctx), max: 10000 },
     { key: 'tickets', collection: 'tickets', timeField: 'createdAt', sinceMs: sinceMs(ctx), max: 10000 }
   ],
   build: ({ inventory: items = [], transactions = [], tickets: tks = [] }, ctx) => {

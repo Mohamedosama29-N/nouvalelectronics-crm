@@ -12,14 +12,12 @@ import {
   CheckCircle2,
   XCircle
 } from 'lucide-react';
-import { useTheme } from '../common/ThemeProvider';
 import { showError, showSuccess } from '../../utils/alerts';
 import { sendEmail, sendWhatsApp, generateInvoiceHTML } from '../../utils/communications';
 import { formatDate } from '../../utils/format';
 import { db, functions } from '../../firebase/config';
 
 export function InvoiceRenderer({ data, systemSettings, onBack }) {
-  const {} = useTheme();
   const printRef = useRef();
 
   // 🆕 حالة إرسال الفاتورة الضريبية لمصلحة الضرائب (ETA) - بتتابع مستند
@@ -105,19 +103,6 @@ export function InvoiceRenderer({ data, systemSettings, onBack }) {
 
   // ✅ حساب الإجمالي النهائي (شامل الضريبة والرسوم والخدمات)
   const finalTotal = Number(data.finalTotal) || 0;
-
-  // ✅ حساب إجمالي القطع (للعلم فقط - لا يظهر في الفاتورة)
-  const itemsTotal = (data.items || []).reduce((sum, item) => {
-    if (item.isService) return sum;
-    const price = item.underWarranty ? 0 : (Number(item.price) || 0);
-    return sum + (price * (item.quantity || 1));
-  }, 0);
-
-  // ✅ حساب الخدمات (للعلم فقط - لا يظهر في الفاتورة)
-  const servicesTotal = (data.items || []).reduce((sum, item) => {
-    if (!item.isService) return sum;
-    return sum + ((Number(item.price) || 0) * (item.quantity || 1));
-  }, 0);
 
   const handleSendWhatsApp = () => {
     if (data.phone) {

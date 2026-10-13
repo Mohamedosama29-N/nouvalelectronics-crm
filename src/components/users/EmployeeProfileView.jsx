@@ -58,7 +58,6 @@ export function EmployeeProfileView({ userToView, warehouseMap }) {
 
   if (!userToView) return null;
 
-  const RoleIcon = getRoleIcon(userToView.role);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 text-right" dir="rtl">
@@ -74,7 +73,7 @@ export function EmployeeProfileView({ userToView, warehouseMap }) {
                  {userToView.phone && <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-lg">{userToView.phone}</span>}
                  <span className="bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-3 py-1 rounded-lg">الفرع: {warehouseMap[userToView.assignedWarehouseId] || 'الرئيسي'}</span>
                  <span className={`px-3 py-1 rounded-lg ${getRoleColorClasses(userToView.role)} flex items-center gap-1`}>
-                   <RoleIcon size={14}/> {USER_ROLES.find(r => r.key === userToView.role)?.label || userToView.role}
+                   {React.createElement(getRoleIcon(userToView.role), { size: 14 })} {USER_ROLES.find(r => r.key === userToView.role)?.label || userToView.role}
                  </span>
               </div>
             </div>

@@ -32,11 +32,6 @@ export function ReturnsWarehouseManager({ appUser, setGlobalLoading }) {
     warehouseId: appUser.assignedWarehouseId || 'main'
   });
 
-  // تحميل بيانات المرتجعات
-  useEffect(() => {
-    loadReturns();
-  }, []);
-
   const loadReturns = async () => {
     setLoading(true);
     try {
@@ -55,6 +50,11 @@ export function ReturnsWarehouseManager({ appUser, setGlobalLoading }) {
     }
     setLoading(false);
   };
+
+  // تحميل بيانات المرتجعات
+  useEffect(() => {
+    loadReturns();
+  }, []);
 
   // إضافة منتج مرتجع جديد
   const handleAddReturn = async (e) => {

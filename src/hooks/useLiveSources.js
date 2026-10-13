@@ -35,7 +35,7 @@ export function useLiveSources(specs, enabled = true) {
             setState((prev) => ({
               data: { ...prev.data, [s.key]: docs },
               errors: { ...prev.errors, [s.key]: undefined },
-              truncated: { ...prev.truncated, [s.key]: !!s.max && docs.length >= s.max },
+              truncated: { ...prev.truncated, [s.key]: !s.soft && !!s.max && docs.length >= s.max },
               ready: { ...prev.ready, [s.key]: true },
               updatedAt: new Date()
             }));

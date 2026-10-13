@@ -43,7 +43,7 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
   });
   const [editingCustomer, setEditingCustomer] = useState(false);
   const [editedData, setEditedData] = useState(customer);
-  const [availableTags, setAvailableTags] = useState([]);
+  const [, setAvailableTags] = useState([]);
 
   // 🛠️ FIX: خانة "الحالة" في كروت التذاكر هنا كانت متعطّلة تمامًا
   // (onStatusChange={() => {}})، فلما المستخدم يختار حالة جديدة، القيمة

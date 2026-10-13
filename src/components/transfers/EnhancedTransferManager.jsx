@@ -882,7 +882,6 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
                 </button>
               </div>
             )}
-            )}
           </div>
         )}
 

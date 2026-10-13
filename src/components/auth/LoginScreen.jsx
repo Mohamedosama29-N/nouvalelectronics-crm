@@ -31,7 +31,7 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [, setLoginAttempts] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [lockRemainingMs, setLockRemainingMs] = useState(0);
   const [showResetModal, setShowResetModal] = useState(false);
@@ -50,7 +50,7 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
       // بنعرض نفس الرسالة سواء الإيميل موجود أو لأ (أمان: منمنعش حد يكتشف
       // إيميلات مسجلة في النظام عن طريق تجربة شاشة الاستعادة)
       setResetSent(true);
-    } catch (err) {
+    } catch {
       showError('حصل خطأ، حاول مرة أخرى أو تواصل مع مدير النظام');
     } finally {
       setResetLoading(false);

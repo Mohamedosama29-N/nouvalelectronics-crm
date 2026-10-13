@@ -67,7 +67,7 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
   const [callCenters, setCallCenters] = useState([]);
   
   const CUSTOMERS_PAGE_SIZE = 30;
-  const [lastDoc, setLastDoc] = useState(null);
+  const [, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   // 🆕 ترقيم صفحات حقيقي + تحديث لحظي (onSnapshot) بدل "تحميل المزيد" مع
   // getDocs مرة واحدة - عشان أي تغيير في العملاء (حتى لو حصل من مكان تاني
@@ -76,7 +76,6 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
   const customersPageCursorsRef = useRef({ 1: null });
   const [loadingData, setLoadingData] = useState(false);
   
-  const [customerTickets, setCustomerTickets] = useState([]);
 
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [invoiceData, setInvoiceData] = useState(null);
