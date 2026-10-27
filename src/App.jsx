@@ -35,7 +35,7 @@ import { REQUIRE_REAL_AUTH, initFirebaseAuth, isRealSession, endSession } from '
 import { ThemeProvider } from './components/common/ThemeProvider';
 import { USER_ROLES } from './constants/roles';
 import { auth, db } from './firebase/config';
-import { showError, showInfo, showSuccess, showWarning } from './utils/alerts';
+import { friendlyMessage, showError, showInfo, showSuccess, showWarning } from './utils/alerts';
 import { onMessageListener, requestNotificationPermission } from './utils/messaging';
 import {} from './utils/offlineDb';
 import { syncManager } from './utils/syncManager';
@@ -203,7 +203,7 @@ useEffect(() => {
       } else if (error.code === 'not-found') {
         errorMessage = "لم يتم العثور على قاعدة البيانات.";
       } else {
-        errorMessage = error.message;
+        errorMessage = friendlyMessage(error.message);
       }
       
       setFirebaseError(errorMessage);

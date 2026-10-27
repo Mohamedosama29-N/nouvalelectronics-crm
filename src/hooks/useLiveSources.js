@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { friendlyMessage } from '../utils/alerts';
 
 // اشتراك لحظي (onSnapshot) في أكتر من collection مرة واحدة.
 // spec = { key, collection, timeField?, sinceMs?, max?, wheres? }
@@ -45,14 +46,14 @@ export function useLiveSources(specs, enabled = true) {
             setState((prev) => ({
               ...prev,
               data: { ...prev.data, [s.key]: prev.data[s.key] || [] },
-              errors: { ...prev.errors, [s.key]: err.code === 'permission-denied' ? 'لا توجد صلاحية لقراءة هذا القسم' : err.message },
+              errors: { ...prev.errors, [s.key]: err.code === 'permission-denied' ? 'لا توجد صلاحية لقراءة هذا القسم' : friendlyMessage(err.message) },
               ready: { ...prev.ready, [s.key]: true }
             }));
           }
         );
       } catch (e) {
         console.warn(`Live source "${s.key}" setup failed:`, e);
-        setState((prev) => ({ ...prev, errors: { ...prev.errors, [s.key]: e.message }, ready: { ...prev.ready, [s.key]: true } }));
+        setState((prev) => ({ ...prev, errors: { ...prev.errors, [s.key]: friendlyMessage(e.message) }, ready: { ...prev.ready, [s.key]: true } }));
         return () => {};
       }
     });

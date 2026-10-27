@@ -17,7 +17,7 @@ import { LoadingSkeleton } from '../common/LoadingSkeleton';
 import { USER_ROLES } from '../../constants/roles';
 import { TICKET_STATUSES } from '../../constants/tickets';
 import { db } from '../../firebase/config';
-import { showError, showSuccess } from '../../utils/alerts';
+import { friendlyMessage, showError, showSuccess } from '../../utils/alerts';
 import { exportToCSV, exportToExcel } from '../../utils/exportUtils';
 import { formatDate } from '../../utils/format';
 import { exportToPDF } from '../../utils/pdfExport';
@@ -205,7 +205,7 @@ export function ReportsManager({ appUser, systemSettings }) {
         setHasMore(snap.docs.length === 50);
     } catch (e) {
         console.error("Error loading reports:", e);
-        setError(e.message);
+        setError(friendlyMessage(e.message));
         if (e.code === 'permission-denied') {
           showError("خطأ في الصلاحيات: تأكد من إعدادات قواعد الأمان في Firebase");
         } else {

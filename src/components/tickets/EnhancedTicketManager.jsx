@@ -45,6 +45,8 @@ import { exportToExcel } from '../../utils/exportUtils';
 import { formatDate, formatDateOnly, getCurrentTimeHHMM } from '../../utils/format';
 import { buildQueryTokens, buildSearchTokens, normalizePhone, normalizeSearch } from '../../utils/search';
 import { getNextTicketNumber, getTicketSLAInfo } from '../../utils/ticketHelpers';
+import { describeMatchResult } from '../../utils/productCodeMatch';
+import { resolveProductCode } from '../../utils/productCodeLookup';
 
 export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUser, warehouseMap, onGenerateInvoice }) {
   const [tickets, setTickets] = useState([]);
@@ -345,15 +347,14 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
       // 🆕 نفس ربط قطعة الغيار التلقائي، بس هنا بنكتبها مباشرة على
       // التذكرة الموجودة فعلاً (زي أي إضافة قطعة غيار تانية وقت التعديل)
       if (selected.productCode && editingTicket?.id) {
-        const found = await lookupInventoryByProductCode(selected.productCode);
-        if (found) {
-          const alreadyLinked = (editingTicket.spareParts || []).some(p => p.id === found.id);
-          if (!alreadyLinked) {
-            handleAddSparePart(editingTicket.id, found);
-            showInfo(`تم ربط قطعة الغيار "${found.name}" تلقائيًا بكود العطل ده`);
-          }
+        const res = await lookupInventoryByProductCode(selected.productCode);
+        if (res.item) {
+          // skipIfExists: بيقرأ التذكرة من القاعدة وقت الإضافة (مش من نسخة قديمة في الشاشة)
+          // فمفيش تكرار لو الكود اتختار مرتين أو اتضغط بسرعة
+          const added = await handleAddSparePart(editingTicket.id, res.item, { skipIfExists: true });
+          if (added) showInfo(`تم ربط قطعة الغيار "${res.item.name}" تلقائيًا بكود العطل ده`);
         } else {
-          showInfo(`كود المنتج "${selected.productCode}" مش مطابق بشكل مؤكد لصنف واحد في المخزون - ابحث عن القطعة يدويًا واختارها بنفسك`);
+          showInfo(describeMatchResult(res, selected.productCode));
         }
       }
     }
@@ -422,70 +423,18 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
   // المخزون عشان نعرف نضيف قطعة الغيار المرتبطة بيه تلقائيًا، من غير
   // ما المستخدم يدوّر عليها يدوي.
   const lookupInventoryByProductCode = async (productCode) => {
-    if (!productCode) return null;
+    if (!productCode) return { status: 'none', item: null, candidates: [] };
     try {
-      const myWarehouse = appUser?.assignedWarehouseId || 'main';
-      const pickBest = (docs) =>
-        docs.find(d => d.data().warehouseId === myWarehouse) ||
-        docs.find(d => d.data().warehouseId === 'main') ||
-        docs[0] || null;
-
-      const fetchBySerial = async (serial) => {
-        const snap = await getDocs(query(
-          collection(db, 'inventory'),
-          where('serialNumber', '==', serial),
-          where('isDeleted', '==', false),
-          limit(10)
-        ));
-        return pickBest(snap.docs);
-      };
-
-      // 🛠️ FIX (باگ حقيقي): كان لو مفيش تطابق دقيق بياخد "أقرب نتيجة بحث"
-      // (candidates[0]) فكان بيربط قطعة تانية خالص بكود مختلف. دلوقتي الربط
-      // التلقائي مش بيحصل غير لو التطابق مؤكد، ولو مش متأكد بنسيب المستخدم
-      // يختار القطعة بنفسه بدل ما نخمّن.
-      const raw = String(productCode).trim();
-      let matchDoc = await fetchBySerial(raw);
-
-      // كود المنتج ساعات بيبقى وصف + سيريال ("الفرشة كبيرة -4403A"): نجرب
-      // أجزاء الكود اللي شكلها سيريال (فيها أرقام) كتطابق تام مع السيريال.
-      if (!matchDoc) {
-        const codeLike = [...new Set(raw.match(/[A-Za-z0-9][A-Za-z0-9._/-]*\d[A-Za-z0-9._/-]*|\d[A-Za-z0-9._/-]*/g) || [])]
-          .filter(t => t.length >= 3 && t !== raw);
-        for (const token of codeLike) {
-          matchDoc = await fetchBySerial(token);
-          if (matchDoc) break;
-        }
-      }
-
-      // آخر محاولة: تطابق تام مع الاسم، أو نتيجة وحيدة بس تحتوي الكود كامل
-      if (!matchDoc) {
-        const term = normalizeSearch(raw);
-        const tokens = buildQueryTokens(term);
-        const candidatesSnap = await getDocs(query(
-          collection(db, 'inventory'),
-          where('isDeleted', '==', false),
-          where('searchTokens', 'array-contains-any', tokens.length ? tokens : [term]),
-          limit(20)
-        ));
-        const exactName = candidatesSnap.docs.filter(d => normalizeSearch(d.data().name || '') === term || normalizeSearch(d.data().serialNumber || '') === term);
-        if (exactName.length) {
-          matchDoc = pickBest(exactName);
-        } else {
-          const containing = candidatesSnap.docs.filter(d =>
-            normalizeSearch(d.data().name || '').includes(term) || normalizeSearch(d.data().serialNumber || '').includes(term)
-          );
-          const distinct = new Set(containing.map(d => d.data().serialNumber));
-          if (distinct.size === 1) matchDoc = pickBest(containing);
-        }
-      }
-
-      if (!matchDoc) return null;
-      const data = matchDoc.data();
-      return { id: matchDoc.id, serialNumber: data.serialNumber, name: data.name, price: Number(data.price) || 0, quantity: 1 };
+      // 🛠️ المطابقة بقت في utils/productCodeLookup (مشتركة مع شاشة الإعدادات):
+      // الربط التلقائي بيحصل بس لو التطابق مؤكد لصنف واحد، والأفضلية للنسخة اللي
+      // فيها كمية في مخزن المستخدم، وإلا بنعرض المرشحين ونسيب المستخدم يختار.
+      const res = await resolveProductCode(productCode, appUser?.assignedWarehouseId || 'main');
+      if (!res.item) return res;
+      const d = res.item;
+      return { ...res, item: { id: d.id, serialNumber: d.serialNumber, name: d.name, price: Number(d.price) || 0, quantity: 1 } };
     } catch (error) {
       console.error('Failed to auto-link product code:', error);
-      return null;
+      return { status: 'none', item: null, candidates: [] };
     }
   };
 
@@ -506,13 +455,17 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
 
       // 🆕 لو كود العطل ده مرتبط بكود منتج، ندوّر عليه في المخزون
       // ونضيفه كقطعة غيار تلقائيًا من غير ما المستخدم يدوّر عليه يدوي.
+      // لو المستخدم غيّر الكود الفرعي، القطعة اللي اتربطت تلقائياً بالكود اللي قبله لازم تتشال
+      // (القطع اللي اضافها يدوياً مبتتأثرش)
+      setNewTicketSpareParts(prev => prev.filter(p => !p.autoLinkedFrom || p.autoLinkedFrom === subFaultId));
       if (selected.productCode) {
-        const found = await lookupInventoryByProductCode(selected.productCode);
-        if (found) {
+        const res = await lookupInventoryByProductCode(selected.productCode);
+        if (res.item) {
+          const found = { ...res.item, autoLinkedFrom: subFaultId };
           setNewTicketSpareParts(prev => prev.some(p => p.id === found.id) ? prev : [...prev, found]);
           showInfo(`تم ربط قطعة الغيار "${found.name}" تلقائيًا بكود العطل ده`);
         } else {
-          showInfo(`كود المنتج "${selected.productCode}" مش مطابق بشكل مؤكد لصنف واحد في المخزون - ابحث عن القطعة يدويًا واختارها بنفسك`);
+          showInfo(describeMatchResult(res, selected.productCode));
         }
       }
     }
@@ -1099,7 +1052,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         assignedCenter: appUser?.assignedWarehouseId || "main",
         // 🛠️ FIX: كانت مثبتة على مصفوفة فاضية دايمًا - يعني مستحيل تحدد
         // قطع غيار وانت بتنشئ التذكرة، لازم تستنى لحد ما تتحفظ وتفتحها تاني.
-        spareParts: newTicketSpareParts,
+        spareParts: newTicketSpareParts.map((part) => { const clean = { ...part }; delete clean.autoLinkedFrom; return clean; }),
         totalCost: newTicketSpareParts.reduce((sum, p) => sum + (Number(p.price) || 0) * (Number(p.quantity) || 1), 0),
         totalPaid: 0,
         remaining: 0,
@@ -1315,13 +1268,18 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   };
 
   // ========== إضافة قطعة غيار ==========
-  const handleAddSparePart = async (ticketId, part) => {
+  const handleAddSparePart = async (ticketId, part, opts = {}) => {
     setGlobalLoading(true);
-    
+    let added = false;
+
     try {
       const ticketRef = doc(db, 'tickets', ticketId);
       const snap = await getDoc(ticketRef);
       const current = snap.data();
+      if (opts.skipIfExists && part.id && (current.spareParts || []).some(p => p.id === part.id)) {
+        setGlobalLoading(false);
+        return false;
+      }
       
       const spareParts = [...(current.spareParts || []), {
         ...part,
@@ -1355,6 +1313,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       });
       
       showSuccess("تم إضافة قطعة الغيار");
+      added = true;
 
       if (fullTicketView?.id === ticketId) {
         setFullTicketView({ ...fullTicketView, spareParts, totalCost, remaining, history });
@@ -1367,6 +1326,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     }
     
     setGlobalLoading(false);
+    return added;
   };
 
   // 🆕 حذف قطعة غيار من التذكرة (كانت غير موجودة خالص - مفيش طريقة

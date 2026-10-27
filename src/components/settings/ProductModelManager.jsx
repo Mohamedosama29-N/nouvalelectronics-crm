@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  collection, addDoc, getDocs, doc, deleteDoc, updateDoc, query, where, serverTimestamp, onSnapshot, limit
+  collection, addDoc, getDocs, doc, deleteDoc, updateDoc, query, where, serverTimestamp, onSnapshot
 } from 'firebase/firestore';
 import {
   Package,
@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { db } from '../../firebase/config';
 import { showConfirm, showError, showSuccess } from '../../utils/alerts';
-import { normalizeSearch, buildQueryTokens } from '../../utils/search';
+import { resolveProductCode } from '../../utils/productCodeLookup';
 
 export function ProductModelManager() {
   const [products, setProducts] = useState([]);
@@ -33,6 +33,8 @@ export function ProductModelManager() {
   // المستخدم في التذاكر - بيجرب تطابق تام الأول، وبعدين بحث بالكلمات).
   const [productCodeInput, setProductCodeInput] = useState('');
   const [matchedItem, setMatchedItem] = useState(null);
+  const [matchStatus, setMatchStatus] = useState(null);
+  const [matchCandidates, setMatchCandidates] = useState([]);
   const [searchingMatch, setSearchingMatch] = useState(false);
   const [savingProductCode, setSavingProductCode] = useState(false);
 
@@ -40,40 +42,24 @@ export function ProductModelManager() {
     const current = subFaults.find(f => f.id === selectedSubFaultId);
     setProductCodeInput(current?.productCode || '');
     setMatchedItem(null);
+    setMatchStatus(null);
+    setMatchCandidates([]);
   }, [selectedSubFaultId, subFaults]);
 
+  // نفس منطق المطابقة المستخدم في التذاكر بالظبط (utils/productCodeLookup): المعاينة هنا
+  // لازم تبيّن اللي هيتربط فعلاً، مش "أقرب نتيجة" (كانت بتوري صنف غلط وتخلي الأدمن يحفظ الكود عليه)
   const lookupProductCodeMatch = async (codeValue) => {
     if (!codeValue.trim()) {
       setMatchedItem(null);
+      setMatchStatus(null);
       return;
     }
     setSearchingMatch(true);
     try {
-      const exactSnap = await getDocs(query(
-        collection(db, 'inventory'),
-        where('serialNumber', '==', codeValue.trim()),
-        where('isDeleted', '==', false),
-        limit(1)
-      ));
-      let found = null;
-      if (!exactSnap.empty) {
-        found = { id: exactSnap.docs[0].id, ...exactSnap.docs[0].data() };
-      } else {
-        const term = normalizeSearch(codeValue);
-        const tokens = buildQueryTokens(term);
-        const candidatesSnap = await getDocs(query(
-          collection(db, 'inventory'),
-          where('isDeleted', '==', false),
-          where('searchTokens', 'array-contains-any', tokens.length ? tokens : [term]),
-          limit(10)
-        ));
-        const match = candidatesSnap.docs.find(d => {
-          const data = d.data();
-          return normalizeSearch(data.name || '').includes(term) || normalizeSearch(data.serialNumber || '').includes(term);
-        }) || candidatesSnap.docs[0];
-        if (match) found = { id: match.id, ...match.data() };
-      }
-      setMatchedItem(found);
+      const res = await resolveProductCode(codeValue.trim(), 'main');
+      setMatchStatus(res.status);
+      setMatchCandidates(res.candidates || []);
+      setMatchedItem(res.item || false);
     } catch {
       showError('فشل البحث في المخزون');
     }
@@ -373,7 +359,7 @@ export function ProductModelManager() {
                 className="flex-1 border p-3 rounded-xl font-mono"
                 placeholder="كود المنتج (سيريال أو وصف قريب من صنف في المخزون)"
                 value={productCodeInput}
-                onChange={e => { setProductCodeInput(e.target.value); setMatchedItem(null); }}
+                onChange={e => { setProductCodeInput(e.target.value); setMatchedItem(null); setMatchStatus(null); }}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); lookupProductCodeMatch(productCodeInput); } }}
               />
               <button
@@ -397,9 +383,21 @@ export function ProductModelManager() {
                 <div>
                   <span className="font-bold">{matchedItem.name}</span>
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-mono block">{matchedItem.serialNumber}</span>
+                  <span className="text-[10px] text-emerald-700 dark:text-emerald-300">{matchStatus === 'exact' ? 'تطابق مؤكد - هيتربط تلقائياً' : 'الكود جزء من اسم/سيريال صنف واحد فقط - هيتربط تلقائياً'}</span>
                 </div>
                 <span className="text-emerald-700 dark:text-emerald-300 font-bold">{matchedItem.price} ج - متاح: {matchedItem.quantity}</span>
               </div>
+            )}
+            {matchedItem === false && matchStatus === 'ambiguous' && (
+              <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                <p className="font-bold">الكود ينطبق على أكتر من صنف - مش هيتربط تلقائياً. اكتب السيريال الدقيق للصنف المطلوب:</p>
+                {matchCandidates.slice(0, 5).map(c => (
+                  <p key={c.id} className="font-mono">{c.name} — {c.serialNumber}</p>
+                ))}
+              </div>
+            )}
+            {matchedItem === false && matchStatus === 'none' && (
+              <p className="text-xs text-rose-600 dark:text-rose-400 font-bold">مفيش صنف في المخزون مطابق للكود ده، فالربط التلقائي مش هيشتغل بيه.</p>
             )}
             {matchedItem === null && productCodeInput && !searchingMatch && (
               <p className="text-xs text-slate-400">دوس "معاينة" للتأكد إن الكود ده بيطابق صنف موجود في المخزون فعليًا</p>

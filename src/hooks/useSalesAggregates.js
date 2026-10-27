@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, count, getAggregateFromServer, query, sum, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { friendlyMessage } from '../utils/alerts';
 
 // إجماليات المبيعات الشهرية من السيرفر (Aggregation Queries) بدل قراءة آلاف الفواتير في المتصفح.
 // Firestore بيحاسب على كل 1000 مستند مفهرس = قراءة واحدة، يعني شهر فيه 3000 فاتورة = 3 قراءات بس.
@@ -48,7 +49,7 @@ export function useSalesAggregates(warehouseId, enabled = true, months = 11) {
         if (!cancelled) {
           const msg = e.code === 'failed-precondition'
             ? 'محتاج Index جديد: شغّل firebase deploy --only firestore:indexes'
-            : (e.code === 'permission-denied' ? 'لا توجد صلاحية' : e.message);
+            : (e.code === 'permission-denied' ? 'لا توجد صلاحية' : friendlyMessage(e.message));
           setState({ months: [], loading: false, error: msg });
         }
       }
