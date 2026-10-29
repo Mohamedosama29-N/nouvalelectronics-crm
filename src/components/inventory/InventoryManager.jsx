@@ -298,6 +298,7 @@ useEffect(() => {
   loadItems(1);
   loadTotalCount();
 
+// eslint-disable-next-line react-hooks/exhaustive-deps -- مقصود: التأثير ده بيشتغل على التغيير في القيم المذكورة بس (إضافة الباقي بتسبب إعادة تحميل/حلقات)
 }, [debouncedSearch, appUser, searchFilters, selectedTags]);
 
   useEffect(() => {

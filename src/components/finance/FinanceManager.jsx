@@ -15,6 +15,7 @@ import {
 import { AdvancedCharts } from '../common/AdvancedCharts';
 import { db } from '../../firebase/config';
 import { showConfirm, showError, showSuccess } from '../../utils/alerts';
+import { isDateLocked, LOCKED_MESSAGE } from '../../utils/periodLock';
 import { exportToCSV } from '../../utils/exportUtils';
 import { formatDate } from '../../utils/format';
 
@@ -47,7 +48,7 @@ function getRangeStart(rangeKey) {
   }
 }
 
-export function FinanceManager({ appUser }) {
+export function FinanceManager({ appUser, systemSettings }) {
   const [range, setRange] = useState('month');
   const [loading, setLoading] = useState(true);
   const [revenue, setRevenue] = useState(0);
@@ -167,6 +168,11 @@ export function FinanceManager({ appUser }) {
   };
 
   const handleDeleteExpense = (expenseId) => {
+    const target = expenses.find((x) => x.id === expenseId);
+    if (target && isDateLocked(target.date, systemSettings?.accountingLockDate)) {
+      showError(LOCKED_MESSAGE(systemSettings.accountingLockDate));
+      return;
+    }
     showConfirm('هل تريد حذف هذا المصروف؟', async () => {
       try {
         await deleteDoc(doc(db, 'expenses', expenseId));

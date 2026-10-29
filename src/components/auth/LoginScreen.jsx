@@ -95,6 +95,7 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
       setLockRemainingMs(0);
       setLoginAttempts(state.attempts || 0);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- مقصود: التأثير ده بيشتغل على التغيير في القيم المذكورة بس (إضافة الباقي بتسبب إعادة تحميل/حلقات)
   }, [email]);
 
   // عدّاد تنازلي حي لفك القفل تلقائيًا لما الوقت يخلص
@@ -113,6 +114,7 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
       }
     }, 1000);
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- مقصود: التأثير ده بيشتغل على التغيير في القيم المذكورة بس (إضافة الباقي بتسبب إعادة تحميل/حلقات)
   }, [isLocked, email]);
 
   // تحميل البريد الإلكتروني المحفوظ

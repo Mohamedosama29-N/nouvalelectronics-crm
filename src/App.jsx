@@ -231,6 +231,7 @@ useEffect(() => {
       return;
     }
     testFirebaseConnection();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- مقصود: التأثير ده بيشتغل على التغيير في القيم المذكورة بس (إضافة الباقي بتسبب إعادة تحميل/حلقات)
   }, []);
 
   const retryConnection = async () => {
@@ -860,7 +861,7 @@ useEffect(() => {
                 }
 
                 {currentView === 'finance' && (appUser.permissions?.viewFinance || appUser.role === 'admin') && 
-                  <FinanceManager appUser={appUser} />
+                  <FinanceManager appUser={appUser} systemSettings={systemSettings} />
                 }
                 
                 {currentView === 'lowstock' && appUser.permissions?.viewLowStock && 

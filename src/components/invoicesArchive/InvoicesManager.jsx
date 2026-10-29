@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  collection, getDocs, query, where, orderBy, limit, startAfter, doc, updateDoc, serverTimestamp
+  collection, getDocs, query, where, orderBy, limit, startAfter, doc, runTransaction, serverTimestamp
 } from 'firebase/firestore';
 import {
   Download
@@ -11,13 +11,15 @@ import { showError, showSuccess } from '../../utils/alerts';
 import { exportToExcel } from '../../utils/exportUtils';
 import { formatDate } from '../../utils/format';
 import { normalizeSearch } from '../../utils/search';
+import { isDateLocked, LOCKED_MESSAGE } from '../../utils/periodLock';
 
 export function InvoicesManager({ systemSettings, appUser }) {
   const [invoices, setInvoices] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [invoiceData, setInvoiceData] = useState(null);
-  const [lastDoc, setLastDoc] = useState(null);
+  // ref بدل state: زر "تحميل المزيد" لازم يشوف آخر مؤشر صفحة فعلي (القيمة القديمة كانت بتكرر الصفحة الأولى)
+  const lastDocRef = useRef(null);
   const [hasMore, setHasMore] = useState(true);
   
   // فلاتر جديدة
@@ -45,20 +47,39 @@ export function InvoicesManager({ systemSettings, appUser }) {
       showError(`المبلغ أكبر من المتبقي (${payingInvoice.remaining.toLocaleString()} ج)`);
       return;
     }
+    if (isDateLocked(payingInvoice.timestamp, systemSettings?.accountingLockDate)) {
+      showError(LOCKED_MESSAGE(systemSettings.accountingLockDate));
+      return;
+    }
     try {
-      const newTotalPaid = (payingInvoice.totalPaid || 0) + amount;
-      const newRemaining = Math.max(0, (payingInvoice.finalTotal || 0) - newTotalPaid);
-      await updateDoc(doc(db, 'transactions', payingInvoice.id), {
-        totalPaid: newTotalPaid,
-        remaining: newRemaining,
-        paymentStatus: newRemaining > 0.01 ? 'partial' : 'paid',
-        paymentHistory: [...(payingInvoice.paymentHistory || []), {
-          amount,
-          method: 'cash',
-          date: new Date().toISOString(),
-          by: appUser.name
-        }],
-        updatedAt: serverTimestamp()
+      // 🛠️ قراءة الفاتورة الحالية جوه transaction: لو كاشيرين سجلوا دفعتين في نفس الوقت
+      // (أو الشاشة كانت قديمة) مفيش دفعة تضيع ولا المبلغ يتجاوز المتبقي الحقيقي.
+      const invRef = doc(db, 'transactions', payingInvoice.id);
+      const { newTotalPaid, newRemaining } = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(invRef);
+        if (!snap.exists()) throw new Error('الفاتورة غير موجودة');
+        const inv = snap.data();
+        const finalTotal = inv.finalTotal || 0;
+        const paidNow = inv.totalPaid || 0;
+        const remainingNow = Math.max(0, finalTotal - paidNow);
+        if (amount > remainingNow + 0.01) {
+          throw new Error(`المبلغ أكبر من المتبقي الفعلي (${remainingNow.toLocaleString()} ج)`);
+        }
+        const totalPaid = paidNow + amount;
+        const remaining = Math.max(0, finalTotal - totalPaid);
+        tx.update(invRef, {
+          totalPaid,
+          remaining,
+          paymentStatus: remaining > 0.01 ? 'partial' : 'paid',
+          paymentHistory: [...(inv.paymentHistory || []), {
+            amount,
+            method: 'cash',
+            date: new Date().toISOString(),
+            by: appUser.name
+          }],
+          updatedAt: serverTimestamp()
+        });
+        return { newTotalPaid: totalPaid, newRemaining: remaining };
       });
       setInvoices(prev => prev.map(inv => inv.id === payingInvoice.id
         ? { ...inv, totalPaid: newTotalPaid, remaining: newRemaining, paymentStatus: newRemaining > 0.01 ? 'partial' : 'paid' }
@@ -111,8 +132,8 @@ export function InvoicesManager({ systemSettings, appUser }) {
           constraints.push(where('warehouseId', '==', appUser.assignedWarehouseId || 'main'));
         }
 
-        if (isNextPage && lastDoc) {
-          constraints.push(startAfter(lastDoc));
+        if (isNextPage && lastDocRef.current) {
+          constraints.push(startAfter(lastDocRef.current));
         }
         constraints.push(limit(500));
         
@@ -123,7 +144,7 @@ export function InvoicesManager({ systemSettings, appUser }) {
           ...d.data()
         }));
         setInvoices(prev => isNextPage ? [...prev, ...data] : data);
-        setLastDoc(snap.docs[snap.docs.length - 1] || null);
+        lastDocRef.current = snap.docs[snap.docs.length - 1] || null;
         setHasMore(snap.docs.length === 500);
       } catch(e) {
         console.error(e);
@@ -132,9 +153,9 @@ export function InvoicesManager({ systemSettings, appUser }) {
   }, [appUser, filterDateFrom, filterDateTo]);
 
   useEffect(() => {
-    setLastDoc(null);
+    lastDocRef.current = null;
     loadInvoices(false);
-  }, [appUser, filterDateFrom, filterDateTo]);
+  }, [loadInvoices]);
 
   const filtered = invoices.filter(inv => {
     const matchesGlobalSearch = !search || 

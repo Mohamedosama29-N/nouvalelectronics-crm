@@ -549,27 +549,32 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
     setProductSearchInput('');
   };
 
-  // ========== جلب العملاء ==========
+  // ========== البحث عن العملاء ==========
+  // 🛠️ كان بيحمّل كل العملاء (آلاف المستندات) مع كل فتح لصفحة التذاكر. دلوقتي بنبحث عند
+  // الكتابة بس: رقم (بداية الهاتف) أو كلمات الاسم (searchTokens)، بحد أقصى 10 نتائج.
+  const debouncedCustomerSearch = useDebounce(customerSearch, 350);
   useEffect(() => {
-    const loadCustomers = async () => {
+    const term = normalizeSearch(debouncedCustomerSearch);
+    if (term.length < 2) { setCustomers([]); return undefined; }
+    let cancelled = false;
+    const run = async () => {
       try {
-        const snap = await getDocs(collection(db, "customers"));
-        setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const col = collection(db, 'customers');
+        const isNumeric = /^[\d+\s-]+$/.test(term);
+        const q = isNumeric
+          ? query(col, where('phone', '>=', normalizePhone(term)), where('phone', '<=', normalizePhone(term) + '\uf8ff'), limit(10))
+          : query(col, where('searchTokens', 'array-contains-any', buildQueryTokens(term)), limit(10));
+        const snap = await getDocs(q);
+        if (!cancelled) setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       } catch (error) {
-        console.error("Error loading customers:", error);
+        console.error('Error searching customers:', error);
       }
     };
-    loadCustomers();
-  }, []);
+    run();
+    return () => { cancelled = true; };
+  }, [debouncedCustomerSearch]);
 
-  const filteredCustomers = useMemo(() => {
-    if (!customerSearch.trim()) return [];
-    const term = normalizeSearch(customerSearch);
-    return customers.filter(c => 
-      normalizeSearch(c.name || '').includes(term) || 
-      normalizeSearch(c.phone || '').includes(term)
-    ).slice(0, 8);
-  }, [customerSearch, customers]);
+  const filteredCustomers = customerSearch.trim().length >= 2 ? customers : [];
 
   const selectCustomer = (customer) => {
     setNewTicket({

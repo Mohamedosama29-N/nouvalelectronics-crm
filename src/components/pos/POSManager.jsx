@@ -21,6 +21,7 @@ import { db } from '../../firebase/config';
 import { useDebounce } from '../../hooks/useDebounce';
 import { logUserActivity } from '../../utils/activityLog';
 import { showConfirm, showError, showInfo, showSuccess } from '../../utils/alerts';
+import { isValidSaleQty, readNextInvoiceNumber, sanitizeQty } from '../../utils/invoiceNumber';
 import { buildQueryTokens, buildSearchTokens, normalizePhone, normalizeSearch } from '../../utils/search';
 
 export function POSManager({ appUser, systemSettings, setGlobalLoading, prefillFromTicket, onConsumeTicketPrefill }) { 
@@ -290,15 +291,25 @@ export function POSManager({ appUser, systemSettings, setGlobalLoading, prefillF
 
       const snap = await getDocs(q);
 
-      if (!snap.empty) {
+      // 🛠️ الصنف بنختاره من مخزن البائع بس (كان بياخد أول نتيجة من أي فرع، فممكن البيع
+      // يخصم من مخزن فرع تاني وهو مسجّل على فرع البائع)
+      const myWarehouse = appUser?.assignedWarehouseId || 'main';
+      const ownDoc = snap.docs.find(d => d.data().warehouseId === myWarehouse);
+      if (!snap.empty && !ownDoc) {
+        showError("❌ الصنف ده مش متوفر في مخزنك (موجود في مخزن تاني)");
+        setGlobalLoading(false);
+        return;
+      }
+
+      if (ownDoc) {
         const item = { 
-          id: snap.docs[0].id, 
-          ...snap.docs[0].data(),
+          id: ownDoc.id, 
+          ...ownDoc.data(),
           underWarranty: false, // ✅ إضافة خاصية الضمان
           isService: false      // ✅ إضافة خاصية الخدمة
         };
         
-        const qtyRequested = Number(sellQty) || 1;
+        const qtyRequested = sanitizeQty(sellQty);
         const availableQty = Number(item.quantity) || 0;
 
         if (qtyRequested > availableQty) {
@@ -478,7 +489,7 @@ const handleCheckout = async () => {
   if (!confirmed) return;
   
   setGlobalLoading(true);
-  const invId = 'INV-' + Date.now().toString().slice(-8);
+  let invId = '';
   
   try {
     // 🛠️ FIX: كان بيستخدم Batch مع قراءة الكمية (getDoc) قبلها بشكل منفصل.
@@ -506,8 +517,16 @@ const handleCheckout = async () => {
     const transRef = doc(collection(db, 'transactions'));
     const itemsToProcess = foundItem ? [foundItem] : cart;
 
+    // أي كمية غير صالحة (سالب/كسر/صفر) تتوقف قبل ما نلمس المخزون
+    for (const it of itemsToProcess) {
+      if (!isValidSaleQty(it.quantity)) throw new Error(`❌ كمية غير صالحة للمنتج ${it.name}`);
+      if (!(Number(it.price) >= 0)) throw new Error(`❌ سعر غير صالح للمنتج ${it.name}`);
+    }
+
     await runTransaction(db, async (transaction) => {
       // 1️⃣ كل القراءات الأول (متطلب أساسي لـ Firestore transactions)
+      const invoiceCounter = await readNextInvoiceNumber(transaction);
+      invId = invoiceCounter.number;
       const itemRefs = itemsToProcess
         .filter(item => !item.isService)
         .map(item => doc(db, 'inventory', item.id));
@@ -597,6 +616,7 @@ const handleCheckout = async () => {
         timestamp: serverTimestamp() 
       };
 
+      invoiceCounter.commit();
       transaction.set(transRef, transactionData);
 
       if (customerRefForUpdate) {
@@ -886,7 +906,7 @@ const handleCheckout = async () => {
               min="1"
               className="w-20 border border-slate-200 dark:border-slate-700 rounded-xl text-center font-bold bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-white outline-none focus:border-teal-500"
               value={sellQty}
-              onChange={e => setSellQty(Number(e.target.value) || 1)}
+              onChange={e => setSellQty(sanitizeQty(e.target.value))}
             />
             <button
               type="button"

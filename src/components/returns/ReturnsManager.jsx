@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  collection, addDoc, getDocs, getDoc, doc, updateDoc, query, where, serverTimestamp, orderBy, increment, limit
+  collection, addDoc, getDocs, getDoc, doc, updateDoc, query, where, serverTimestamp, orderBy, increment, limit, runTransaction
 } from 'firebase/firestore';
 import {
   Plus,
@@ -16,6 +16,21 @@ import { logUserActivity } from '../../utils/activityLog';
 import { showConfirm, showError, showInfo, showSuccess } from '../../utils/alerts';
 import { buildInventorySearchTokens, normalizeSearch, normalizeSerial } from '../../utils/search';
 import { exportToCSV } from '../../utils/exportUtils';
+
+// 🛠️ "حجز" المرتجع بشكل ذري قبل معالجته: بيقلب الحالة من pending لحالة وسيطة جوه transaction،
+// فلو أدمنين ضغطوا موافقة/رفض في نفس اللحظة، واحد بس ينجح والتاني ياخد "تمت معالجته بالفعل"
+// (الفحص القديم كان قراءة ثم كتابة منفصلين فكان ممكن الكمية تتضاف للمخزون مرتين).
+const claimReturn = (returnRef, interimStatus) => runTransaction(db, async (tx) => {
+  const snap = await tx.get(returnRef);
+  if (!snap.exists()) throw new Error('المرتجع غير موجود');
+  const data = snap.data();
+  if (data.status && data.status !== 'pending') throw new Error('تمت معالجة هذا المرتجع بالفعل');
+  tx.update(returnRef, { status: interimStatus });
+  return data;
+});
+const releaseReturn = async (returnRef) => {
+  try { await updateDoc(returnRef, { status: 'pending' }); } catch (e) { console.error('Failed to release return claim:', e); }
+};
 
 export function ReturnsManager({ appUser, setGlobalLoading, warehouses, warehouseMap }) {
   const [returns, setReturns] = useState([]);
@@ -73,6 +88,7 @@ export function ReturnsManager({ appUser, setGlobalLoading, warehouses, warehous
   // ========== تحميل المرتجعات ==========
   useEffect(() => {
     loadReturns();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- مقصود: التأثير ده بيشتغل على التغيير في القيم المذكورة بس (إضافة الباقي بتسبب إعادة تحميل/حلقات)
   }, []);
 
   // ========== البحث عن المنتج بالسيريال ==========
@@ -166,6 +182,11 @@ export function ReturnsManager({ appUser, setGlobalLoading, warehouses, warehous
       return;
     }
 
+    if (!Number.isInteger(Number(newReturn.quantity)) || Number(newReturn.quantity) < 1) {
+      showError("الكمية لازم تكون رقم صحيح أكبر من صفر");
+      return;
+    }
+
     setGlobalLoading(true);
     try {
       // ✅ الحصول على تسمية السبب
@@ -197,17 +218,16 @@ export function ReturnsManager({ appUser, setGlobalLoading, warehouses, warehous
       if (foundProduct && foundProduct.id) {
         // ✅ نزول الكمية من المخزون المصدر
         const inventoryRef = doc(db, 'inventory', foundProduct.id);
-        const inventorySnap = await getDoc(inventoryRef);
-        
-        if (inventorySnap.exists()) {
+        // خصم ذري (transaction) بدل قراءة ثم كتابة، عشان عمليتين متزامنتين ميكتبوش فوق بعض
+        await runTransaction(db, async (tx) => {
+          const inventorySnap = await tx.get(inventoryRef);
+          if (!inventorySnap.exists()) return;
           const currentQty = inventorySnap.data().quantity || 0;
-          const newQty = Math.max(0, currentQty - newReturn.quantity);
-          
-          await updateDoc(inventoryRef, {
-            quantity: newQty,
+          tx.update(inventoryRef, {
+            quantity: Math.max(0, currentQty - Number(newReturn.quantity)),
             updatedAt: serverTimestamp()
           });
-        }
+        });
       }
       
       await logUserActivity(appUser, 'إضافة مرتجع', `إضافة مرتجع: ${newReturn.productName} (${newReturn.serialNumber}) - ${reasonLabels[newReturn.reason]}`);
@@ -232,22 +252,12 @@ const handleApproveReturn = async (returnId) => {
   }
 
   setGlobalLoading(true);
+  const returnRef = doc(db, 'returns', returnId);
+  let claimed = false;
   try {
-    const returnRef = doc(db, 'returns', returnId);
-    const returnSnap = await getDoc(returnRef);
-    
-    if (!returnSnap.exists()) {
-      throw new Error("المرتجع غير موجود");
-    }
-    
-    const returnData = returnSnap.data();
-
-    // 🛠️ FIX: مفيش أي تحقق قبل كده من إن المرتجع لسه "قيد الانتظار"، فلو
-    // الأدمن ضغط "موافقة" مرتين بسرعة (أو الشبكة اتأخرت والزرار اتضغط تاني)
-    // كان بيتكرر إضافة الكمية للمخزون/مخزن المرتجعات مرتين لنفس المرتجع.
-    if (returnData.status && returnData.status !== 'pending') {
-      throw new Error("تمت معالجة هذا المرتجع بالفعل");
-    }
+    // 🛠️ حجز ذري: الموافقة المزدوجة (ضغطتين أو أدمنين) مستحيلة، واحد بس ينجح
+    const returnData = await claimReturn(returnRef, 'approving');
+    claimed = true;
     
     // ✅ معالجة حسب نوع المرتجع
     const reason = returnData.reason;
@@ -271,9 +281,8 @@ const handleApproveReturn = async (returnId) => {
       if (targetSnap.size > 0) {
         // ✅ إضافة الكمية للمنتج الموجود
         const targetItem = targetSnap.docs[0];
-        const currentQty = targetItem.data().quantity || 0;
         await updateDoc(targetItem.ref, {
-          quantity: currentQty + quantity,
+          quantity: increment(quantity),
           updatedAt: serverTimestamp()
         });
       } else {
@@ -356,6 +365,7 @@ const handleApproveReturn = async (returnId) => {
     loadReturns();
   } catch (error) {
     console.error("Error approving return:", error);
+    if (claimed) await releaseReturn(returnRef);
     showError("فشل الموافقة على المرتجع: " + error.message);
   }
   setGlobalLoading(false);
@@ -371,18 +381,12 @@ const handleApproveReturn = async (returnId) => {
     if (!confirmed) return;
     
     setGlobalLoading(true);
+    const returnRef = doc(db, 'returns', returnId);
+    let claimed = false;
     try {
-      const returnRef = doc(db, 'returns', returnId);
-      const returnSnap = await getDoc(returnRef);
-      if (!returnSnap.exists()) {
-        throw new Error("المرتجع غير موجود");
-      }
-      const returnData = returnSnap.data();
-
-      // 🛠️ FIX: منع رفض مرتجع اتعالج بالفعل (موافق عليه أو مرفوض سابقًا)
-      if (returnData.status && returnData.status !== 'pending') {
-        throw new Error("تمت معالجة هذا المرتجع بالفعل");
-      }
+      // 🛠️ حجز ذري: منع رفض مرتجع اتعالج بالفعل أو رفضه مرتين (كان بيرجّع الكمية مرتين)
+      const returnData = await claimReturn(returnRef, 'rejecting');
+      claimed = true;
 
       // 🛠️ FIX: إضافة المرتجع كانت بتخصم الكمية من مخزون المصدر فورًا،
       // ولما يترفض المرتجع الكمية دي مكنتش بترجع تاني للمخزون أبدًا،
@@ -409,6 +413,7 @@ const handleApproveReturn = async (returnId) => {
       loadReturns();
     } catch (error) {
       console.error("Error rejecting return:", error);
+      if (claimed) await releaseReturn(returnRef);
       showError("فشل رفض المرتجع: " + (error.message || ''));
     }
     setGlobalLoading(false);

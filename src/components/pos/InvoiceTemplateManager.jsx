@@ -35,6 +35,7 @@ export function InvoiceTemplateManager({ systemSettings, setSettings }) {
       setTemplate(systemSettings.invoiceTemplate || template);
     }
     lastSyncedRef.current = systemSettings.invoiceTemplate;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- مقصود: التأثير ده بيشتغل على التغيير في القيم المذكورة بس (إضافة الباقي بتسبب إعادة تحميل/حلقات)
   }, [systemSettings.invoiceTemplate]);
 
   const handleSave = async () => {

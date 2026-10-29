@@ -57,6 +57,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
       setLocalSettings(systemSettings);
     }
     lastSyncedRef.current = systemSettings;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- مقصود: التأثير ده بيشتغل على التغيير في القيم المذكورة بس (إضافة الباقي بتسبب إعادة تحميل/حلقات)
   }, [systemSettings]);
 
   useEffect(() => {
@@ -71,6 +72,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
     if (!settings.maintenanceCenters) {
       setSettings({...settings, maintenanceCenters: []});
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- مقصود: التأثير ده بيشتغل على التغيير في القيم المذكورة بس (إضافة الباقي بتسبب إعادة تحميل/حلقات)
   }, []);
 
   const handleExportSettings = () => {
@@ -654,6 +656,21 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                 className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
                 value={settings.autoLogoutMinutes ?? 30}
                 onChange={e => setLocalSettings({...settings, autoLogoutMinutes: Number(e.target.value) || 0})}
+              />
+            </div>
+
+            {/* 🔒 قفل الفترات المحاسبية */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <label className="block text-xs font-bold text-teal-600 dark:text-teal-400 mb-2">قفل الفترة المحاسبية حتى تاريخ</label>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                أي فاتورة أو مصروف تاريخه قبل (أو في) التاريخ ده مينفعش يتعدّل أو يتحذف أو تتسجل عليه دفعات. سيبه فاضي لتعطيل القفل.
+              </p>
+              <input
+                type="date"
+                disabled={appUser?.role !== 'admin'}
+                className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                value={settings.accountingLockDate || ''}
+                onChange={e => setLocalSettings({...settings, accountingLockDate: e.target.value})}
               />
             </div>
 

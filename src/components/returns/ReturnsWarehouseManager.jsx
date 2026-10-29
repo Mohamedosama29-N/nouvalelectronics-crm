@@ -54,6 +54,7 @@ export function ReturnsWarehouseManager({ appUser, setGlobalLoading }) {
   // تحميل بيانات المرتجعات
   useEffect(() => {
     loadReturns();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- مقصود: التأثير ده بيشتغل على التغيير في القيم المذكورة بس (إضافة الباقي بتسبب إعادة تحميل/حلقات)
   }, []);
 
   // إضافة منتج مرتجع جديد

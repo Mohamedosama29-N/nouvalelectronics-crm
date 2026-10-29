@@ -108,7 +108,7 @@ export function ReportsManager({ appUser, systemSettings }) {
 
   const [transactions, setTransactions] = useState([]);
   const transactionsRef = useRef([]);
-  const [lastDoc, setLastDoc] = useState(null);
+  const lastDocRef = useRef(null); // ref: "تحميل المزيد" لازم يشوف آخر مؤشر فعلي
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -154,8 +154,8 @@ export function ReportsManager({ appUser, systemSettings }) {
           q = query(q, where('warehouseId', '==', warehouse));
         }
 
-        if (isNextPage && lastDoc) {
-           q = query(q, startAfter(lastDoc));
+        if (isNextPage && lastDocRef.current) {
+           q = query(q, startAfter(lastDocRef.current));
         }
         q = query(q, limit(50));
         
@@ -201,7 +201,7 @@ export function ReportsManager({ appUser, systemSettings }) {
           total
         })).slice(0, 20));
 
-        setLastDoc(snap.docs[snap.docs.length - 1] || null);
+        lastDocRef.current = snap.docs[snap.docs.length - 1] || null;
         setHasMore(snap.docs.length === 50);
     } catch (e) {
         console.error("Error loading reports:", e);
@@ -213,12 +213,12 @@ export function ReportsManager({ appUser, systemSettings }) {
         }
     }
     setLoading(false);
-  }, [lastDoc, dateRange, reportType, warehouse]);
+  }, [dateRange, reportType, warehouse]);
 
   useEffect(() => {
-    setLastDoc(null);
+    lastDocRef.current = null;
     loadReports(false);
-  }, [dateRange, reportType, warehouse]);
+  }, [loadReports]);
 
   const handleExport = async () => {
     if (!transactions || transactions.length === 0) {

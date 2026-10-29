@@ -25,6 +25,7 @@ import { TICKET_STATUSES } from '../../constants/tickets';
 import { db } from '../../firebase/config';
 import { tagManager } from '../../utils/TagManager';
 import { showConfirm, showError, showInfo, showSuccess } from '../../utils/alerts';
+import { isValidSaleQty, readNextInvoiceNumber } from '../../utils/invoiceNumber';
 import { sendWhatsApp } from '../../utils/communications';
 import { formatDate } from '../../utils/format';
 import { normalizeSerial } from '../../utils/search';
@@ -330,10 +331,15 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
       if (!confirmed) return;
 
       setGlobalLoading(true);
-      const invId = 'INV-' + Date.now().toString().slice(-8);
+      let invId = '';
       try {
+         for (const ci of cart) {
+           if (!isValidSaleQty(ci.quantity || 1)) throw new Error(`كمية غير صالحة للمنتج ${ci.name}`);
+         }
          const transRef = doc(collection(db, 'transactions'));
          await runTransaction(db, async (t) => {
+             const invoiceCounter = await readNextInvoiceNumber(t);
+             invId = invoiceCounter.number;
              const itemRefs = [];
              const itemSnaps = [];
              for (const cartItem of cart) {
@@ -357,12 +363,19 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
              const joinedNames = cart.map(i => i.name).join(' + ');
              const joinedSerials = cart.map(i => i.serialNumber).join(', ');
 
+             invoiceCounter.commit();
              t.set(transRef, {
                  ...calculations,
                  customerName: customer.name,
                  phone: customer.phone,
                  technicianName: invoice.technicianName,
                  type: 'sell',
+                 // 🛠️ FIX: الفواتير من ملف العميل كانت من غير warehouseId، فكانت بتختفي من
+                 // تقارير/داشبورد/مالية الفرع (كلها بتفلتر بالمخزن) ومن إجماليات المخزن
+                 warehouseId: appUser.assignedWarehouseId || 'main',
+                 totalPaid: calculations.finalTotal,
+                 remaining: 0,
+                 paymentStatus: 'paid',
                  items: cart, 
                  itemName: joinedNames,
                  serialNumber: joinedSerials,

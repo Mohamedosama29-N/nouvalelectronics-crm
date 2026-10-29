@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   collection, getDocs, query, where, orderBy, limit, startAfter
 } from 'firebase/firestore';
@@ -12,7 +12,8 @@ import { normalizeSearch } from '../../utils/search';
 export function AuditLogManager() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [lastDoc, setLastDoc] = useState(null);
+  // ref بدل state: زر "تحميل المزيد" لازم يشوف آخر مؤشر صفحة فعلي (القيمة القديمة كانت بتكرر الصفحة الأولى)
+  const lastDocRef = useRef(null);
   const [hasMore, setHasMore] = useState(true);
   const [employees, setEmployees] = useState([]);
   const [filterUserId, setFilterUserId] = useState('all');
@@ -51,7 +52,7 @@ export function AuditLogManager() {
         constraints.push(where('timestamp', '<=', toDate));
       }
 
-      if (isNextPage && lastDoc) constraints.push(startAfter(lastDoc));
+      if (isNextPage && lastDocRef.current) constraints.push(startAfter(lastDocRef.current));
       constraints.push(limit(100));
 
       const q = query(collection(db, 'activity_logs'), ...constraints);
@@ -59,7 +60,7 @@ export function AuditLogManager() {
       const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
       setLogs(prev => isNextPage ? [...prev, ...fetched] : fetched);
-      setLastDoc(snap.docs[snap.docs.length - 1] || null);
+      lastDocRef.current = snap.docs[snap.docs.length - 1] || null;
       setHasMore(snap.docs.length === 100);
     } catch (error) {
       console.error("Error loading audit log:", error);
@@ -69,9 +70,9 @@ export function AuditLogManager() {
   }, [filterUserId, filterAction, filterDateFrom, filterDateTo]);
 
   useEffect(() => {
-    setLastDoc(null);
+    lastDocRef.current = null;
     loadLogs(false);
-  }, [filterUserId, filterAction, filterDateFrom, filterDateTo]);
+  }, [loadLogs]);
 
   const filteredLogs = logs.filter(log => {
     if (!search) return true;
