@@ -723,8 +723,8 @@ const handleCheckout = async () => {
       {/* ===== مودال الدفع ===== */}
       {paymentModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
-            <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white border-b pb-3">إتمام الدفع</h3>
+          <div role="dialog" aria-modal="true" aria-label="إتمام الدفع" className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
+            <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-3">إتمام الدفع</h3>
             
             <div className="space-y-4">
               <div className="bg-teal-50 dark:bg-teal-900/30 p-4 rounded-xl">
@@ -738,11 +738,30 @@ const handleCheckout = async () => {
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">المبلغ المدفوع</label>
                     <input
                       type="number"
-                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold text-center text-lg bg-white dark:bg-slate-900"
+                      min="0"
+                      aria-label="المبلغ المدفوع"
+                      className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold text-center text-lg bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
                       value={cashReceived}
                       onChange={e => setCashReceived(Number(e.target.value))}
+                      onKeyDown={e => { if (e.key === 'Enter' && cashReceived >= calculations.finalTotal) handleCheckout(); }}
                       autoFocus
                     />
+                    {/* اختصارات سريعة: المبلغ بالظبط وأقرب مئة/خمسين فوقه */}
+                    <div className="grid grid-cols-3 gap-2 mt-2">
+                      <button type="button" onClick={() => setCashReceived(calculations.finalTotal)}
+                        className="py-2 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">
+                        بالظبط
+                      </button>
+                      {[50, 100].map(step => {
+                        const up = Math.ceil(calculations.finalTotal / step) * step;
+                        return (
+                          <button key={step} type="button" onClick={() => setCashReceived(up)}
+                            className="py-2 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">
+                            {up} ج
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                   {cashReceived > 0 && (
                     <div className="bg-emerald-50 dark:bg-emerald-900/30 p-4 rounded-xl">
@@ -783,7 +802,7 @@ const handleCheckout = async () => {
                 <button
                   onClick={handleCheckout}
                   disabled={invoice.paymentMethod === 'cash' && cashReceived < calculations.finalTotal}
-                  className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50"
+                  className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                 >
                   تأكيد الدفع
                 </button>
@@ -802,8 +821,8 @@ const handleCheckout = async () => {
       {/* ===== مودال إضافة عميل ===== */}
       {showCustomerModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md shadow-2xl">
-            <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white border-b pb-3">إضافة عميل جديد</h3>
+          <div role="dialog" aria-modal="true" aria-label="إضافة عميل جديد" className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
+            <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-3">إضافة عميل جديد</h3>
             <div className="space-y-4">
               <input
                 type="text"

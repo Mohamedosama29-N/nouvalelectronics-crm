@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import { writeObjectsToXlsx } from './xlsxIO';
 
 export const exportToCSV = (data, filename) => {
   if (!data || !data.length) return false;
@@ -35,10 +35,8 @@ export const exportToCSV = (data, filename) => {
 export const exportToExcel = (data, filename, sheetName = 'Sheet1') => {
   if (!data || !data.length) return false;
   try {
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-    XLSX.writeFile(workbook, `${filename}.xlsx`);
+    // async في الخلفية: الدالة بتفضل ترجّع true فورًا زي الأول، والخطأ بيتسجل في الكونسول
+    writeObjectsToXlsx(data, filename, sheetName).catch((error) => console.error('Excel export error:', error));
     return true;
   } catch (error) {
     console.error("Excel export error:", error);

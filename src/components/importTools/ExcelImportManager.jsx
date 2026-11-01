@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
+import { readFirstSheetAsCSV } from '../../utils/xlsxIO';
 import {
   collection, addDoc, getDocs, serverTimestamp, updateDoc, doc
 } from 'firebase/firestore';
@@ -87,11 +87,9 @@ export function ExcelImportManager() {
       const isXLSX = fileToRead.name.toLowerCase().endsWith('.xlsx');
 
       if (isXLSX) {
-        reader.onload = (event) => {
+        reader.onload = async (event) => {
           try {
-            const workbook = XLSX.read(event.target.result, { type: 'array' });
-            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            const csvText = XLSX.utils.sheet_to_csv(firstSheet);
+            const csvText = await readFirstSheetAsCSV(event.target.result);
             resolve(parseCSVData(csvText));
           } catch (error) {
             console.error('Excel parse error:', error);

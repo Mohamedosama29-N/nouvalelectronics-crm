@@ -179,14 +179,12 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
          <div className="flex items-center gap-2">
            <h2 className="text-xl font-black text-slate-800 dark:text-white">لوحة المؤشرات</h2>
-           <span className="bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 px-3 py-1 rounded-lg text-xs">
-             {new Date().toLocaleDateString('ar-EG')}
-           </span>
          </div>
          
          <div className="flex flex-wrap gap-2">
            <select
-             className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm font-bold bg-white dark:bg-slate-900"
+             aria-label="المخزن"
+             className="border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm font-bold bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
              value={selectedWarehouse}
              onChange={e => setSelectedWarehouse(e.target.value)}
            >
@@ -197,7 +195,8 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
            </select>
            
            <select
-             className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm font-bold bg-white dark:bg-slate-900"
+             aria-label="الفترة"
+             className="border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm font-bold bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
              value={dateRange}
              onChange={e => setDateRange(e.target.value)}
            >
@@ -257,7 +256,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">إجمالي القطع بالمخزن</p>
                 <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.totalItems.toLocaleString()}</p>
                 <div className="flex items-center gap-1 mt-2">
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500">مجموع الكميات (لحظي)</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500">مجموع الكميات (لحظي)</span>
                 </div>
               </div>
             </button>
@@ -274,7 +273,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">عدد الأصناف بالمخزن</p>
                 <p className="text-2xl font-black text-slate-800 dark:text-white">{(stats.itemsCount || 0).toLocaleString()}</p>
                 <div className="flex items-center gap-1 mt-2">
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500">نوع/منتج مختلف، مش مجموع الكميات</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500">نوع/منتج مختلف، مش مجموع الكميات</span>
                 </div>
               </div>
             </button>
@@ -288,7 +287,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">قيمة المخزون الإجمالية</p>
                 <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.totalValue.toLocaleString()} ج</p>
                 <div className="flex items-center gap-1 mt-2">
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500">الكمية × السعر (لحظي)</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500">الكمية × السعر (لحظي)</span>
                 </div>
               </div>
             </div>
@@ -303,13 +302,13 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
                 <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.salesToday.toLocaleString()} ج</p>
                 <div className="flex items-center gap-1 mt-2">
                   {stats.salesTrend === null ? (
-                    <span className="text-[9px] text-slate-400 dark:text-slate-500">{sales.todayCount} فاتورة · لا مبيعات أمس للمقارنة</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">{sales.todayCount} فاتورة · لا مبيعات أمس للمقارنة</span>
                   ) : (
                     <>
-                      <span className={`text-[9px] font-bold ${stats.salesTrend >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                      <span className={`text-[10px] font-bold ${stats.salesTrend >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                         {stats.salesTrend > 0 ? '+' : ''}{stats.salesTrend}%
                       </span>
-                      <span className="text-[9px] text-slate-400 dark:text-slate-500">عن الأمس · {sales.todayCount} فاتورة</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500">عن الأمس · {sales.todayCount} فاتورة</span>
                     </>
                   )}
                 </div>
@@ -328,7 +327,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">نواقص تحتاج طلب</p>
                 <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.lowStockCount.toLocaleString()}</p>
                 {stats.lowStockCount > 0 && (
-                  <p className="text-[9px] text-rose-500 dark:text-rose-400 font-bold mt-2">اضغط لعرض التفاصيل</p>
+                  <p className="text-[10px] text-rose-500 dark:text-rose-400 font-bold mt-2">اضغط لعرض التفاصيل</p>
                 )}
               </div>
             </button>
@@ -361,6 +360,9 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
               <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2">
                 <Award className="text-amber-500" size={20}/> أفضل المنتجات مبيعاً <span className="text-[10px] font-normal text-slate-400">({dateRange === 'day' ? 'اليوم' : dateRange === 'week' ? 'آخر 7 أيام' : 'آخر 30 يوم'})</span>
               </h3>
+              {stats.topProducts.length === 0 && (
+                <p className="text-center text-sm text-slate-400 dark:text-slate-500 py-8">لا توجد مبيعات في الفترة دي بعد</p>
+              )}
               <div className="space-y-3">
                 {stats.topProducts.slice(0, 5).map((product, idx) => (
                   <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-xl">
@@ -378,28 +380,28 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
           ) : null,
           charts: () => (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="col-span-1 lg:col-span-2 flex gap-2 mb-2">
+              <div className="col-span-1 lg:col-span-2 flex flex-wrap gap-2 mb-2">
                 <button
                   onClick={() => setChartType('sales')}
-                  className={`px-4 py-2 rounded-lg font-bold text-sm ${chartType === 'sales' ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                  className={`px-4 py-2 rounded-lg font-bold text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 transition-colors ${chartType === 'sales' ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
                 >
                   المبيعات
                 </button>
                 <button
                   onClick={() => setChartType('tickets')}
-                  className={`px-4 py-2 rounded-lg font-bold text-sm ${chartType === 'tickets' ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                  className={`px-4 py-2 rounded-lg font-bold text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 transition-colors ${chartType === 'tickets' ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
                 >
                   التذاكر
                 </button>
                 <button
                   onClick={() => setChartType('inventory')}
-                  className={`px-4 py-2 rounded-lg font-bold text-sm ${chartType === 'inventory' ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                  className={`px-4 py-2 rounded-lg font-bold text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 transition-colors ${chartType === 'inventory' ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
                 >
                   المخزون
                 </button>
                 <button
                   onClick={() => setChartType('operations')}
-                  className={`px-4 py-2 rounded-lg font-bold text-sm ${chartType === 'operations' ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                  className={`px-4 py-2 rounded-lg font-bold text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 transition-colors ${chartType === 'operations' ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
                 >
                   التحويلات والمرتجعات
                 </button>
@@ -456,8 +458,8 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
                         <p className="text-xs font-bold text-slate-800 dark:text-white">{act.action}</p>
                         <p className="text-[10px] text-slate-500 dark:text-slate-400">{act.details}</p>
                         <div className="flex justify-between items-center mt-1">
-                          <p className="text-[8px] text-slate-400 dark:text-slate-500">{formatDate(act.timestamp)}</p>
-                          <p className="text-[8px] font-bold text-teal-600 dark:text-teal-400">{act.userName}</p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500">{formatDate(act.timestamp)}</p>
+                          <p className="text-[10px] font-bold text-teal-600 dark:text-teal-400">{act.userName}</p>
                         </div>
                       </div>
                     </div>

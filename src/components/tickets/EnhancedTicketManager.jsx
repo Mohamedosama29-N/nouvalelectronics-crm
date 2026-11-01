@@ -1781,7 +1781,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
               <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
                 <MessageSquare className="text-teal-600"/> إنشاء تذكرة صيانة جديدة
               </h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-rose-600"><X size={24}/></button>
+              <button aria-label="إغلاق" onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-rose-600"><X size={24}/></button>
             </div>
             
            <form onSubmit={handleAddTicket} className="space-y-4">
@@ -3059,7 +3059,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                   </div>
                   <h2 className="text-2xl font-black">{fullTicketView.customerName}</h2>
                 </div>
-                <button onClick={() => setShowFullTicketModal(false)} className="text-white/70 hover:text-white">
+                <button aria-label="إغلاق" onClick={() => setShowFullTicketModal(false)} className="text-white/70 hover:text-white">
                   <X size={24}/>
                 </button>
               </div>
@@ -3554,7 +3554,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6 border-b pb-4">
               <h3 className="font-black text-xl">قطع غيار التذكرة #{selectedTicket.ticketNumber}</h3>
-              <button onClick={() => setShowSparePartsModal(false)} className="hover:text-rose-600"><X size={24}/></button>
+              <button aria-label="إغلاق" onClick={() => setShowSparePartsModal(false)} className="hover:text-rose-600"><X size={24}/></button>
             </div>
             <div className="space-y-6">
               <div className="border rounded-xl overflow-hidden">
@@ -3576,7 +3576,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                         <td className="p-3 text-center">{p.price} ج</td>
                         <td className="p-3 text-center font-black">{p.quantity * p.price} ج</td>
                         <td className="p-3 text-center">
-                          <button onClick={() => handleRemoveSparePart(selectedTicket.id, p.id)} className="text-rose-500 hover:text-rose-700">
+                          <button aria-label="إغلاق" onClick={() => handleRemoveSparePart(selectedTicket.id, p.id)} className="text-rose-500 hover:text-rose-700">
                             <X size={16}/>
                           </button>
                         </td>
@@ -3684,7 +3684,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-2xl shadow-2xl max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6 border-b pb-4">
               <h3 className="font-black text-xl">سجل التذكرة #{selectedTicket.ticketNumber}</h3>
-              <button onClick={() => setShowHistoryModal(false)} className="hover:text-rose-600"><X size={24}/></button>
+              <button aria-label="إغلاق" onClick={() => setShowHistoryModal(false)} className="hover:text-rose-600"><X size={24}/></button>
             </div>
             <div className="space-y-4">
               {ticketHistory.map((event, idx) => (
@@ -3852,8 +3852,8 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         </div>
         
         <div className="flex gap-2 w-full sm:w-auto">
-          <input type="date" className="border p-2 rounded-lg text-xs bg-white dark:bg-slate-900" value={dateRange.from} onChange={e => setDateRange({...dateRange, from: e.target.value})} />
-          <input type="date" className="border p-2 rounded-lg text-xs bg-white dark:bg-slate-900" value={dateRange.to} onChange={e => setDateRange({...dateRange, to: e.target.value})} />
+          <input type="date" aria-label="من تاريخ" className="border p-2 rounded-lg text-xs bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500" value={dateRange.from} onChange={e => setDateRange({...dateRange, from: e.target.value})} />
+          <input type="date" aria-label="إلى تاريخ" className="border p-2 rounded-lg text-xs bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500" value={dateRange.to} onChange={e => setDateRange({...dateRange, to: e.target.value})} />
         </div>
       </div>
 
