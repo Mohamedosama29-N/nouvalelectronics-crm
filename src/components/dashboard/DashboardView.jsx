@@ -12,6 +12,9 @@ import {
 } from 'lucide-react';
 import { AdvancedCharts } from '../common/AdvancedCharts';
 import { LiveBadge } from '../common/LiveBadge';
+import { AnimatedNumber } from '../common/AnimatedNumber';
+import { ActionCenter } from '../ai/ActionCenter';
+import { buildActionItems } from '../../ai/actionCenter';
 import { LoadingSkeleton } from '../common/LoadingSkeleton';
 import { TICKET_STATUSES, TICKET_TERMINAL_STATUSES } from '../../constants/tickets';
 import { useLiveSources } from '../../hooks/useLiveSources';
@@ -20,7 +23,7 @@ import { getDashboardWidgetConfig } from '../../utils/dashboardHelpers';
 import { formatDate } from '../../utils/format';
 import {
   buildInventoryStats, buildReturnsStats, buildSalesSeries, buildSalesStats, buildTicketStats,
-  buildTransferStats, canSeeWarehouse, countBy, startOfDay, addDays, topProductsFrom
+  buildTransferStats, canSeeWarehouse, countBy, startOfDay, addDays, topProductsFrom, ticketWarehouseOf
 } from '../../utils/liveStats';
 import { getTicketSLAInfo } from '../../utils/ticketHelpers';
 
@@ -82,7 +85,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
   const tickets = useMemo(() => {
     const byId = new Map();
     [...(data.ticketsOpen || []), ...(data.ticketsRecent || [])].forEach(t => byId.set(t.id, t));
-    return [...byId.values()].filter(t => inScope(t.warehouseId));
+    return [...byId.values()].filter(t => inScope(ticketWarehouseOf(t)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.ticketsOpen, data.ticketsRecent, selectedWarehouse, isScoped, appUser]);
   const transfers = useMemo(() => (data.transfers || []).filter(t => inScope(t.fromWarehouseId) || inScope(t.toWarehouseId)),
@@ -116,7 +119,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
     terminal: TICKET_TERMINAL_STATUSES
   }), [tickets, systemSettings]);
   const openByStatus = useMemo(() => countBy(
-    (data.ticketsOpen || []).filter(t => inScope(t.warehouseId)),
+    (data.ticketsOpen || []).filter(t => inScope(ticketWarehouseOf(t))),
     t => t.status, st => TICKET_STATUSES.find(x => x.value === st)?.label || st
   ),
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -125,6 +128,15 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [transfers, warehouses]);
   const returnStats = useMemo(() => buildReturnsStats(returns), [returns]);
+
+  // ✅ مركز المهام: من نفس البيانات اللحظية (مفيش قراءات زيادة)
+  const actionItems = useMemo(() => {
+    const has = (p) => appUser?.role === 'admin' || appUser?.permissions?.[p] === true;
+    return buildActionItems({
+      tickets, transfers, returns, transactions: txs, lowStock: inv.lowStock,
+      isOverdue: (t) => getTicketSLAInfo(t, systemSettings?.ticketSLA)?.level === 'overdue',
+    }, { tickets: has('manageTickets'), transfers: has('viewTransfers'), returns: has('viewReturns'), invoices: has('viewInvoices'), lowStock: has('viewLowStock') });
+  }, [tickets, transfers, returns, txs, inv, systemSettings, appUser]);
 
   const stats = {
     totalItems: inv.totalQty,
@@ -176,7 +188,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
 
   return (
     <div className="space-y-6 text-right">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+      <div className="anim-up flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
          <div className="flex items-center gap-2">
            <h2 className="text-xl font-black text-slate-800 dark:text-white">لوحة المؤشرات</h2>
          </div>
@@ -232,6 +244,8 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
         </div>
       )}
 
+      <ActionCenter items={actionItems} loading={loading} />
+
       {/* 🎛️ من هنا لتحت: كل قسم عبارة عن "widget" مستقل - بيتفلتر ويترتب حسب
           تخصيص الداشبورد الخاص بالمستخدم الحالي (widgetConfig) */}
       {(() => {
@@ -254,7 +268,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
               </div>
               <div className="mt-3">
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">إجمالي القطع بالمخزن</p>
-                <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.totalItems.toLocaleString()}</p>
+                <p className="text-2xl font-black text-slate-800 dark:text-white"><AnimatedNumber value={stats.totalItems} /></p>
                 <div className="flex items-center gap-1 mt-2">
                   <span className="text-[10px] text-slate-400 dark:text-slate-500">مجموع الكميات (لحظي)</span>
                 </div>
@@ -271,7 +285,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
               </div>
               <div className="mt-3">
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">عدد الأصناف بالمخزن</p>
-                <p className="text-2xl font-black text-slate-800 dark:text-white">{(stats.itemsCount || 0).toLocaleString()}</p>
+                <p className="text-2xl font-black text-slate-800 dark:text-white"><AnimatedNumber value={stats.itemsCount || 0} /></p>
                 <div className="flex items-center gap-1 mt-2">
                   <span className="text-[10px] text-slate-400 dark:text-slate-500">نوع/منتج مختلف، مش مجموع الكميات</span>
                 </div>
@@ -285,7 +299,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
               </div>
               <div className="mt-3">
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">قيمة المخزون الإجمالية</p>
-                <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.totalValue.toLocaleString()} ج</p>
+                <p className="text-2xl font-black text-slate-800 dark:text-white"><AnimatedNumber value={stats.totalValue} suffix=" ج" /></p>
                 <div className="flex items-center gap-1 mt-2">
                   <span className="text-[10px] text-slate-400 dark:text-slate-500">الكمية × السعر (لحظي)</span>
                 </div>
@@ -299,7 +313,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
               </div>
               <div className="mt-3">
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">مبيعات اليوم</p>
-                <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.salesToday.toLocaleString()} ج</p>
+                <p className="text-2xl font-black text-slate-800 dark:text-white"><AnimatedNumber value={stats.salesToday} suffix=" ج" /></p>
                 <div className="flex items-center gap-1 mt-2">
                   {stats.salesTrend === null ? (
                     <span className="text-[10px] text-slate-400 dark:text-slate-500">{sales.todayCount} فاتورة · لا مبيعات أمس للمقارنة</span>
@@ -325,7 +339,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
               </div>
               <div className="mt-3">
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">نواقص تحتاج طلب</p>
-                <p className="text-2xl font-black text-slate-800 dark:text-white">{stats.lowStockCount.toLocaleString()}</p>
+                <p className="text-2xl font-black text-slate-800 dark:text-white"><AnimatedNumber value={stats.lowStockCount} /></p>
                 {stats.lowStockCount > 0 && (
                   <p className="text-[10px] text-rose-500 dark:text-rose-400 font-bold mt-2">اضغط لعرض التفاصيل</p>
                 )}
@@ -335,17 +349,17 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
         };
 
         const xsCard = (grad, border, textCls, label, value) => (
-          <div className={`bg-gradient-to-br ${grad} p-4 rounded-xl border ${border} h-full`}>
+          <div className={`card-lift bg-gradient-to-br ${grad} p-4 rounded-xl border ${border} h-full`}>
             <p className={`text-xs font-bold ${textCls} mb-1`}>{label}</p>
             <p className={`text-2xl font-black ${textCls.replace('800', '600').replace('300', '400')}`}>{value}</p>
           </div>
         );
 
         const xsRenderers = {
-          salesWeek: () => xsCard('from-blue-50 to-teal-50 dark:from-blue-900/30 dark:to-teal-900/30', 'border-blue-100 dark:border-blue-800', 'text-blue-800 dark:text-blue-300', 'مبيعات الأسبوع', `${stats.salesWeek.toLocaleString()} ج`),
-          salesMonth: () => xsCard('from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30', 'border-green-100 dark:border-green-800', 'text-green-800 dark:text-green-300', 'مبيعات الشهر', `${stats.salesMonth.toLocaleString()} ج`),
-          salesYear: () => xsCard('from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30', 'border-purple-100 dark:border-purple-800', 'text-purple-800 dark:text-purple-300', 'مبيعات آخر 12 شهر', `${stats.salesYear.toLocaleString()} ج`),
-          avgInvoice: () => xsCard('from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30', 'border-amber-100 dark:border-amber-800', 'text-amber-800 dark:text-amber-300', 'متوسط الفاتورة (آخر 7 أيام)', `${stats.avgInvoice.toLocaleString()} ج`),
+          salesWeek: () => xsCard('from-blue-50 to-teal-50 dark:from-blue-900/30 dark:to-teal-900/30', 'border-blue-100 dark:border-blue-800', 'text-blue-800 dark:text-blue-300', 'مبيعات الأسبوع', <AnimatedNumber value={stats.salesWeek} suffix=" ج" />),
+          salesMonth: () => xsCard('from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30', 'border-green-100 dark:border-green-800', 'text-green-800 dark:text-green-300', 'مبيعات الشهر', <AnimatedNumber value={stats.salesMonth} suffix=" ج" />),
+          salesYear: () => xsCard('from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30', 'border-purple-100 dark:border-purple-800', 'text-purple-800 dark:text-purple-300', 'مبيعات آخر 12 شهر', <AnimatedNumber value={stats.salesYear} suffix=" ج" />),
+          avgInvoice: () => xsCard('from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30', 'border-amber-100 dark:border-amber-800', 'text-amber-800 dark:text-amber-300', 'متوسط الفاتورة (آخر 7 أيام)', <AnimatedNumber value={stats.avgInvoice} suffix=" ج" />),
           ticketsToday: () => xsCard('from-blue-50 to-teal-50 dark:from-blue-900/30 dark:to-teal-900/30', 'border-blue-100 dark:border-blue-800', 'text-blue-800 dark:text-blue-300', 'تذاكر اليوم', ticketStats.today),
           ticketsWeek: () => xsCard('from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30', 'border-green-100 dark:border-green-800', 'text-green-800 dark:text-green-300', 'تذاكر الأسبوع', ticketStats.week),
           ticketsMonth: () => xsCard('from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30', 'border-purple-100 dark:border-purple-800', 'text-purple-800 dark:text-purple-300', 'تذاكر الشهر', ticketStats.month),
@@ -476,16 +490,16 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
           <>
             {visibleSm.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {visibleSm.map(w => <React.Fragment key={w.id}>{smRenderers[w.id]?.()}</React.Fragment>)}
+                {visibleSm.map((w, i) => <div key={w.id} className="anim-up h-full" style={{ '--d': `${i * 70}ms` }}>{smRenderers[w.id]?.()}</div>)}
               </div>
             )}
             {visibleXs.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
-                {visibleXs.map(w => <React.Fragment key={w.id}>{xsRenderers[w.id]?.()}</React.Fragment>)}
+                {visibleXs.map((w, i) => <div key={w.id} className="anim-up h-full" style={{ '--d': `${120 + i * 50}ms` }}>{xsRenderers[w.id]?.()}</div>)}
               </div>
             )}
-            {visibleFull.map(w => (
-              <div key={w.id} className="mt-6">
+            {visibleFull.map((w, i) => (
+              <div key={w.id} className="mt-6 anim-up" style={{ '--d': `${300 + i * 90}ms` }}>
                 {fullRenderers[w.id]?.()}
               </div>
             ))}

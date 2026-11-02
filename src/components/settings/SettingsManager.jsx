@@ -29,6 +29,7 @@ import { ExcelImportManager } from '../importTools/ExcelImportManager';
 import { InvoiceTemplateManager } from '../pos/InvoiceTemplateManager';
 import { AuditLogManager } from '../reports/AuditLogManager';
 import { ProductModelManager } from './ProductModelManager';
+import { AISettingsCard } from '../ai/AISettingsCard';
 import { ALL_PERMISSIONS } from '../../constants/roles';
 import { db } from '../../firebase/config';
 import { showConfirm, showError, showSuccess } from '../../utils/alerts';
@@ -658,6 +659,9 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                 onChange={e => setLocalSettings({...settings, autoLogoutMinutes: Number(e.target.value) || 0})}
               />
             </div>
+
+            {/* 🤖 الذكاء الاصطناعي */}
+            <AISettingsCard settings={settings} setLocalSettings={setLocalSettings} isAdmin={appUser?.role === 'admin'} />
 
             {/* 🔒 قفل الفترات المحاسبية */}
             <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">

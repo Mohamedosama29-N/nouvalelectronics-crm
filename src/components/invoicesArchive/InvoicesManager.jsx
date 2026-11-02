@@ -12,10 +12,13 @@ import { exportToExcel } from '../../utils/exportUtils';
 import { formatDate } from '../../utils/format';
 import { normalizeSearch } from '../../utils/search';
 import { isDateLocked, LOCKED_MESSAGE } from '../../utils/periodLock';
+import { useIntent } from '../../hooks/useIntent';
 
 export function InvoicesManager({ systemSettings, appUser }) {
   const [invoices, setInvoices] = useState([]);
   const [search, setSearch] = useState("");
+  // 🔀 بحث جاي من البحث السريع (Ctrl+K)
+  useIntent('invoice-search', ({ text }) => setSearch(text || ''));
   const [loading, setLoading] = useState(true);
   const [invoiceData, setInvoiceData] = useState(null);
   // ref بدل state: زر "تحميل المزيد" لازم يشوف آخر مؤشر صفحة فعلي (القيمة القديمة كانت بتكرر الصفحة الأولى)

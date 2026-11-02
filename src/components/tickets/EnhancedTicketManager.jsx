@@ -47,6 +47,9 @@ import { buildQueryTokens, buildSearchTokens, normalizePhone, normalizeSearch } 
 import { getNextTicketNumber, getTicketSLAInfo } from '../../utils/ticketHelpers';
 import { describeMatchResult } from '../../utils/productCodeMatch';
 import { resolveProductCode } from '../../utils/productCodeLookup';
+import { TicketAIPanel } from '../ai/TicketAIPanel';
+import { TicketIntakeAssist } from '../ai/TicketIntakeAssist';
+import { useIntent } from '../../hooks/useIntent';
 
 export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUser, warehouseMap, onGenerateInvoice }) {
   const [tickets, setTickets] = useState([]);
@@ -924,6 +927,19 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   setEditingCommentText('');
   setShowFullTicketModal(true);
 };
+
+  // 🔀 فتح تذكرة من البحث السريع / مركز المهام، أو فتح تذكرة جديدة (مع بيانات جاهزة)
+  useIntent('ticket', async ({ id }) => {
+    try {
+      const snap = await getDoc(doc(db, 'tickets', id));
+      if (snap.exists()) openFullTicket({ id: snap.id, ...snap.data() });
+      else showError('التذكرة دي مش موجودة');
+    } catch { showError('معرفتش أفتح التذكرة'); }
+  });
+  useIntent('ticket-new', ({ prefill }) => {
+    if (prefill) setNewTicket((p) => ({ ...p, ...prefill }));
+    setShowAddModal(true);
+  });
   // ========== التعليقات ==========
   const addComment = async () => {
     if (!newComment.trim() || !fullTicketView) return;
@@ -1785,6 +1801,8 @@ const loadTickets = useCallback(async (targetPage = 1) => {
             </div>
             
            <form onSubmit={handleAddTicket} className="space-y-4">
+  {/* 📋 إدخال ذكي من رسالة العميل */}
+  <TicketIntakeAssist systemSettings={systemSettings} onApply={(prefill) => setNewTicket((p) => ({ ...p, ...prefill }))} />
   {/* البحث عن عميل */}
   <div className="relative">
     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">🔍 البحث عن عميل موجود</label>
@@ -3066,6 +3084,8 @@ const loadTickets = useCallback(async (targetPage = 1) => {
             </div>
 
             <div className="p-6 space-y-6">
+  {/* 🤖 المساعد الذكي: تذاكر مشابهة + اقتراح تشخيص + رسالة واتساب + ملخص */}
+  <TicketAIPanel ticket={fullTicketView} systemSettings={systemSettings} />
   {/* معلومات العميل */}
   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
     <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">

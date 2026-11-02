@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  collection, addDoc, getDocs, doc, query, where, serverTimestamp, orderBy, onSnapshot, limit, writeBatch, startAfter
+  collection, addDoc, getDocs, getDoc, doc, query, where, serverTimestamp, orderBy, onSnapshot, limit, writeBatch, startAfter
 } from 'firebase/firestore';
 import {
   Users,
@@ -33,6 +33,7 @@ import { formatDate } from '../../utils/format';
 import { exportToPDF } from '../../utils/pdfExport';
 import { buildQueryTokens, buildSearchTokens, normalizePhone, normalizeSearch } from '../../utils/search';
 import { validators } from '../../utils/validators';
+import { useIntent } from '../../hooks/useIntent';
 
 export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoading, appUser }) {
   const [customers, setCustomers] = useState([]);
@@ -78,6 +79,14 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
   
 
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  // 🔀 فتح ملف عميل من البحث السريع
+  useIntent('customer', async ({ id, data }) => {
+    if (data) { setSelectedCustomer(data); return; }
+    try {
+      const snap = await getDoc(doc(db, 'customers', id));
+      if (snap.exists()) setSelectedCustomer({ id: snap.id, ...snap.data() });
+    } catch { /* ignore */ }
+  });
   const [invoiceData, setInvoiceData] = useState(null);
   const [filterCity, setFilterCity] = useState('');
   const [filterGovernorate, setFilterGovernorate] = useState('');

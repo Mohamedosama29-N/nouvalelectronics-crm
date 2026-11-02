@@ -9,7 +9,7 @@ import {
   PRIORITY_LABELS, RETURN_STATUS_LABELS, TRANSFER_STATUS_LABELS, amountOf, buildCustomerStats,
   buildFinanceStats, buildInventoryStats, buildReturnsStats, buildSalesSeriesByDays, buildTicketStats,
   buildTransferStats, buildWarrantyStats, bucketByDay, canSeeWarehouse, countBy, isReturnTx, isSale,
-  startOfDay, sumBy, toDate, topProductsFrom, transferItems
+  startOfDay, sumBy, toDate, topProductsFrom, transferItems, ticketWarehouseOf
 } from './liveStats';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -123,7 +123,7 @@ const tickets = {
   id: 'tickets', label: 'تذاكر الصيانة', icon: 'wrench', permission: 'manageTickets', timeBound: true,
   sources: (ctx) => [{ key: 'tickets', collection: 'tickets', timeField: 'createdAt', sinceMs: sinceMs(ctx), max: 10000 }],
   build: ({ tickets: list = [] }, ctx) => {
-    const rows = list.filter((t) => ctx.scope(t.warehouseId));
+    const rows = list.filter((t) => ctx.scope(ticketWarehouseOf(t)));
     const statusLabel = (s) => TICKET_STATUSES.find((x) => x.value === s)?.label || s;
     const st = buildTicketStats(rows, {
       now: ctx.now, statusLabel, terminal: TICKET_TERMINAL_STATUSES,
@@ -408,7 +408,7 @@ const warehousesReport = {
   build: ({ inventory: items = [], transactions = [], tickets: tks = [] }, ctx) => {
     const inv = buildInventoryStats(items, ctx.warehouseName);
     const sold = transactions.filter(isSale);
-    const ids = [...new Set([...items.map((i) => i.warehouseId), ...sold.map((t) => t.warehouseId), ...tks.map((t) => t.warehouseId), ...(ctx.warehouses || []).map((w) => w.id)])].filter(Boolean);
+    const ids = [...new Set([...items.map((i) => i.warehouseId), ...sold.map((t) => t.warehouseId), ...tks.map(ticketWarehouseOf), ...(ctx.warehouses || []).map((w) => w.id)])].filter(Boolean);
     const rows = ids.map((id) => {
       const mine = inv.live.filter((i) => i.warehouseId === id);
       const sales = sold.filter((t) => t.warehouseId === id);
@@ -421,7 +421,7 @@ const warehousesReport = {
         'نواقص': inv.lowStock.filter((i) => i.warehouseId === id).length,
         'مبيعات الفترة': sales.reduce((s, t) => s + amountOf(t), 0),
         'فواتير الفترة': sales.length,
-        'تذاكر مفتوحة': tks.filter((t) => t.warehouseId === id && !TICKET_TERMINAL_STATUSES.includes(t.status)).length
+        'تذاكر مفتوحة': tks.filter((t) => ticketWarehouseOf(t) === id && !TICKET_TERMINAL_STATUSES.includes(t.status)).length
       };
     });
     const clean = rows.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== 'id')));

@@ -46,6 +46,9 @@ if (import.meta.env.DEV) {
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
+// مُصدَّر عشان الخدمات اللي بتتحمّل عند الطلب (زي الذكاء الاصطناعي firebase/ai)
+export const firebaseApp = app;
+
 export const auth = getAuth(app);
 
 export const db = getFirestore(app);

@@ -34,12 +34,15 @@ import { parseCSV } from '../../utils/csvParser';
 import { exportToCSV, exportToExcel } from '../../utils/exportUtils';
 import { buildInventorySearchTokens, buildQueryTokens, buildSearchTokens, normalizePhone, normalizeSearch, normalizeSerial, sanitizeDocId } from '../../utils/search';
 import { validators } from '../../utils/validators';
+import { useIntent } from '../../hooks/useIntent';
 
 export function InventoryManager({ appUser, warehouses, setGlobalLoading, warehouseMap }) {
   const [items, setItems] = useState([]);
   const [movementItem, setMovementItem] = useState(null);
   const [showScanner, setShowScanner] = useState(false);
   const [search, setSearch] = useState('');
+  // 🔀 بحث جاي من البحث السريع (Ctrl+K)
+  useIntent('inventory-search', ({ text }) => setSearch(text || ''));
   const debouncedSearch = useDebounce(search, 700);
   const [editingItem, setEditingItem] = useState(null);
   const [newItem, setNewItem] = useState({ 

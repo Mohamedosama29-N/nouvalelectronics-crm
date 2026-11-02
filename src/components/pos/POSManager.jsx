@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { InvoiceRenderer } from './InvoiceRenderer';
 import { BarcodeScannerModal } from '../common/BarcodeScannerModal';
+import { AnimatedNumber } from '../common/AnimatedNumber';
+import { PosSuggestions } from '../ai/PosSuggestions';
 import { db } from '../../firebase/config';
 import { useDebounce } from '../../hooks/useDebounce';
 import { logUserActivity } from '../../utils/activityLog';
@@ -722,8 +724,8 @@ const handleCheckout = async () => {
       
       {/* ===== مودال الدفع ===== */}
       {paymentModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div role="dialog" aria-modal="true" aria-label="إتمام الدفع" className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="anim-fade fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div role="dialog" aria-modal="true" aria-label="إتمام الدفع" className="anim-pop bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
             <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-3">إتمام الدفع</h3>
             
             <div className="space-y-4">
@@ -802,7 +804,7 @@ const handleCheckout = async () => {
                 <button
                   onClick={handleCheckout}
                   disabled={invoice.paymentMethod === 'cash' && cashReceived < calculations.finalTotal}
-                  className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                  className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                 >
                   تأكيد الدفع
                 </button>
@@ -820,8 +822,8 @@ const handleCheckout = async () => {
 
       {/* ===== مودال إضافة عميل ===== */}
       {showCustomerModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div role="dialog" aria-modal="true" aria-label="إضافة عميل جديد" className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="anim-fade fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div role="dialog" aria-modal="true" aria-label="إضافة عميل جديد" className="anim-pop bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
             <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-3">إضافة عميل جديد</h3>
             <div className="space-y-4">
               <input
@@ -866,7 +868,7 @@ const handleCheckout = async () => {
 
       {/* ===== مودال QR Code ===== */}
       {showQrModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <div className="anim-fade fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-sm shadow-2xl">
             <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white border-b pb-3">رمز QR للفاتورة</h3>
             <div className="flex justify-center mb-4">
@@ -955,7 +957,7 @@ const handleCheckout = async () => {
               <h3 className="font-black text-slate-800 dark:text-white flex items-center gap-2">
                 السلة
                 {cart.length > 0 && (
-                  <span className="bg-teal-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                  <span key={cart.length} className="anim-pop bg-teal-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
                     {cart.length}
                   </span>
                 )}
@@ -972,14 +974,14 @@ const handleCheckout = async () => {
 
             {cart.length === 0 ? (
               <div className="py-16 flex flex-col items-center justify-center text-slate-300 dark:text-slate-600">
-                <Receipt size={40} className="mb-3 opacity-50"/>
+                <Receipt size={40} className="mb-3 opacity-50 anim-float"/>
                 <p className="text-sm font-bold text-slate-400 dark:text-slate-500">السلة فاضية</p>
                 <p className="text-xs mt-1">ابحث عن صنف بالباركود أو الاسم فوق عشان تضيفه</p>
               </div>
             ) : (
               <div className="max-h-[50vh] overflow-y-auto custom-scrollbar divide-y divide-slate-50 dark:divide-slate-700/50">
                 {cart.map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between gap-3 p-4 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
+                  <div key={idx} className="anim-slide-in flex items-center justify-between gap-3 p-4 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${item.isService ? 'bg-violet-50 dark:bg-violet-900/30 text-violet-500' : 'bg-teal-50 dark:bg-teal-900/30 text-teal-500'}`}>
                         {item.isService ? <LinkIcon size={16}/> : <Receipt size={16}/>}
@@ -1039,6 +1041,9 @@ const handleCheckout = async () => {
               </div>
             )}
           </div>
+
+          {/* 🛒 اقتراحات "بيتشتروا مع بعض" (من تاريخ مبيعات المخزن) */}
+          <PosSuggestions cart={cart} warehouseId={appUser?.assignedWarehouseId || 'main'} onAdd={(serial) => handleSearch(null, serial)} />
         </div>
 
         {/* ===================== لوحة الدفع الجانبية (ثابتة أثناء التمرير) ===================== */}
@@ -1223,7 +1228,7 @@ const handleCheckout = async () => {
             <div className="border-t border-teal-800 pt-4 flex items-end justify-between">
               <p className="text-[11px] text-teal-200">الصافي للدفع</p>
               <span className="text-4xl font-black text-emerald-400 tracking-tighter">
-                {calculations.finalTotal.toLocaleString()} <span className="text-sm font-normal">ج.م</span>
+                <AnimatedNumber value={calculations.finalTotal} /> <span className="text-sm font-normal">ج.م</span>
               </span>
             </div>
 

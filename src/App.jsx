@@ -28,6 +28,7 @@ import {
   Sun,
   Moon,
   Webhook,
+  Search as SearchIcon,
   RotateCcw
 } from 'lucide-react';
 import { LoginScreen } from './components/auth/LoginScreen';
@@ -40,6 +41,7 @@ import { onMessageListener, requestNotificationPermission } from './utils/messag
 import {} from './utils/offlineDb';
 import { syncManager } from './utils/syncManager';
 import { clearUserFromStorage, loadUserFromStorage, saveUserToStorage } from './utils/userStorage';
+import { onNavigate } from './utils/appEvents';
 
 // 🛠️ FIX (أداء): الصفحات دي كانت كلها بتتحمّل مع أول تحميل للتطبيق حتى
 // لو المستخدم فاتح شاشة واحدة بس (مثلاً الداشبورد). دلوقتي كل صفحة بتتحمّل
@@ -63,6 +65,9 @@ const ReportsManager = lazyPage(() => import('./components/reports/ReportsManage
 const FinanceManager = lazyPage(() => import('./components/finance/FinanceManager'), 'FinanceManager');
 const WarrantyAlertsView = lazyPage(() => import('./components/warranty/WarrantyAlertsView'), 'WarrantyAlertsView');
 const SettingsManager = lazyPage(() => import('./components/settings/SettingsManager'), 'SettingsManager');
+const StockForecastPanel = lazyPage(() => import('./components/ai/StockForecastPanel'), 'StockForecastPanel');
+const AskAssistant = lazyPage(() => import('./components/ai/AskAssistant'), 'AskAssistant');
+const CommandPalette = lazyPage(() => import('./components/ai/CommandPalette'), 'CommandPalette');
 const EnhancedWarehouseManager = lazyPage(() => import('./components/warehouses/EnhancedWarehouseManager'), 'EnhancedWarehouseManager');
 const EnhancedUserManagement = lazyPage(() => import('./components/users/EnhancedUserManagement'), 'EnhancedUserManagement');
 const EmployeeProfileView = lazyPage(() => import('./components/users/EmployeeProfileView'), 'EmployeeProfileView');
@@ -314,6 +319,13 @@ useEffect(() => {
   setIsMobileOpen(false);
 };
 
+  // 🔀 تنقل مطلوب من البحث السريع / المساعد / مركز المهام
+  useEffect(() => onNavigate((view) => {
+    if (!view) return;
+    setCurrentView(view);
+    setIsMobileOpen(false);
+  }), []);
+
   const handleGenerateInvoiceFromTicket = (ticket) => {
     // 🛠️ FIX: كان بيتم تجاهل بيانات التذكرة بالكامل (العميل، قطع الغيار)
     // ومجرد الانتقال لشاشة نقطة البيع فاضية - يعني الكاشير كان مضطر
@@ -510,6 +522,12 @@ useEffect(() => {
   return (
     <ThemeProvider>
       <div className={`flex h-screen bg-slate-50 dark:bg-slate-900 font-sans overflow-hidden text-right selection:bg-teal-100 dark:selection:bg-teal-900 transition-colors duration-200`} dir="rtl">
+
+        {/* 🤖 اسأل السيستم: زر عائم (خارج المحتوى عشان position:fixed يفضل ثابت) */}
+        <React.Suspense fallback={null}>
+          <AskAssistant appUser={appUser} warehouses={warehouses} systemSettings={systemSettings} hideLauncher={currentView === 'transactions'} />
+          <CommandPalette appUser={appUser} warehouses={warehouses} />
+        </React.Suspense>
         
         {/* منطقة الإشعارات */}
         <div className="fixed top-6 left-6 z-[200] flex flex-col gap-2">
@@ -778,6 +796,14 @@ useEffect(() => {
               </h2>
             </div>
             <div className="flex items-center gap-3 font-bold">
+               {/* ⌨️ بحث سريع في السيستم كله */}
+               <button type="button" onClick={() => window.dispatchEvent(new Event('erp:open-palette'))}
+                 className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-teal-600 hover:border-teal-300 transition-colors text-xs print:hidden"
+                 aria-label="بحث سريع">
+                 <SearchIcon size={14} /> بحث سريع
+                 <kbd className="text-[10px] border border-slate-200 dark:border-slate-600 rounded px-1">Ctrl K</kbd>
+               </button>
+               <button type="button" onClick={() => window.dispatchEvent(new Event('erp:open-palette'))} className="md:hidden p-2 rounded-lg text-slate-500 hover:text-teal-600 print:hidden" aria-label="بحث سريع"><SearchIcon size={18} /></button>
                <div className="flex items-center gap-2" title={isOnline ? '' : 'تحذير: أي تعديل الآن لن يُحفظ تلقائياً، يرجى الانتظار حتى يعود الاتصال'}>
                  <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
                  <span className={`text-[9px] uppercase px-2 py-1 rounded border ${
@@ -864,9 +890,12 @@ useEffect(() => {
                   <FinanceManager appUser={appUser} systemSettings={systemSettings} />
                 }
                 
-                {currentView === 'lowstock' && appUser.permissions?.viewLowStock && 
-                  <LowStockView lowStockItems={lowStockItems} appUser={appUser} warehouseMap={warehouseMap} systemSettings={systemSettings} />
-                }
+                {currentView === 'lowstock' && appUser.permissions?.viewLowStock && (
+                  <>
+                    <StockForecastPanel appUser={appUser} warehouseMap={warehouseMap} />
+                    <LowStockView lowStockItems={lowStockItems} appUser={appUser} warehouseMap={warehouseMap} systemSettings={systemSettings} />
+                  </>
+                )}
 
                 {currentView === 'warranty_alerts' && (appUser.permissions?.viewReports || appUser.role === 'admin') && 
                   <WarrantyAlertsView systemSettings={systemSettings} appUser={appUser} />

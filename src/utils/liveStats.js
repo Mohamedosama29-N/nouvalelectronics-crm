@@ -28,6 +28,9 @@ const pad = (n) => String(n).padStart(2, '0');
 export const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 export const monthKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 
+// التذاكر بتتسجل بالفرع في assignedCenter (مش warehouseId)
+export const ticketWarehouseOf = (t) => t?.warehouseId || t?.assignedCenter || 'main';
+
 export const isSale = (t) => !t.type || t.type === 'sell';
 export const isReturnTx = (t) => t.type === 'return';
 
