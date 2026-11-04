@@ -664,7 +664,8 @@ const handleCheckout = async () => {
       try {
         await updateDoc(doc(db, 'tickets', invoice.ticketId), {
           linkedInvoiceNumber: invId,
-          linkedInvoiceDate: serverTimestamp()
+          linkedInvoiceDate: serverTimestamp(),
+          updatedAt: serverTimestamp()
         });
       } catch (linkError) {
         console.error("Ticket-invoice link error:", linkError);

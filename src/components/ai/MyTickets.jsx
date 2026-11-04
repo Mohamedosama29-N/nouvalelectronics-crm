@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { arrayUnion, collection, doc, getDocs, limit, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { Wrench, Loader2, RefreshCw, Phone, Play, PackageSearch, BadgeDollarSign, CheckCircle2, StickyNote, MapPin, Clock } from 'lucide-react';
 import { db } from '../../firebase/config';
+import { writeOrQueue } from '../../utils/offlineWrites';
+import { OfflineBadge } from '../common/OfflineBadge';
+import { InstallAppButton } from '../common/InstallAppButton';
 import { TICKET_STATUSES, TICKET_TERMINAL_STATUSES } from '../../constants/tickets';
 import { refreshTrackingIfAny } from '../../utils/ticketTracking';
 import { showError, showSuccess } from '../../utils/alerts';
@@ -64,11 +67,11 @@ export function MyTickets({ appUser, systemSettings, warehouses = [] }) {
       const upd = { status: q.status, updatedAt: serverTimestamp(), statusHistory: arrayUnion({ status: q.status, timestamp: at, by: name }),
         history: arrayUnion({ action: `${q.label} (من شاشة الفني)`, timestamp: at, by: name }) };
       if (q.needsCost) upd.estimatedCost = Number(cost[t.id]);
-      await updateDoc(doc(db, 'tickets', t.id), upd);
+      const w = await writeOrQueue(updateDoc(doc(db, 'tickets', t.id), upd));
       const patched = { ...t, status: q.status, ...(q.needsCost ? { estimatedCost: Number(cost[t.id]) } : {}), statusHistory: [...(t.statusHistory || []), { status: q.status, timestamp: at, by: name }] };
       refreshTrackingIfAny(patched, { company: systemSettings?.storeName || '', companyPhone: systemSettings?.storePhone || '' });
       setItems((arr) => arr.map((x) => (x.id === t.id ? patched : x)));
-      showSuccess(q.label);
+      showSuccess(w.queued ? `${q.label} — اتسجل على الجهاز وهيتبعت أول ما النت يرجع` : q.label);
     } catch (e) { console.error(e); showError('معرفتش أغيّر الحالة'); }
     finally { setBusy(''); }
   };
@@ -77,16 +80,17 @@ export function MyTickets({ appUser, systemSettings, warehouses = [] }) {
     const txt = String(note[t.id] || '').trim();
     if (!txt) return;
     try {
-      await updateDoc(doc(db, 'tickets', t.id), { updatedAt: serverTimestamp(), history: arrayUnion({ action: 'ملاحظة الفني', details: txt, timestamp: new Date().toISOString(), by: name }) });
-      setNote((n) => ({ ...n, [t.id]: '' })); showSuccess('اتسجلت الملاحظة');
+      const w = await writeOrQueue(updateDoc(doc(db, 'tickets', t.id), { updatedAt: serverTimestamp(), history: arrayUnion({ action: 'ملاحظة الفني', details: txt, timestamp: new Date().toISOString(), by: name }) }));
+      setNote((n) => ({ ...n, [t.id]: '' })); showSuccess(w.queued ? 'الملاحظة اتسجلت على الجهاز وهتتبعت لما النت يرجع' : 'اتسجلت الملاحظة');
     } catch { showError('معرفتش أسجل الملاحظة'); }
   };
 
   return (
     <section className="space-y-3 max-w-2xl mx-auto" dir="rtl">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="font-black text-lg text-slate-800 dark:text-white flex items-center gap-2"><Wrench size={20} className="text-teal-600" /> تذاكري</h2>
+        <h2 className="font-black text-lg text-slate-800 dark:text-white flex items-center gap-2"><Wrench size={20} className="text-teal-600" /> تذاكري <OfflineBadge /></h2>
         <div className="flex gap-2">
+          <InstallAppButton />
           <button type="button" onClick={() => setShowAll((v) => !v)} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-700 text-xs font-bold">{showAll ? 'المفتوحة بس' : 'كله'}</button>
           <button type="button" onClick={load} aria-label="تحديث" className="p-2 rounded-xl bg-slate-100 dark:bg-slate-700">{loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}</button>
         </div>

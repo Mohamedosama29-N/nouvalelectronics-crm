@@ -39,6 +39,7 @@ import { TICKET_STATUSES, TICKET_TERMINAL_STATUSES } from '../../constants/ticke
 import { SignatureModal } from '../common/SignaturePad';
 import { db } from '../../firebase/config';
 import { hasPerm } from '../../utils/permissions';
+import { ensureRatingDoc } from '../../utils/ticketRating';
 import { recordAudit } from '../../utils/audit';
 import { useDebounce } from '../../hooks/useDebounce';
 import { showConfirm, showError, showInfo, showSuccess } from '../../utils/alerts';
@@ -1328,6 +1329,8 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       token = makeRatingToken();
       await patchTicket(ticket.id, { ratingToken: token }, 'إنشاء رابط تقييم العميل');
     }
+    // ⭐ المستند العام اللي العميل بيقيّم عليه (مجاني، من غير Cloud Functions)
+    await ensureRatingDoc(ticket, token, { company: systemSettings?.storeName || '' });
     return `${window.location.origin}/?rate=${ticket.id}&k=${token}`;
   };
 

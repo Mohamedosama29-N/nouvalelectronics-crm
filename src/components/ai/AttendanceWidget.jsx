@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { Clock, LogIn, LogOut, Loader2 } from 'lucide-react';
 import { db } from '../../firebase/config';
+import { writeOrQueue } from '../../utils/offlineWrites';
 import { attendanceInfo, DEFAULT_SHIFT, ymd } from '../../ai/staff';
-import { showError, showSuccess } from '../../utils/alerts';
+import { showError, showInfo, showSuccess } from '../../utils/alerts';
 
 const t = (v) => { const d = v?.toDate ? v.toDate() : v ? new Date(v) : null; return d ? d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '—'; };
 
@@ -25,8 +26,11 @@ export function AttendanceWidget({ appUser, systemSettings }) {
     setBusy(true);
     try {
       const base = { userId: appUser.id, name: appUser.name || '', role: appUser.role || '', warehouseId: appUser.assignedWarehouseId || 'main', date: ymd() };
-      const patch = kind === 'in' ? { ...base, checkIn: serverTimestamp() } : { ...base, checkOut: serverTimestamp() };
-      await setDoc(doc(db, 'attendance', id), patch, { merge: true });
+      // من غير نت: وقت الجهاز (وقت السيرفر كان هيتسجل لما النت يرجع = ميعاد غلط)
+      const at = navigator.onLine === false ? new Date() : serverTimestamp();
+      const patch = kind === 'in' ? { ...base, checkIn: at } : { ...base, checkOut: at };
+      const w = await writeOrQueue(setDoc(doc(db, 'attendance', id), patch, { merge: true }));
+      if (w.queued) showInfo('اتسجل على الجهاز وهيتبعت لما النت يرجع');
       setRec((r) => ({ ...r, ...base, [kind === 'in' ? 'checkIn' : 'checkOut']: new Date() }));
       showSuccess(kind === 'in' ? 'اتسجل الحضور' : 'اتسجل الانصراف');
     } catch (e) { console.error(e); showError('معرفتش أسجل'); }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Star, CheckCircle2, Loader2 } from 'lucide-react';
-import { callFunction } from '../../utils/authSession';
+import { readRatingDoc, submitRating } from '../../utils/ticketRating';
 
 const CRITERIA = [
   { key: 'accessibility', label: 'سهولة الوصول لمركز الصيانة' },
@@ -22,12 +22,13 @@ export default function PublicRatingPage({ ticketId, token }) {
   useEffect(() => {
     (async () => {
       try {
-        const info = await callFunction('getTicketForRating', { ticketId, token });
+        const info = await readRatingDoc(token);
+        if (!info || info.ticketId !== ticketId) { setState('invalid'); return; }
         setTicket(info);
-        setState(info.alreadyRated ? 'already' : 'ready');
+        setState(info.rated ? 'already' : 'ready');
       } catch (e) {
         console.error(e);
-        setState(e?.code === 'functions/permission-denied' ? 'invalid' : 'error');
+        setState(e?.code === 'permission-denied' ? 'invalid' : 'error');
       }
     })();
   }, [ticketId, token]);
@@ -36,11 +37,12 @@ export default function PublicRatingPage({ ticketId, token }) {
     if (Object.values(ratings).some(v => !v)) return;
     setSaving(true);
     try {
-      await callFunction('submitTicketRating', { ticketId, token, ratings, repurchase, comment: comment.trim().slice(0, 500) });
+      await submitRating(token, { ratings, repurchase, comment });
       setState('done');
     } catch (e) {
       console.error(e);
-      setState(e?.code === 'functions/already-exists' ? 'already' : 'error');
+      // القواعد بترفض أي تقييم تاني على نفس الرابط
+      setState(e?.code === 'permission-denied' ? 'already' : 'error');
     }
     setSaving(false);
   };
@@ -65,7 +67,7 @@ export default function PublicRatingPage({ ticketId, token }) {
 
   return shell(
     <>
-      <h1 className="font-black text-xl text-slate-800 mb-1">قيّم تجربتك مع Nouval</h1>
+      <h1 className="font-black text-xl text-slate-800 mb-1">قيّم تجربتك مع {ticket?.company || 'Nouval'}</h1>
       <p className="text-xs text-slate-500 mb-5">تذكرة {ticket?.ticketNumber}{ticket?.device ? ` - ${ticket.device}` : ''}</p>
       <div className="space-y-4">
         {CRITERIA.map(c => (

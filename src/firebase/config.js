@@ -1,7 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import {
-  collection, doc, getFirestore
+  collection, doc, getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager
 } from 'firebase/firestore';
 import { getMessaging } from 'firebase/messaging';
 import { getFunctions } from 'firebase/functions';
@@ -51,7 +51,18 @@ export const firebaseApp = app;
 
 export const auth = getAuth(app);
 
-export const db = getFirestore(app);
+// 📱 (8) كاش محلي دائم: السيستم بيفتح ويقرا آخر بيانات حتى من غير نت، والتعديلات بتتحفظ على
+// الجهاز وبتتبعت لوحدها لما النت يرجع. لو المتصفح مش بيدعمه (وضع التصفح الخفي) بنرجع للعادي.
+const makeDb = () => {
+  try {
+    if (typeof window === 'undefined' || typeof indexedDB === 'undefined') return getFirestore(app);
+    return initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  } catch (e) {
+    console.warn('offline cache disabled', e?.code || e);
+    return getFirestore(app);
+  }
+};
+export const db = makeDb();
 
 // 🆕 لاستدعاء الـ Cloud Functions (زي submitInvoiceToETA) من الواجهة.
 // نفس الـ region المحدد في functions/index.js (europe-west1) عشان

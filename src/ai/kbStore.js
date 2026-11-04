@@ -2,7 +2,8 @@
 import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
-const TTL = 10 * 60000;
+const TTL = 30 * 60000; // 📊 (5) مدة أطول = قراءات أقل
+const WTTL = 60 * 60000;
 const kb = { at: 0, p: null };
 export function loadKbArticles() {
   if (kb.p && Date.now() - kb.at < TTL) return kb.p;
@@ -17,7 +18,7 @@ export const invalidateKb = () => { kb.at = 0; };
 const wm = { at: 0, p: null };
 // آخر 3000 فاتورة بيع + سجل الأجهزة — عشان نعرف تاريخ الشراء وانتهاء الضمان لكل سيريال
 export function loadWarrantySources() {
-  if (wm.p && Date.now() - wm.at < TTL) return wm.p;
+  if (wm.p && Date.now() - wm.at < WTTL) return wm.p;
   wm.at = Date.now();
   wm.p = Promise.all([
     getDocs(query(collection(db, 'transactions'), where('type', '==', 'sell'), orderBy('timestamp', 'desc'), limit(3000))).then((s) => s.docs.map((d) => d.data())).catch(() => []),

@@ -24,15 +24,54 @@
       "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/?source=pwa",
   "display": "standalone",
   "theme_color": "#0d9488",
   "background_color": "#ffffff",
-  "orientation": "portrait",
+  "orientation": "any",
   "scope": "/",
   "description": "نظام إدارة متكامل للمخازن والمبيعات والصيانة",
   "dir": "rtl",
   "lang": "ar",
-  "categories": ["business", "productivity"],
-  "gcm_sender_id": "103953800507"
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "gcm_sender_id": "103953800507",
+  "id": "/",
+  "shortcuts": [
+    {
+      "name": "تذاكري",
+      "short_name": "تذاكري",
+      "url": "/?view=my_tickets",
+      "icons": [
+        {
+          "src": "logo192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "الكاشير",
+      "short_name": "الكاشير",
+      "url": "/?view=transactions",
+      "icons": [
+        {
+          "src": "logo192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "الكول سنتر",
+      "short_name": "الكول سنتر",
+      "url": "/?view=callcenter",
+      "icons": [
+        {
+          "src": "logo192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
 }

@@ -21,9 +21,10 @@ import { DASHBOARD_WIDGETS } from '../../constants/dashboard';
 import { ALL_PERMISSIONS, ROLE_DEFAULT_PERMISSIONS, USER_ROLES } from '../../constants/roles';
 import { db } from '../../firebase/config';
 import { OPT_OUT } from '../../utils/permissions';
+import { adminPasswordChanged, authErrorMessage, provisionEmployeeAccount, secureAccountsEnabled } from '../../utils/secureAuth';
 import { recordAudit } from '../../utils/audit';
 import { logUserActivity } from '../../utils/activityLog';
-import { showConfirm, showError, showSuccess } from '../../utils/alerts';
+import { showConfirm, showError, showInfo, showSuccess } from '../../utils/alerts';
 import { getDashboardWidgetConfig } from '../../utils/dashboardHelpers';
 import { exportToExcel } from '../../utils/exportUtils';
 import { formatDate } from '../../utils/format';
@@ -220,6 +221,17 @@ const WARRANTY_PERIODS = [
           if (newPass) dataToUpdate.pass = hashPassword(newPass);
         }
         await updateDoc(doc(db, 'employees', editingUser.id), dataToUpdate);
+        // 🔐 في الدخول الآمن: باسورد Firebase بيتغير برابط على إيميل الموظف
+        if (appUser.role === 'admin' && (newPass || emailChanged) && secureAccountsEnabled()) {
+          if (emailChanged && newPass) {
+            try { await provisionEmployeeAccount({ employeeId: editingUser.id, email: newEmail, password: newPass }); showInfo('اتعمل حساب دخول آمن بالإيميل الجديد والباسورد الجديد.'); }
+            catch (pe) { showError(`حساب الدخول الآمن بالإيميل الجديد ماتعملش (${authErrorMessage(pe)}).`); }
+          } else if (emailChanged) showInfo('الإيميل اتغيّر: في الدخول الآمن لازم تكتب باسورد جديد مع تغيير الإيميل عشان يتعمله حساب بالإيميل الجديد.');
+          else {
+            const r = await adminPasswordChanged(newEmail);
+            showInfo(r.sent ? `اتبعت لـ ${newEmail} رابط عشان يحط الباسورد الجديد في الدخول الآمن.` : 'معرفتش أبعت رابط الباسورد — ابعته من شاشة الأمان.');
+          }
+        }
         await logUserActivity(appUser, 'تعديل بيانات موظف', `تعديل بيانات الموظف: ${editingUser.name}${newPass ? ' (تغيير كلمة السر)' : ''}${emailChanged ? ' (تغيير البريد)' : ''}`);
         showSuccess("تم حفظ الإعدادات"); 
         setEditingUser(null);
@@ -258,7 +270,7 @@ const WARRANTY_PERIODS = [
         const defaultPermissions = ROLE_DEFAULT_PERMISSIONS[newUser.role] || {};
         defaultPermissions.viewInvoices = newUser.role === 'admin';
 
-        await addDoc(collection(db, 'employees'), {
+        const empRef = await addDoc(collection(db, 'employees'), {
             email: emailToSave,
             pass: hashPassword(newUser.pass),
             name: newUser.name,
@@ -278,6 +290,13 @@ const WARRANTY_PERIODS = [
             loginHistory: []
         });
         
+        // 🔐 حساب الدخول الآمن للموظف الجديد (لو الدخول الآمن أو الترحيل متفعّل)
+        if (secureAccountsEnabled()) {
+          try {
+            const r = await provisionEmployeeAccount({ employeeId: empRef.id, email: emailToSave, password: newUser.pass });
+            if (r.reason === 'exists-reset-sent') showInfo('الإيميل ده عليه حساب آمن قديم — اتبعتله رابط يحط باسورد جديد.');
+          } catch (pe) { console.warn(pe); showError(`الموظف اتضاف، بس حساب الدخول الآمن ماتعملش (${authErrorMessage(pe)}). هيتعمل لوحده أول ما يدخل في وضع الترحيل، أو ضيفه من Firebase Console.`); }
+        }
         await logUserActivity(appUser, 'إضافة موظف', `إنشاء حساب للموظف: ${newUser.name} بدور ${newUser.role}`);
         showSuccess("تم إضافة المستخدم بنجاح");
         setShowAddModal(false);

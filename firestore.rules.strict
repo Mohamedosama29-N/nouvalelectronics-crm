@@ -65,6 +65,43 @@ service cloud.firestore {
     // باقي الكوليكشنز: أي موظف مسجّل (زي الوضع الحالي، من غير الدخول المجهول)
     // 🆕 صفحة "تابع تذكرتك": أي حد معاه التوكن (رابط/QR) يقرا مستند واحد بس، ومحدش يقدر يعمل list.
     // ⚠️ طول ما القاعدة العامة تحت مفتوحة، الـ list بيبقى متاح لأي جلسة؛ بيتقفل فعليًا مع القواعد الصارمة.
+    // ⭐ تقييم العميل (مجاني): أي حد معاه التوكن يقرا مستند واحد ويقيّم مرة واحدة بس
+    match /ticketRatings/{token} {
+      allow get: if true;
+      allow list: if isEmployee();
+      allow create, delete: if isEmployee();
+      allow update: if isEmployee() || (
+        resource.data.rated == false && request.resource.data.rated == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rated', 'ratings', 'repurchase', 'comment', 'ratedAt'])
+        && request.resource.data.ratings.keys().hasOnly(['accessibility', 'maintenanceTime', 'centerDealing', 'deliveryProcedures'])
+        && request.resource.data.ratings.accessibility is int && request.resource.data.ratings.accessibility >= 1 && request.resource.data.ratings.accessibility <= 5
+        && request.resource.data.ratings.maintenanceTime is int && request.resource.data.ratings.maintenanceTime >= 1 && request.resource.data.ratings.maintenanceTime <= 5
+        && request.resource.data.ratings.centerDealing is int && request.resource.data.ratings.centerDealing >= 1 && request.resource.data.ratings.centerDealing <= 5
+        && request.resource.data.ratings.deliveryProcedures is int && request.resource.data.ratings.deliveryProcedures >= 1 && request.resource.data.ratings.deliveryProcedures <= 5
+        && request.resource.data.comment is string && request.resource.data.comment.size() <= 500
+        && request.resource.data.repurchase in ['yes', 'no', '']
+        && request.resource.data.ratedAt == request.time);
+    }
+
+    // 📝 طلبات الصيانة من صفحة الحجز العامة: أي حد يقدر يضيف طلب بشروط، والقراءة للموظفين بس
+    match /serviceRequests/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['name', 'phone', 'governorate', 'city', 'address', 'device', 'brand', 'issue', 'kind', 'preferredDate', 'source', 'status', 'createdAt'])
+        && request.resource.data.status == 'new' && request.resource.data.createdAt == request.time
+        && request.resource.data.name is string && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 80
+        && request.resource.data.phone is string && request.resource.data.phone.matches('^01[0125][0-9]{8}$')
+        && request.resource.data.issue is string && request.resource.data.issue.size() <= 600
+        && request.resource.data.address is string && request.resource.data.address.size() <= 200
+        && request.resource.data.device is string && request.resource.data.device.size() <= 40
+        && request.resource.data.kind in ['center', 'visit', 'inquiry'];
+      allow read, update, delete: if isEmployee();
+    }
+    // إعدادات الصفحات العامة (من غير بيانات حساسة)
+    match /publicConfig/{id} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if isAdmin();
+    }
+
     match /ticketTracking/{token} {
       allow get: if true;
       allow list: if false;

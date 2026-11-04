@@ -90,3 +90,61 @@ export function secureAuthStatus(employees = []) {
   const linked = active.filter((e) => e.authUid);
   return { mode: AUTH_MODE, appCheck: !!APPCHECK_KEY, total: active.length, linked: linked.length, pending: active.filter((e) => !e.authUid) };
 }
+
+// ================================================================ إدارة الحسابات الآمنة من جوه السيستم
+// بنستخدم نسخة Firebase تانية (secondary app) عشان نعمل حساب الموظف الجديد من غير ما
+// جلسة الأدمن الحالية تتقفل — مجاني وما محتاجش Admin SDK ولا Cloud Functions.
+let provisioner = null;
+async function getProvisioner() {
+  if (provisioner) return provisioner;
+  const [{ initializeApp, getApps }, authMod, fsMod] = await Promise.all([import('firebase/app'), import('firebase/auth'), import('firebase/firestore')]);
+  const existing = getApps().find((a) => a.name === 'provisioner');
+  const app = existing || initializeApp(firebaseApp.options, 'provisioner');
+  const pAuth = authMod.getAuth(app);
+  await authMod.setPersistence(pAuth, authMod.inMemoryPersistence).catch(() => {});
+  provisioner = { auth: pAuth, db: fsMod.getFirestore(app), authMod, fsMod };
+  return provisioner;
+}
+
+export const secureAccountsEnabled = () => AUTH_MODE !== 'legacy';
+
+// بيعمل حساب Firebase Auth للموظف (بعد ما مستند الموظف يتعمل) ويربطه — الحساب الجديد هو اللي بيكتب الربط بنفسه
+export async function provisionEmployeeAccount({ employeeId, email, password }) {
+  if (!secureAccountsEnabled()) return { created: false, reason: 'legacy' };
+  const em = String(email).trim().toLowerCase();
+  const p = await getProvisioner();
+  try {
+    let cred;
+    try { cred = await p.authMod.createUserWithEmailAndPassword(p.auth, em, password); }
+    catch (e) {
+      if (e?.code !== 'auth/email-already-in-use') throw e;
+      // الحساب موجود (مثلاً موظف اتمسح ورجع) — بنجرب الباسورد، وإلا بنبعتله رابط تعيين
+      try { cred = await p.authMod.signInWithEmailAndPassword(p.auth, em, password); }
+      catch { await sendPasswordResetEmail(auth, em).catch(() => {}); return { created: false, reason: 'exists-reset-sent' }; }
+    }
+    const uid = cred.user.uid;
+    await p.fsMod.setDoc(p.fsMod.doc(p.db, 'authLinks', uid), { employeeId, email: em, linkedAt: p.fsMod.serverTimestamp() }, { merge: true });
+    await updateDoc(doc(db, 'employees', employeeId), { authUid: uid, authLinkedAt: serverTimestamp() });
+    return { created: true, uid };
+  } finally {
+    await p.authMod.signOut(p.auth).catch(() => {});
+  }
+}
+
+// الأدمن مايقدرش يغيّر باسورد Firebase لموظف تاني من المتصفح (ده محتاج سيرفر مدفوع)،
+// فبنبعت للموظف رابط تعيين باسورد على إيميله (مجاني من Firebase).
+export async function adminPasswordChanged(email) {
+  if (!secureAccountsEnabled()) return { sent: false };
+  try { await sendPasswordResetEmail(auth, String(email).trim().toLowerCase()); return { sent: true }; }
+  catch (e) { return { sent: false, reason: e?.code }; }
+}
+
+// الموظف يغيّر باسوورده بنفسه (لازم الباسورد الحالي — Firebase بيطلب تأكيد الهوية)
+export async function changeMyPassword(currentPassword, newPassword) {
+  const m = await import('firebase/auth');
+  const u = auth.currentUser;
+  if (!u || u.isAnonymous || !u.email) throw Object.assign(new Error('no-session'), { code: 'no-session' });
+  await m.reauthenticateWithCredential(u, m.EmailAuthProvider.credential(u.email, currentPassword));
+  await m.updatePassword(u, newPassword);
+  return true;
+}

@@ -11,6 +11,7 @@ import {
   Wallet,
   ArrowRightLeft,
   LogOut,
+  KeyRound,
   AlertTriangle,
   Settings,
   Store,
@@ -41,7 +42,11 @@ import {
 import { LoginScreen } from './components/auth/LoginScreen';
 import { REQUIRE_REAL_AUTH, initFirebaseAuth, isRealSession, endSession } from './utils/authSession';
 import { initAppCheck } from './utils/secureAuth';
-import { BackupReminder } from './components/ai/BackupReminder';
+import { BackupReminder, UsageWarning } from './components/ai/BackupReminder';
+import { flushUsage } from './utils/readMeter';
+import { OfflineBadge } from './components/common/OfflineBadge';
+import { ChangeMyPassword } from './components/auth/ChangeMyPassword';
+import { runBackgroundJobs } from './utils/backgroundJobs';
 import { hasPerm, setExportGuard } from './utils/permissions';
 import { ThemeProvider } from './components/common/ThemeProvider';
 import { USER_ROLES } from './constants/roles';
@@ -91,6 +96,7 @@ const EnhancedWarehouseManager = lazyPage(() => import('./components/warehouses/
 const EnhancedUserManagement = lazyPage(() => import('./components/users/EnhancedUserManagement'), 'EnhancedUserManagement');
 const EmployeeProfileView = lazyPage(() => import('./components/users/EmployeeProfileView'), 'EmployeeProfileView');
 const PublicRatingPage = React.lazy(() => import('./components/tickets/PublicRatingPage'));
+const PublicBookingPage = React.lazy(() => import('./components/tickets/PublicBookingPage'));
 const PublicTrackPage = React.lazy(() => import('./components/tickets/PublicTrackPage'));
 const ResetPasswordScreen = lazyPage(() => import('./components/auth/ResetPasswordScreen'), 'ResetPasswordScreen');
 
@@ -108,8 +114,11 @@ export default function App() {
   const [fbReady, setFbReady] = useState(false);
   const [firebaseError, setFirebaseError] = useState(null);
   const [isConnecting, setIsConnecting] = useState(!REQUIRE_REAL_AUTH);
+  const [showChangePass, setShowChangePass] = useState(false);
   
 const [currentView, setCurrentView] = useState(() => {
+  // 📱 اختصارات التطبيق (?view=my_tickets) ليها الأولوية، وبعدها آخر صفحة كانت مفتوحة
+  try { const v = new URLSearchParams(window.location.search).get('view'); if (v && /^[a-z_]+$/.test(v)) return v; } catch { /* */ }
   // محاولة استعادة الصفحة من localStorage
   const savedView = localStorage.getItem('nouval_current_view');
   return savedView || 'dashboard';
@@ -371,6 +380,24 @@ useEffect(() => {
     initAuth();
   }, []);
 
+  // ⏱️ مهام الخلفية (نقل تقييمات العملاء للتذاكر...) — بعد ما السيستم يفتح بثواني
+  useEffect(() => {
+    if (!appUser || !fbReady) return undefined;
+    const t = setTimeout(() => { runBackgroundJobs(appUser, systemSettings); }, 5000);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- مرة لكل دخول
+  }, [appUser?.id, fbReady]);
+
+  // 📊 إرسال عدّاد الاستهلاك كل ربع ساعة (كتابة واحدة) وعند قفل الصفحة
+  useEffect(() => {
+    if (!appUser) return undefined;
+    const send = () => { flushUsage(appUser).catch(() => {}); };
+    const iv = setInterval(send, 15 * 60000);
+    const onHide = () => { if (document.visibilityState === 'hidden') send(); };
+    document.addEventListener('visibilitychange', onHide);
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onHide); };
+  }, [appUser]);
+
   // 🔑 حارس التصدير حسب صلاحية الموظف الحالي
   useEffect(() => { setExportGuard(() => hasPerm(appUser, 'exportData')); }, [appUser]);
 
@@ -502,6 +529,15 @@ useEffect(() => {
     return (
       <React.Suspense fallback={<PageLoadingFallback />}>
         <PublicRatingPage ticketId={rateParams.get('rate')} token={rateParams.get('k')} />
+      </React.Suspense>
+    );
+  }
+
+  // 📝 صفحة حجز الصيانة للعملاء (?book=1) - عامة من غير تسجيل دخول
+  if (rateParams.get('book')) {
+    return (
+      <React.Suspense fallback={<PageLoadingFallback />}>
+        <PublicBookingPage source={rateParams.get('src') || ''} />
       </React.Suspense>
     );
   }
@@ -794,6 +830,12 @@ useEffect(() => {
               {darkMode ? 'الوضع الفاتح' : 'الوضع الداكن'}
             </button>
             
+            <button
+              onClick={() => setShowChangePass(true)}
+              className="w-full px-4 py-2 bg-slate-800 text-slate-300 font-bold flex items-center justify-center gap-2 hover:bg-slate-700 rounded-lg transition-colors text-sm mb-2"
+            >
+              <KeyRound size={16} /> تغيير كلمة السر
+            </button>
             <button 
               onClick={handleLogout} 
               className="w-full px-4 py-2 bg-red-500/10 text-red-400 font-bold flex items-center justify-center gap-2 hover:bg-red-500 hover:text-white rounded-lg transition-colors text-sm"
@@ -802,6 +844,8 @@ useEffect(() => {
             </button>
           </div>
         </aside>
+
+        {showChangePass && <ChangeMyPassword appUser={appUser} onClose={() => setShowChangePass(false)} />}
 
         {/* المحتوى الرئيسي */}
         <div className="flex-1 flex flex-col min-w-0 relative">
@@ -848,7 +892,7 @@ useEffect(() => {
                  <kbd className="text-[10px] border border-slate-200 dark:border-slate-600 rounded px-1">Ctrl K</kbd>
                </button>
                <button type="button" onClick={() => window.dispatchEvent(new Event('erp:open-palette'))} className="md:hidden p-2 rounded-lg text-slate-500 hover:text-teal-600 print:hidden" aria-label="بحث سريع"><SearchIcon size={18} /></button>
-               <div className="flex items-center gap-2" title={isOnline ? '' : 'تحذير: أي تعديل الآن لن يُحفظ تلقائياً، يرجى الانتظار حتى يعود الاتصال'}>
+               <div className="flex items-center gap-2" title={isOnline ? '' : 'من غير نت: التعديلات بتتحفظ على الجهاز وبتتبعت لوحدها لما النت يرجع (متقفلش المتصفح بمسح البيانات)'}>
                  <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
                  <span className={`text-[9px] uppercase px-2 py-1 rounded border ${
                    isOnline 
@@ -858,6 +902,7 @@ useEffect(() => {
                    {isOnline ? 'متصل' : 'غير متصل'}
                  </span>
                </div>
+               <OfflineBadge className="hidden sm:inline-flex" />
                <div className="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
                <span className="text-sm font-bold text-teal-600 dark:text-teal-400">{warehouseMap[appUser.assignedWarehouseId]}</span>
             </div>
@@ -873,6 +918,7 @@ useEffect(() => {
                 )}
                 
                 {currentView !== 'security' && <BackupReminder appUser={appUser} systemSettings={systemSettings} onOpen={() => setCurrentView('security')} />}
+                {currentView !== 'security' && <UsageWarning appUser={appUser} onOpen={() => setCurrentView('security')} />}
                 {/* الصفحات المختلفة - كل صفحة بتتحمّل عند الحاجة فقط (React.lazy) */}
                 <React.Suspense fallback={<PageLoadingFallback />}>
                 {currentView === 'dashboard' && <DashboardView appUser={appUser} warehouses={warehouses} onNavigateToInventory={handleNavigateToInventory} notify={notify} systemSettings={systemSettings} />}

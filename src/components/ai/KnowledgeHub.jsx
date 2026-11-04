@@ -193,14 +193,21 @@ function KbTab({ appUser, systemSettings }) {
 }
 
 // ================================================================ (16) توقع حجم التذاكر
+let forecastCache = { at: 0, list: null };
 function ForecastTab({ appUser, warehouses }) {
   const [tickets, setTickets] = useState(null);
   const [wh, setWh] = useState(seeAll(appUser) ? 'all' : appUser?.assignedWarehouseId || 'main');
   const [now] = useState(() => new Date());
   useEffect(() => {
+    // 📊 (5) التوقع بيتحسب من تاريخ الإنشاء والفرع بس — بنحفظ النتيجة ساعة عشان متتقريش آلاف التذاكر كل مرة
+    if (forecastCache.list && Date.now() - forecastCache.at < 60 * 60000) { setTimeout(() => setTickets(forecastCache.list), 0); return; }
     const from = new Date(now.getTime() - 113 * DAY);
     getDocs(query(collection(db, 'tickets'), where('createdAt', '>=', from), orderBy('createdAt', 'asc'), limit(15000)))
-      .then((s) => setTickets(s.docs.map((d) => d.data()).filter((t) => !t.isDeleted)))
+      .then((s) => {
+        const list = s.docs.map((d) => d.data()).filter((t) => !t.isDeleted).map((t) => ({ createdAt: t.createdAt, warehouseId: t.warehouseId, assignedCenter: t.assignedCenter, assignedTechnician: t.assignedTechnician }));
+        forecastCache = { at: Date.now(), list };
+        setTickets(list);
+      })
       .catch((e) => { console.error(e); showError('معرفتش أحمّل التذاكر'); setTickets([]); });
   }, [now]);
   const f = useMemo(() => (tickets ? forecastTicketVolume(tickets, { now, warehouse: wh }) : null), [tickets, wh, now]);
@@ -273,12 +280,14 @@ function FraudTab({ appUser }) {
 }
 
 // ================================================================ (9) مزاج العملاء
+let logsCache = { at: 0, list: null };
 function MoodTab({ appUser }) {
   const pool = usePool(appUser);
   const [logs, setLogs] = useState(null);
   useEffect(() => {
+    if (logsCache.list && Date.now() - logsCache.at < 30 * 60000) { setTimeout(() => setLogs(logsCache.list), 0); return; }
     getDocs(query(collection(db, 'contactLogs'), orderBy('at', 'desc'), limit(1500)))
-      .then((s) => setLogs(s.docs.map((d) => d.data())))
+      .then((s) => { const list = s.docs.map((d) => d.data()); logsCache = { at: Date.now(), list }; setLogs(list); })
       .catch(() => setLogs([]));
   }, []);
   const rows = useMemo(() => {

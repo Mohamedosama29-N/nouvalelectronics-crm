@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { addDoc, collection, doc, getDocs, limit, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
-import { PhoneCall, Search, Loader2, Plus, Phone, ExternalLink, ClipboardList, HeartHandshake, CalendarClock, History, ShieldCheck, Save, Check, Sparkles, Megaphone } from 'lucide-react';
+import { PhoneCall, Search, Loader2, Plus, Phone, ExternalLink, ClipboardList, HeartHandshake, CalendarClock, History, ShieldCheck, Save, Check, Sparkles, Megaphone, Inbox } from 'lucide-react';
 import { db } from '../../firebase/config';
 import { normalizePhone } from '../../utils/search';
 import { requestNavigation } from '../../utils/appEvents';
@@ -14,6 +14,7 @@ import { ticketWarehouseOf, toDate } from '../../utils/liveStats';
 import { customerMood, MOODS } from '../../ai/insights';
 import { useIntent } from '../../hooks/useIntent';
 import { ComplaintsTab } from './ComplaintsTab';
+import { RequestsTab } from './RequestsTab';
 
 const DAY = 86400000;
 const card = 'bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4';
@@ -253,7 +254,7 @@ function FollowUpTab({ appUser, systemSettings }) {
     try {
       await updateDoc(doc(db, 'tickets', t.id), {
         followUp: { ...Object.fromEntries(keys.map((k) => [k, Number(s[k])])), repurchase: s.repurchase || '' },
-        followUpNotes: s.notes || '', followUpDate: todayYmd(), followUpBy: appUser?.name || '',
+        followUpNotes: s.notes || '', followUpDate: todayYmd(), followUpBy: appUser?.name || '', updatedAt: serverTimestamp(),
       });
       await logContact(t, 'followup_done', s.notes || 'متابعة بعد التسليم');
       showSuccess('اتسجلت المتابعة');
@@ -408,13 +409,14 @@ function LogTab({ appUser }) {
   );
 }
 
-const TABS = [['call', 'مكالمة', <PhoneCall size={14} key="i" />], ['complaints', 'الشكاوى والتصعيد', <Megaphone size={14} key="i" />], ['followup', 'متابعة بعد التسليم', <HeartHandshake size={14} key="i" />], ['reminders', 'صيانة دورية وضمان', <CalendarClock size={14} key="i" />], ['log', 'سجل التواصل', <History size={14} key="i" />]];
+const TABS = [['call', 'مكالمة', <PhoneCall size={14} key="i" />], ['requests', 'طلبات الحجز أونلاين', <Inbox size={14} key="i" />], ['complaints', 'الشكاوى والتصعيد', <Megaphone size={14} key="i" />], ['followup', 'متابعة بعد التسليم', <HeartHandshake size={14} key="i" />], ['reminders', 'صيانة دورية وضمان', <CalendarClock size={14} key="i" />], ['log', 'سجل التواصل', <History size={14} key="i" />]];
 
 // ☎️ شاشة الكول سنتر
 export function CallCenterView({ appUser, systemSettings }) {
   const [tab, setTab] = useState('call');
   const [preset, setPreset] = useState(null);
   useIntent('call', (v) => { setTab('call'); setPreset({ phone: v.phone, at: Date.now() }); });
+  useIntent('requests', () => setTab('requests'));
   const [complaintPrefill, setComplaintPrefill] = useState(null);
   useIntent('complaint-new', (v) => { setTab('complaints'); setComplaintPrefill({ ...(v.prefill || {}), at: Date.now() }); });
   return (
@@ -428,6 +430,7 @@ export function CallCenterView({ appUser, systemSettings }) {
         </div>
       </div>
       {tab === 'call' && <CallTab appUser={appUser} systemSettings={systemSettings} preset={preset} />}
+      {tab === 'requests' && <RequestsTab appUser={appUser} systemSettings={systemSettings} />}
       {tab === 'complaints' && <ComplaintsTab appUser={appUser} systemSettings={systemSettings} prefill={complaintPrefill} />}
       {tab === 'followup' && <FollowUpTab appUser={appUser} systemSettings={systemSettings} />}
       {tab === 'reminders' && <RemindersTab appUser={appUser} systemSettings={systemSettings} />}

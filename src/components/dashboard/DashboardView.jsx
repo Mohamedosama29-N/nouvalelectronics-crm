@@ -15,6 +15,7 @@ import { LiveBadge } from '../common/LiveBadge';
 import { AnimatedNumber } from '../common/AnimatedNumber';
 import { ActionCenter } from '../ai/ActionCenter';
 import { MorningBrief } from '../ai/MorningBrief';
+import { NewRequestsBanner } from '../ai/NewRequestsBanner';
 import { buildActionItems } from '../../ai/actionCenter';
 import { analyzePool, expectedByType, riskOf } from '../../ai/ticketPredict';
 import { LoadingSkeleton } from '../common/LoadingSkeleton';
@@ -256,6 +257,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
         </div>
       )}
 
+      {(appUser?.role === 'admin' || appUser?.permissions?.manageTickets) && <NewRequestsBanner />}
       {(appUser?.role === 'admin' || appUser?.permissions?.manageTickets) && (
         <MorningBrief tickets={tickets} transactions={txs} atRiskCount={atRisk.length}
           overdueCount={actionItems.find((i) => i.id === 'overdue')?.count || 0} systemSettings={systemSettings} userName={appUser?.name} />

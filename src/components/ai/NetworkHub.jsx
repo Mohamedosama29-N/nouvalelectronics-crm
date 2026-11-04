@@ -12,6 +12,7 @@ import { requestNavigation } from '../../utils/appEvents';
 import { whatsappLink, statusLabel } from '../../ai/ticketAssist';
 import { toDate } from '../../utils/liveStats';
 import { GovernorateMap } from './GovernorateMap';
+import { CentersReportTab } from './CentersReportTab';
 
 const DAY = 86400000;
 const card = 'bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4';
@@ -419,7 +420,7 @@ const TABS = [
   ['centers', 'المراكز والمستحقات', <Building2 size={14} key="i" />], ['parts', 'طلبات القطع', <PackagePlus size={14} key="i" />],
   ['defective', 'القطع التالفة', <PackageX size={14} key="i" />], ['claims', 'مطالبات المصنع', <FileBadge size={14} key="i" />],
   ['warranty', 'فحص الضمان', <ShieldCheck size={14} key="i" />], ['contracts', 'العقود', <FileSignature size={14} key="i" />],
-  ['map', 'خريطة المحافظات', <MapPin size={14} key="i" />],
+  ['map', 'خريطة المحافظات', <MapPin size={14} key="i" />], ['report', 'التقرير الشهري للمراكز', <FileBadge size={14} key="i" />],
 ];
 
 // 🏢 شبكة مراكز الصيانة
@@ -440,6 +441,7 @@ export function NetworkHub({ appUser, systemSettings }) {
       {tab === 'warranty' && <WarrantyCheckTab appUser={appUser} />}
       {tab === 'contracts' && <ContractsTab appUser={appUser} systemSettings={systemSettings} />}
       {tab === 'map' && <GovernorateMap systemSettings={systemSettings} />}
+      {tab === 'report' && <CentersReportTab systemSettings={systemSettings} />}
     </section>
   );
 }
