@@ -51,7 +51,11 @@ export function DuplicateCustomersManager({ appUser }) {
     setLoading(false);
   };
 
-  useEffect(() => { scanForDuplicates(); }, []);
+  useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => { scanForDuplicates(); })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
+  }, []);
 
   const handleMerge = async (groupIdx) => {
     const group = duplicateGroups[groupIdx];

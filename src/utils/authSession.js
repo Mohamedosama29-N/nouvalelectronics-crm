@@ -2,11 +2,13 @@ import { httpsCallable } from 'firebase/functions';
 import { signInWithCustomToken, signInAnonymously, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db, functions } from '../firebase/config';
+import { AUTH_MODE } from './secureAuth';
 
 // الوضع الصارم: لما يتفعّل (VITE_REQUIRE_REAL_AUTH=true) مفيش دخول مجهول خالص،
 // ولازم أي جلسة تكون من تسجيل دخول حقيقي عن طريق customLogin. يتفعّل بعد ما
 // تتأكد إن الدخول الجديد شغال (وقبل نشر firestore.rules.strict).
-export const REQUIRE_REAL_AUTH = import.meta.env.VITE_REQUIRE_REAL_AUTH === 'true';
+// وضع الدخول الآمن (VITE_AUTH_MODE=firebase) برضه بيمنع الدخول المجهول
+export const REQUIRE_REAL_AUTH = import.meta.env.VITE_REQUIRE_REAL_AUTH === 'true' || AUTH_MODE === 'firebase';
 
 export const callFunction = async (name, data) => (await httpsCallable(functions, name)(data)).data;
 

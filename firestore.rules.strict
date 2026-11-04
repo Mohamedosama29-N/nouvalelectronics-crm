@@ -63,6 +63,14 @@ service cloud.firestore {
     }
 
     // باقي الكوليكشنز: أي موظف مسجّل (زي الوضع الحالي، من غير الدخول المجهول)
+    // 🆕 صفحة "تابع تذكرتك": أي حد معاه التوكن (رابط/QR) يقرا مستند واحد بس، ومحدش يقدر يعمل list.
+    // ⚠️ طول ما القاعدة العامة تحت مفتوحة، الـ list بيبقى متاح لأي جلسة؛ بيتقفل فعليًا مع القواعد الصارمة.
+    match /ticketTracking/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if isEmployee();
+    }
+
     match /{document=**} {
       allow read, write: if isEmployee();
     }

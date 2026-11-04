@@ -30,10 +30,10 @@ function Delta({ current, previous, inverse = false }) {
 
 // مقارنة شهر بشهر: المبيعات الصافية، عدد الفواتير، المتوسط، المرتجعات، التذاكر،
 // ومنحنى المبيعات اليومي + أعلى الأصناف. قابلة للتصدير PDF/Excel.
-export function MonthlyComparison({ warehouses = [] }) {
+export function MonthlyComparison({ warehouses = [], lockedWarehouse = null }) {
   const [monthA, setMonthA] = useState(thisMonth());
   const [monthB, setMonthB] = useState(previousMonth(thisMonth()));
-  const [warehouse, setWarehouse] = useState('all');
+  const [warehouse, setWarehouse] = useState(lockedWarehouse || 'all');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
 
@@ -43,7 +43,8 @@ export function MonthlyComparison({ warehouses = [] }) {
     const endTs = Timestamp.fromDate(end);
     const [txSnap, ticketsCount] = await Promise.all([
       getDocs(query(collection(db, 'transactions'), where('timestamp', '>=', startTs), where('timestamp', '<=', endTs), orderBy('timestamp', 'desc'), limit(MAX_DOCS))),
-      getCountFromServer(query(collection(db, 'tickets'), where('createdAt', '>=', startTs), where('createdAt', '<=', endTs)))
+      // 🛠️ FIX: عدد التذاكر كان دايمًا على مستوى الشركة حتى لو اخترت فرع (والمبيعات متفلترة بالفرع)
+      getCountFromServer(query(collection(db, 'tickets'), ...(warehouse !== 'all' ? [where('assignedCenter', '==', warehouse)] : []), where('createdAt', '>=', startTs), where('createdAt', '<=', endTs)))
     ]);
     let list = txSnap.docs.map(d => d.data());
     if (warehouse !== 'all') list = list.filter(t => (t.warehouseId || 'main') === warehouse);
@@ -133,8 +134,8 @@ export function MonthlyComparison({ warehouses = [] }) {
           <input type="month" value={monthB} onChange={e => setMonthB(e.target.value)} className="block border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm font-bold bg-white dark:bg-slate-900" />
         </label>
         <label className="text-xs font-bold text-slate-500">المخزن
-          <select value={warehouse} onChange={e => setWarehouse(e.target.value)} className="block border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm font-bold bg-white dark:bg-slate-900">
-            <option value="all">كل المخازن</option>
+          <select value={warehouse} onChange={e => setWarehouse(e.target.value)} disabled={!!lockedWarehouse} className="block border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm font-bold bg-white dark:bg-slate-900">
+            {!lockedWarehouse && <option value="all">كل المخازن</option>}
             {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
         </label>

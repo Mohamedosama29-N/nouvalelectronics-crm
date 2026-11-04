@@ -19,7 +19,10 @@ import { InvoiceRenderer } from './InvoiceRenderer';
 import { BarcodeScannerModal } from '../common/BarcodeScannerModal';
 import { AnimatedNumber } from '../common/AnimatedNumber';
 import { PosSuggestions } from '../ai/PosSuggestions';
+import { ShiftBadge } from '../ai/ShiftBadge';
+import { QrImage } from '../common/QrImage';
 import { db } from '../../firebase/config';
+import { discountCheck } from '../../utils/permissions';
 import { useDebounce } from '../../hooks/useDebounce';
 import { logUserActivity } from '../../utils/activityLog';
 import { showConfirm, showError, showInfo, showSuccess } from '../../utils/alerts';
@@ -59,6 +62,8 @@ export function POSManager({ appUser, systemSettings, setGlobalLoading, prefillF
 
   // ✨ ميزة جديدة: تعبئة نقطة البيع تلقائيًا لما الفاتورة جاية من تذكرة صيانة
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     if (!prefillFromTicket) return;
     setInvoice(prev => ({
       ...prev,
@@ -140,6 +145,8 @@ export function POSManager({ appUser, systemSettings, setGlobalLoading, prefillF
 
     loadPrefillItems();
     if (onConsumeTicketPrefill) onConsumeTicketPrefill();
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillFromTicket]);
 
@@ -156,6 +163,8 @@ export function POSManager({ appUser, systemSettings, setGlobalLoading, prefillF
   const debouncedCustomerName = useDebounce(invoice.customerName, 400);
 
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     const term = (debouncedCustomerName || '').trim();
     if (term.length < 2) {
       setCustomerSuggestions([]);
@@ -190,6 +199,8 @@ export function POSManager({ appUser, systemSettings, setGlobalLoading, prefillF
     };
     search();
     return () => { cancelled = true; };
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [debouncedCustomerName]);
 
   useEffect(() => {
@@ -482,6 +493,10 @@ const handleCheckout = async () => {
     totalPaidNow = paidValue;
   }
   const remainingAmount = calculations.finalTotal - totalPaidNow;
+
+  // 🔑 حد الخصم المسموح للموظف
+  const dc = discountCheck(appUser, calculations.subtotal, calculations.discountAmount);
+  if (!dc.ok) return showError(`الخصم ${dc.pct}% أكبر من الحد المسموح لك (${dc.max}%). اطلب موافقة المدير.`);
   
   const confirmed = await showConfirm(
     'تأكيد البيع',
@@ -872,7 +887,8 @@ const handleCheckout = async () => {
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 w-full max-w-sm shadow-2xl">
             <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white border-b pb-3">رمز QR للفاتورة</h3>
             <div className="flex justify-center mb-4">
-              <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrcode)}`} alt="QR Code" className="w-48 h-48" />
+              {/* 🛠️ FIX: الـ QR كان بيتولّد من موقع خارجي (api.qrserver.com) فبيانات العميل كانت بتتبعتله — بقى محلي */}
+              <QrImage text={qrcode} size={192} className="w-48 h-48" />
             </div>
             <button
               onClick={() => setShowQrModal(false)}
@@ -893,6 +909,7 @@ const handleCheckout = async () => {
           <h2 className="text-xl font-black text-slate-800 dark:text-white">نقطة البيع</h2>
           <p className="text-xs text-slate-400 dark:text-slate-500">إضافة أصناف وإتمام عملية بيع جديدة</p>
         </div>
+        <div className="mr-auto"><ShiftBadge appUser={appUser} /></div>
       </div>
 
       {/* ✨ تنبيه إن الفاتورة دي مرتبطة بتذكرة صيانة */}

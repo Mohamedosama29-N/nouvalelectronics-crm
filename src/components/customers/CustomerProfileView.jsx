@@ -23,6 +23,7 @@ import { AdvancedCharts } from '../common/AdvancedCharts';
 import { TicketCard } from '../tickets/TicketCard';
 import { TICKET_STATUSES } from '../../constants/tickets';
 import { db } from '../../firebase/config';
+import { recordAudit } from '../../utils/audit';
 import { tagManager } from '../../utils/TagManager';
 import { showConfirm, showError, showInfo, showSuccess } from '../../utils/alerts';
 import { isValidSaleQty, readNextInvoiceNumber } from '../../utils/invoiceNumber';
@@ -57,6 +58,8 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
       await updateDoc(doc(db, 'tickets', ticketId), {
         status: newStatus,
         updatedAt: serverTimestamp(),
+        // 🛠️ FIX: كان مش بيتسجل في statusHistory، فوقت الصيانة والـ SLA كانوا بيتحسبوا غلط
+        statusHistory: arrayUnion({ status: newStatus, timestamp: new Date().toISOString(), by: appUser?.name || '-' }),
         history: arrayUnion({
           action: `تغيير الحالة إلى ${TICKET_STATUSES.find(s => s.value === newStatus)?.label || newStatus}`,
           timestamp: new Date().toISOString(),
@@ -228,6 +231,7 @@ export function CustomerProfileView({ customer, onClose, systemSettings, setGlob
     setGlobalLoading(true);
     try {
       await updateDoc(doc(db, 'customers', customer.id), editedData);
+      recordAudit({ coll: 'customers', docId: customer.id, label: `تعديل بيانات العميل ${customer.name || ''}`, before: customer, patch: editedData, user: appUser });
       showSuccess("تم تحديث بيانات العميل بنجاح");
       setEditingCustomer(false);
     } catch (error) {

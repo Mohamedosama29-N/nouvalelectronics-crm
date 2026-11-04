@@ -2,7 +2,7 @@ import React from 'react';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
 } from 'recharts';
-import { useTheme } from './ThemeProvider';
+import { useTheme } from '../../hooks/useTheme';
 
 // 🛠️ تحسين بصري: كانت الرسوم البيانية بتستخدم ألوان recharts الافتراضية
 // (بنفسجي/أخضر فاتح عشوائيين) اللي مالهاش علاقة بهوية النظام البصرية

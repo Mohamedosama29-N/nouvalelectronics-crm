@@ -68,6 +68,7 @@ export function buildForecast(inventory, transactions, opts = {}) {
         warehouseId: it.warehouseId || 'main',
         quantity: qty,
         price: Number(it.price) || 0,
+        cost: Number(it.avgCost || it.cost) || 0,
         sold: v.sold,
         perDay,
         daysLeft,

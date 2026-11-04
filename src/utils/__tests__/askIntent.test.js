@@ -76,3 +76,55 @@ describe('sanitize & scope & format', () => {
     expect(a.details.join(' ')).toContain('300');
   });
 });
+
+import { parseFollowUp } from '../../ai/askIntent';
+describe('stronger assistant', () => {
+  it.each([
+    ['متوسط وقت الصيانة الشهر ده', 'avg_repair_time'],
+    ['الصيانة بتاخد قد ايه', 'avg_repair_time'],
+    ['أداء الفنيين الشهر اللي فات', 'technician_performance'],
+    ['مين أسرع فني', 'technician_performance'],
+    ['أكتر الأعطال تكرارا', 'top_faults'],
+    ['كام تذكرة متأخرة', 'tickets_overdue'],
+    ['عملاء جدد السنة دي', 'new_customers'],
+  ])('%s', (q, metric) => expect(parseQuestionLocally(q, WH).metric).toBe(metric));
+
+  it('group by branch', () => {
+    const r = parseQuestionLocally('مبيعات كل فرع الشهر ده', WH);
+    expect(r).toMatchObject({ metric: 'sales_total', groupBy: 'warehouse', warehouseId: 'all' });
+    expect(parseQuestionLocally('أداء الفنيين حسب الفرع', WH).groupBy).toBe('none'); // مش قابل للتقسيم
+  });
+
+  it('follow-up questions reuse the previous intent', () => {
+    const prev = parseQuestionLocally('مبيعات الشهر ده', WH);
+    expect(parseFollowUp('وفرع 1؟', prev, WH)).toMatchObject({ metric: 'sales_total', period: 'this_month', warehouseId: 'b1', source: 'followup' });
+    expect(parseFollowUp('والشهر اللي فات؟', prev, WH)).toMatchObject({ metric: 'sales_total', period: 'last_month' });
+    expect(parseFollowUp('حسب الفرع', prev, WH)).toMatchObject({ groupBy: 'warehouse', warehouseId: 'all' });
+    expect(parseFollowUp('كام تذكرة مفتوحة', prev, WH)).toBeNull(); // سؤال جديد
+    expect(parseFollowUp('شكرا', prev, WH)).toBeNull();
+    expect(parseFollowUp('وفرع 1', null, WH)).toBeNull();
+  });
+
+  it('branch users cannot group by branch', () => {
+    const i = enforceScope({ metric: 'sales_total', groupBy: 'warehouse', warehouseId: 'all' }, { role: 'cashier', assignedWarehouseId: 'b1' });
+    expect(i).toMatchObject({ groupBy: 'none', warehouseId: 'b1' });
+  });
+
+  it('formats durations, groups and inverted tone for repair time', () => {
+    const fd = (ms) => `${Math.round(ms / 3600000)}h`;
+    const a = formatAnswer({ metric: 'avg_repair_time', period: 'this_month' }, { value: 48 * 3600000, previous: 24 * 3600000, extra: { net: 10 * 3600000, median: 30 * 3600000, count: 4, slaRate: 0.5 } }, { formatDuration: fd });
+    expect(a.headline).toBe('48h');
+    expect(a.change).toMatchObject({ pct: 100, dir: 'up', tone: 'bad' });
+    expect(a.details.join(' ')).toContain('50%');
+    const g = formatAnswer({ metric: 'sales_total', period: 'this_month', groupBy: 'warehouse' }, { value: 300, groups: [{ name: 'فرع 1', value: 200, count: 2 }, { name: 'الرئيسي', value: 100, count: 1 }] });
+    expect(g.list.map((x) => x.name)).toEqual(['فرع 1', 'الرئيسي']);
+    expect(g.headline).toContain('300');
+    const t = formatAnswer({ metric: 'top_faults', period: 'this_month' }, { top: [{ name: 'باور', n: 4 }], uncoded: 2 });
+    expect(t.list[0].right).toBe('4 تذكرة');
+  });
+
+  it('sanitize groupBy only for groupable metrics', () => {
+    expect(sanitizeIntent({ metric: 'top_faults', period: 'today', warehouseId: 'b1', groupBy: 'warehouse', compare: false }, WH)).toMatchObject({ groupBy: 'none', warehouseId: 'b1' });
+    expect(sanitizeIntent({ metric: 'expenses_total', period: 'today', warehouseId: 'b1', groupBy: 'warehouse', compare: false }, WH)).toMatchObject({ groupBy: 'warehouse', warehouseId: 'all' });
+  });
+});

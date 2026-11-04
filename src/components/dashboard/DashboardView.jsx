@@ -14,7 +14,9 @@ import { AdvancedCharts } from '../common/AdvancedCharts';
 import { LiveBadge } from '../common/LiveBadge';
 import { AnimatedNumber } from '../common/AnimatedNumber';
 import { ActionCenter } from '../ai/ActionCenter';
+import { MorningBrief } from '../ai/MorningBrief';
 import { buildActionItems } from '../../ai/actionCenter';
+import { analyzePool, expectedByType, riskOf } from '../../ai/ticketPredict';
 import { LoadingSkeleton } from '../common/LoadingSkeleton';
 import { TICKET_STATUSES, TICKET_TERMINAL_STATUSES } from '../../constants/tickets';
 import { useLiveSources } from '../../hooks/useLiveSources';
@@ -129,14 +131,24 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
     [transfers, warehouses]);
   const returnStats = useMemo(() => buildReturnsStats(returns), [returns]);
 
+  // ⚠️ الإنذار المبكر: المدة المعتادة لكل نوع جهاز من التذاكر اللي خلصت آخر 34 يوم
+  const atRisk = useMemo(() => {
+    const expected = expectedByType(analyzePool(tickets));
+    return tickets
+      .map((t) => ({ ticket: t, risk: riskOf(t, { expectedMs: expected(t), slaHours: systemSettings?.ticketSLA }) }))
+      .filter((x) => x.risk?.level === 'high')
+      .sort((a, b) => b.risk.score - a.risk.score);
+  }, [tickets, systemSettings]);
+
   // ✅ مركز المهام: من نفس البيانات اللحظية (مفيش قراءات زيادة)
   const actionItems = useMemo(() => {
     const has = (p) => appUser?.role === 'admin' || appUser?.permissions?.[p] === true;
     return buildActionItems({
       tickets, transfers, returns, transactions: txs, lowStock: inv.lowStock,
       isOverdue: (t) => getTicketSLAInfo(t, systemSettings?.ticketSLA)?.level === 'overdue',
+      atRisk,
     }, { tickets: has('manageTickets'), transfers: has('viewTransfers'), returns: has('viewReturns'), invoices: has('viewInvoices'), lowStock: has('viewLowStock') });
-  }, [tickets, transfers, returns, txs, inv, systemSettings, appUser]);
+  }, [tickets, transfers, returns, txs, inv, systemSettings, appUser, atRisk]);
 
   const stats = {
     totalItems: inv.totalQty,
@@ -244,6 +256,10 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
         </div>
       )}
 
+      {(appUser?.role === 'admin' || appUser?.permissions?.manageTickets) && (
+        <MorningBrief tickets={tickets} transactions={txs} atRiskCount={atRisk.length}
+          overdueCount={actionItems.find((i) => i.id === 'overdue')?.count || 0} systemSettings={systemSettings} userName={appUser?.name} />
+      )}
       <ActionCenter items={actionItems} loading={loading} />
 
       {/* 🎛️ من هنا لتحت: كل قسم عبارة عن "widget" مستقل - بيتفلتر ويترتب حسب

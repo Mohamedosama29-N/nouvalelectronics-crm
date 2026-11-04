@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   collection, addDoc, getDocs, getDoc, setDoc, doc, updateDoc, query, where, serverTimestamp, orderBy, onSnapshot, increment, limit, runTransaction
 } from 'firebase/firestore';
@@ -86,7 +86,6 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
   const [rejectingReq, setRejectingReq] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [selectedWarehouse, setSelectedWarehouse] = useState('all');
-  const [filteredTransfers, setFilteredTransfers] = useState([]);
   const [transferNotes, setTransferNotes] = useState('');
   const [priority, setPriority] = useState('normal');
   const [transferLog, setTransferLog] = useState([]);
@@ -143,19 +142,13 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
     return () => { unsub(); invUnsub(); sourceInvUnsub(); };
   }, [appUser, currentWarehouseId, isMainWarehouse]);
 
-  useEffect(() => {
-    // 🆕 دمج طلبات المستخدم الشخصية مع الطلبات الواردة له كمصدر (لو فرع
-    // عادي)، بدون تكرار
+  // 🆕 دمج طلبات المستخدم الشخصية مع الطلبات الواردة له كمصدر (لو فرع
+  // عادي)، بدون تكرار — قيمة محسوبة بدل state (مفيش render زيادة)
+  const filteredTransfers = useMemo(() => {
     const allTransfers = [...transfers]
       .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-
-    if (selectedWarehouse === 'all') {
-      setFilteredTransfers(allTransfers);
-    } else {
-      setFilteredTransfers(allTransfers.filter(t => 
-        t.toWarehouseId === selectedWarehouse || t.fromWarehouseId === selectedWarehouse
-      ));
-    }
+    if (selectedWarehouse === 'all') return allTransfers;
+    return allTransfers.filter(t => t.toWarehouseId === selectedWarehouse || t.fromWarehouseId === selectedWarehouse);
   }, [transfers, selectedWarehouse]);
 
   // 🆕 مصدر البحث يختلف حسب دور المستخدم:

@@ -128,7 +128,11 @@ export function FinanceManager({ appUser, systemSettings }) {
   }, [range, appUser]);
 
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     loadFinanceData();
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [loadFinanceData]);
 
   const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);

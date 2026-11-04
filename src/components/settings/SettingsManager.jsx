@@ -32,6 +32,7 @@ import { ProductModelManager } from './ProductModelManager';
 import { AISettingsCard } from '../ai/AISettingsCard';
 import { ALL_PERMISSIONS } from '../../constants/roles';
 import { db } from '../../firebase/config';
+import { recordAudit } from '../../utils/audit';
 import { showConfirm, showError, showSuccess } from '../../utils/alerts';
 import { generateAPIKey } from '../../utils/apiKeys';
 import { getAllDocs } from '../../utils/backup';
@@ -187,6 +188,7 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
     setGlobalLoading(true);
     try {
       await setDoc(doc(db, 'settings', 'general'), settings, { merge: true });
+      recordAudit({ coll: 'settings', docId: 'general', label: 'تعديل الإعدادات العامة', before: systemSettings, patch: settings, user: appUser });
       setSettings(settings);
       showSuccess("✅ تم حفظ الإعدادات بنجاح");
     } catch (error) {
@@ -371,7 +373,8 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
             
             {settings.maintenanceCenters && settings.maintenanceCenters.length > 0 ? (
               settings.maintenanceCenters.map((center, idx) => (
-                <div key={idx} className="flex gap-3 mb-3">
+                <div key={idx} className="mb-4 p-3 rounded-xl border border-slate-100 dark:border-slate-700">
+                <div className="flex gap-3 mb-2">
                   <input 
                     className="flex-1 border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-white dark:bg-slate-900 focus:border-teal-500 outline-none transition-colors"
                     placeholder="اسم مركز الصيانة"
@@ -395,6 +398,31 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                   >
                     <Trash2 size={18}/>
                   </button>
+                </div>
+                {/* 🆕 التوزيع الأوتوماتيك والمستحقات */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-500">
+                  {[
+                    ['governorates', 'المحافظات اللي بيغطيها (افصل بفاصلة)', 'الجيزة، 6 أكتوبر'],
+                    ['devices', 'الأجهزة اللي بيصلّحها (فاضي = كله)', 'شاشة، غسالة'],
+                    ['capacity', 'أقصى عدد تذاكر مفتوحة', '20'],
+                    ['rate', 'مستحقه عن كل إصلاح ضمان (ج)', '150'],
+                  ].map(([key, label, ph]) => (
+                    <label key={key} className="flex flex-col gap-1">{label}
+                      <input
+                        className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm bg-white dark:bg-slate-900 focus:border-teal-500 outline-none"
+                        placeholder={ph}
+                        type={key === 'capacity' || key === 'rate' ? 'number' : 'text'}
+                        value={Array.isArray(center?.[key]) ? center[key].join('، ') : (center?.[key] ?? '')}
+                        onChange={e => {
+                          const newCenters = [...(settings.maintenanceCenters || [])];
+                          const base = typeof center === 'string' ? { name: center, value: center } : center;
+                          newCenters[idx] = { ...base, [key]: key === 'capacity' || key === 'rate' ? Number(e.target.value) || 0 : e.target.value };
+                          setLocalSettings({...settings, maintenanceCenters: newCenters});
+                        }}
+                      />
+                    </label>
+                  ))}
+                </div>
                 </div>
               ))
             ) : (
@@ -444,6 +472,15 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                   value={settings.storeName || ''}
                   onChange={e => setLocalSettings({...settings, storeName: e.target.value})}
                   placeholder="مثال: نوڤال للإلكترونيات"
+                />
+              </div>
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <label className="block text-xs font-bold text-teal-600 dark:text-teal-400 mb-2">رقم خدمة العملاء (بيظهر في الإيصال وصفحة التتبع)</label>
+                <input dir="ltr"
+                  className="w-full border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl font-bold outline-none focus:border-teal-500 transition-all bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800"
+                  value={settings.storePhone || ''}
+                  onChange={e => setLocalSettings({...settings, storePhone: e.target.value})}
+                  placeholder="مثال: 19xxx أو 010xxxxxxxx"
                 />
               </div>
               <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -658,6 +695,21 @@ export function SettingsManager({ systemSettings, setSettings, notify, setGlobal
                 value={settings.autoLogoutMinutes ?? 30}
                 onChange={e => setLocalSettings({...settings, autoLogoutMinutes: Number(e.target.value) || 0})}
               />
+            </div>
+
+            {/* 🕘 مواعيد الدوام (للحضور والانصراف) */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <label className="block text-xs font-bold text-teal-600 dark:text-teal-400 mb-2">مواعيد الدوام (لحساب التأخير في الحضور والانصراف)</label>
+              <div className="grid grid-cols-3 gap-3 text-[11px] text-slate-500">
+                {[['start', 'بداية الدوام', 'time', '09:00'], ['end', 'نهاية الدوام', 'time', '17:00'], ['grace', 'سماح (دقيقة)', 'number', 15]].map(([k, l, type, def]) => (
+                  <label key={k} className="flex flex-col gap-1">{l}
+                    <input type={type} disabled={appUser?.role !== 'admin'}
+                      className="border-2 border-slate-100 dark:border-slate-700 p-2 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500"
+                      value={settings.attendance?.[k] ?? def}
+                      onChange={e => setLocalSettings({ ...settings, attendance: { ...(settings.attendance || {}), [k]: type === 'number' ? Number(e.target.value) || 0 : e.target.value } })} />
+                  </label>
+                ))}
+              </div>
             </div>
 
             {/* 🤖 الذكاء الاصطناعي */}

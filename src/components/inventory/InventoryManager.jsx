@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp, orderBy, limit, writeBatch, startAfter, getCountFromServer
 } from 'firebase/firestore';
@@ -26,6 +26,8 @@ import { VirtualTable } from '../common/VirtualTable';
 import { BarcodeScannerModal } from '../common/BarcodeScannerModal';
 import { ItemMovementModal } from './ItemMovementModal';
 import { db } from '../../firebase/config';
+import { canSeeCost } from '../../utils/permissions';
+import { recordAudit } from '../../utils/audit';
 import { useDebounce } from '../../hooks/useDebounce';
 import { tagManager } from '../../utils/TagManager';
 import { logUserActivity } from '../../utils/activityLog';
@@ -50,6 +52,7 @@ export function InventoryManager({ appUser, warehouses, setGlobalLoading, wareho
     name: '', 
     quantity: 1, 
     price: 0, 
+    cost: '',
     minStock: 2, 
     warehouseId: appUser?.assignedWarehouseId || 'main',
     category: 'عام',
@@ -77,7 +80,6 @@ export function InventoryManager({ appUser, warehouses, setGlobalLoading, wareho
   const [importErrors, setImportErrors] = useState([]);
   
   const [searchFilters, setSearchFilters] = useState({});
-  const [categories, setCategories] = useState([]);
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState('');
@@ -296,18 +298,19 @@ const loadTotalCount = useCallback(async () => {
 
 
 useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
 
   setPageCursors([null]);
   loadItems(1);
   loadTotalCount();
 
+})(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
 // eslint-disable-next-line react-hooks/exhaustive-deps -- مقصود: التأثير ده بيشتغل على التغيير في القيم المذكورة بس (إضافة الباقي بتسبب إعادة تحميل/حلقات)
-}, [debouncedSearch, appUser, searchFilters, selectedTags]);
+  }, [debouncedSearch, appUser, searchFilters, selectedTags]);
 
-  useEffect(() => {
-    const uniqueCategories = [...new Set(items.map(item => item.category).filter(Boolean))];
-    setCategories(uniqueCategories);
-  }, [items]);
+  const categories = useMemo(() => [...new Set(items.map(item => item.category).filter(Boolean))], [items]);
 
   // دوال التحديد المتعدد
   const toggleSelectItem = (itemId) => {
@@ -714,6 +717,7 @@ useEffect(() => {
       name: newItem.name,
       price: priceNum,
       quantity: qtyNum,
+      ...(Number(newItem.cost) > 0 && canSeeCost(appUser) ? { cost: Number(newItem.cost), avgCost: Number(newItem.cost) } : {}),
       minStock: Number(newItem.minStock) || 2,
       category: newItem.category || 'عام',
       location: newItem.location || '',
@@ -746,6 +750,7 @@ useEffect(() => {
       name: '',
       quantity: 1,
       price: 0,
+      cost: '',
       minStock: 2,
       category: 'عام',
       location: '',
@@ -778,7 +783,7 @@ useEffect(() => {
       const originalItem = items.find(i => i.id === id);
       const priceChanged = originalItem && Number(originalItem.price) !== priceNum;
 
-      await updateDoc(doc(db, 'inventory', id), { 
+      const invPatch = { 
         name: dataToUpdate.name, 
         quantity: qtyNum, 
         price: priceNum,
@@ -787,10 +792,14 @@ useEffect(() => {
         tags: dataToUpdate.tags,
         notes: dataToUpdate.notes,
         minStock: Number(dataToUpdate.minStock),
+        // التكلفة بتتغير بس لو اتعدّلت فعلاً (عشان متمسحش متوسط التكلفة اللي اتحسب من أوامر الشراء)
+        ...(dataToUpdate.cost !== undefined && dataToUpdate.cost !== '' && canSeeCost(appUser) && Number(dataToUpdate.cost) !== Number(originalItem?.cost) ? { cost: Number(dataToUpdate.cost) || 0, avgCost: Number(dataToUpdate.cost) || 0 } : {}),
         searchKey: normalizeSearch(`${dataToUpdate.name} ${dataToUpdate.serialNumber} ${dataToUpdate.category} ${(dataToUpdate.tags || []).join(' ')}`),
         searchTokens: buildInventorySearchTokens(dataToUpdate.name, dataToUpdate.serialNumber, dataToUpdate.category, ...(dataToUpdate.tags || [])),
         updatedAt: serverTimestamp()
-      });
+      };
+      await updateDoc(doc(db, 'inventory', id), invPatch);
+      recordAudit({ coll: 'inventory', docId: id, label: `تعديل الصنف ${dataToUpdate.name} (${dataToUpdate.serialNumber})`, before: originalItem, patch: invPatch, user: appUser });
       
       await logUserActivity(appUser, 'تعديل صنف', `تعديل بيانات ${dataToUpdate.name} (S/N: ${dataToUpdate.serialNumber})`);
 
@@ -1232,6 +1241,12 @@ useEffect(() => {
                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 block">حد الطلب</span>
                    <input type="number" min="0" className="w-full border border-slate-200 dark:border-slate-700 p-2.5 rounded-lg font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900 text-center text-sm" value={editingItem.minStock} onChange={e=>setEditingItem({...editingItem, minStock: e.target.value})} />
                 </label>
+{canSeeCost(appUser) && (
+                <label className="block text-right">
+                   <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 block">سعر التكلفة (للأرباح)</span>
+                   <input type="number" min="0" step="0.01" className="w-full border border-slate-200 dark:border-slate-700 p-2.5 rounded-lg font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900 text-center text-sm" value={editingItem.cost ?? editingItem.avgCost ?? ''} onChange={e=>setEditingItem({...editingItem, cost: e.target.value})} />
+                </label>
+                )}
                 <label className="block text-right">
                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 block">التصنيف</span>
                    <input className="w-full border border-slate-200 dark:border-slate-700 p-2.5 rounded-lg font-bold outline-none focus:border-teal-500 bg-white dark:bg-slate-900 text-sm" value={editingItem.category} onChange={e=>setEditingItem({...editingItem, category: e.target.value})} />
@@ -1510,6 +1525,12 @@ useEffect(() => {
                      onChange={e=>setNewItem({...newItem, price: e.target.value})} 
                    />
                 </div>
+                {canSeeCost(appUser) && (
+                <div className="w-20">
+                   <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1 block">التكلفة</label>
+                   <input type="number" min="0" step="0.01" placeholder="اختياري" className="w-full border border-slate-200 dark:border-slate-700 p-2.5 rounded-lg outline-none text-center font-bold bg-white dark:bg-slate-900 focus:border-teal-500 text-sm" value={newItem.cost} onChange={e=>setNewItem({...newItem, cost: e.target.value})} />
+                </div>
+                )}
                 <button type="submit" id="add-item-button" className="bg-slate-900 dark:bg-teal-600 text-white px-4 rounded-lg font-bold h-[42px] mt-auto hover:bg-black dark:hover:bg-teal-700 transition-colors shadow-sm">
                   <Plus size={18}/>
                 </button>

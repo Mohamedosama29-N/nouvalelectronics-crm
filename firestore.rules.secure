@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==========================================================================
+    // 🔐 قواعد "الدخول الآمن المجاني" (VITE_AUTH_MODE=firebase) — مجانية على خطة Spark.
+    // ⚠️ متنشرهاش غير بعد ما تتبع SECURE_LOGIN.md وكل الموظفين يتربطوا.
+    // الفكرة: كل موظف عنده حساب Firebase Auth (إيميل/باسورد)، ومستند authLinks/{uid}
+    // بيربطه بمستند الموظف. أي حد مش موظف مربوط (حتى لو دخل بحساب مجهول) ميقدرش يقرا
+    // أو يكتب أي حاجة، والموظف الموقوف بيتقفل فورًا.
+    // ==========================================================================
+
+    function signedIn() { return request.auth != null && request.auth.token.get('email', '') != ''; }
+    function linkPath() { return /databases/$(database)/documents/authLinks/$(request.auth.uid); }
+    function linked() { return signedIn() && exists(linkPath()); }
+    function emp() { return get(/databases/$(database)/documents/employees/$(get(linkPath()).data.employeeId)).data; }
+    function isEmployee() { return linked() && emp().get('isDisabled', false) != true; }
+    function role() { return emp().get('role', ''); }
+    function isAdmin() { return isEmployee() && role() == 'admin'; }
+    function canManageUsers() { return isEmployee() && (isAdmin() || emp().get('permissions', {}).get('manageUsers', false) == true); }
+
+    // الربط: الموظف بيربط حسابه بنفسه أول مرة بس، والإيميل لازم يطابق إيميل مستند الموظف
+    match /authLinks/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list: if isAdmin();
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.email == request.auth.token.email
+        && get(/databases/$(database)/documents/employees/$(request.resource.data.employeeId)).data.email == request.auth.token.email;
+      allow delete: if isAdmin();
+    }
+
+    // الموظفين: الموظف قبل الربط يقدر يدوّر على مستنده هو بس (بالإيميل)
+    match /employees/{userId} {
+      allow list: if isEmployee() || (signedIn() && resource.data.email == request.auth.token.email);
+      allow get: if isEmployee() || (signedIn() && resource.data.email == request.auth.token.email);
+      allow create, delete: if canManageUsers() && (isAdmin() || request.resource.data.get('role', '') != 'admin');
+      allow update: if isAdmin()
+        || (canManageUsers() && request.resource.data.get('role', '') != 'admin' && resource.data.get('role', '') != 'admin')
+        || (signedIn() && resource.data.email == request.auth.token.email
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'permissions', 'limits', 'isDisabled', 'assignedWarehouseId', 'email']));
+    }
+
+    match /api_keys/{id} { allow read, write: if isAdmin(); }
+    match /login_history/{id} {
+      allow create: if isEmployee();
+      allow read: if isAdmin() || canManageUsers();
+      allow update, delete: if false;
+    }
+    // سجل التعديلات: أي موظف يضيف، ومحدش يمسح، والتعديل (علامة "اترجع") للأدمن
+    match /auditTrail/{id} {
+      allow create, read: if isEmployee();
+      allow update: if isAdmin() || (isEmployee() && emp().get('permissions', {}).get('revertChanges', false) == true);
+      allow delete: if false;
+    }
+    match /einvoices/{id} { allow read: if isEmployee(); allow write: if false; }
+
+    // صفحة "تابع تذكرتك": أي حد معاه التوكن يقرا مستند واحد بس
+    match /ticketTracking/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if isEmployee();
+    }
+
+    match /{document=**} {
+      allow read, write: if isEmployee();
+    }
+  }
+}

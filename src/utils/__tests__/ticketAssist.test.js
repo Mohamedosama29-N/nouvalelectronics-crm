@@ -46,3 +46,25 @@ describe('ticketAssist', () => {
     expect(s).toContain('بورد ×2');
   });
 });
+
+import { suggestReply, detectCustomerIntent } from '../../ai/customerReply';
+describe('customer reply', () => {
+  it('detects intents', () => {
+    expect(detectCustomerIntent('الجهاز خلص ولا لسه؟')).toEqual(['status']);
+    expect(detectCustomerIntent('بقالي أسبوعين ومحدش بيرد وعايز اعرف بكام')).toEqual(expect.arrayContaining(['complaint', 'price']));
+  });
+  it('builds reply with status, apology, cost and link; first name only', () => {
+    const r = suggestReply({ customerName: 'محمد أسامة', ticketNumber: 'TKT-1', device: 'شاشة', status: 'contacted_customer', totalCost: 800, totalPaid: 300 },
+      'اتأخرتوا كده ليه؟', { trackUrl: 'https://x/?track=abc', company: 'نوڤال' });
+    expect(r.text).toContain('بنعتذر');
+    expect(r.text).toContain('جاهز للاستلام');
+    expect(r.text).toContain('500');
+    expect(r.text).toContain('?track=abc');
+    expect(r.text).not.toContain('أسامة');
+  });
+  it('waiting parts and expected duration', () => {
+    const r = suggestReply({ ticketNumber: 'T', device: 'غسالة', status: 'waiting_spare_parts' }, 'امتى يخلص', { expectedLabel: '2 يوم – 4 يوم' });
+    expect(r.text).toContain('قطعة الغيار');
+    expect(r.text).toContain('2 يوم – 4 يوم');
+  });
+});

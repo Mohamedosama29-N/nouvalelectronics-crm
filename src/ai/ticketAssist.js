@@ -21,8 +21,8 @@ export const tokenize = (s) => normalizeArabic(s)
 
 export const ticketText = (t) => [t.device, t.deviceModel, t.productCode, t.issue, t.mainFaultDescription, t.subFaultDescription].filter(Boolean).join(' ');
 
-// بيرجّع أقرب التذاكر للتذكرة/الوصف ده (من غير التذكرة نفسها)
-export function findSimilarTickets(target, pool, { limit = 5, minScore = 0.12 } = {}) {
+// ترتيب التذاكر حسب التشابه (TF-IDF + جيب التمام + أولوية لنفس كود المنتج/الموديل)
+export function rankSimilar(target, pool, { minScore = 0.12 } = {}) {
   const docs = (pool || []).filter((t) => t && t.id !== target.id);
   if (!docs.length) return [];
   const tokenLists = docs.map((t) => tokenize(ticketText(t)));
@@ -52,19 +52,22 @@ export function findSimilarTickets(target, pool, { limit = 5, minScore = 0.12 } 
     return { ticket: t, score };
   })
     .filter((x) => x.score >= minScore)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map(({ ticket: t, score }) => ({
-      id: t.id,
-      ticketNumber: t.ticketNumber,
-      device: [t.device, t.deviceModel].filter(Boolean).join(' '),
-      issue: t.issue || '',
-      fault: [t.mainFaultDescription, t.subFaultDescription].filter(Boolean).join(' — '),
-      parts: (t.spareParts || []).map((p) => p.name).filter(Boolean),
-      status: t.status,
-      solved: TICKET_TERMINAL_STATUSES.includes(t.status) && t.status !== 'rejected_by_customer',
-      score: Math.min(1, score),
-    }));
+    .sort((a, b) => b.score - a.score);
+}
+
+// بيرجّع أقرب التذاكر للتذكرة/الوصف ده (من غير التذكرة نفسها ومن غير بيانات العميل)
+export function findSimilarTickets(target, pool, { limit = 5, minScore = 0.12 } = {}) {
+  return rankSimilar(target, pool, { minScore }).slice(0, limit).map(({ ticket: t, score }) => ({
+    id: t.id,
+    ticketNumber: t.ticketNumber,
+    device: [t.device, t.deviceModel].filter(Boolean).join(' '),
+    issue: t.issue || '',
+    fault: [t.mainFaultDescription, t.subFaultDescription].filter(Boolean).join(' — '),
+    parts: (t.spareParts || []).map((p) => p.name).filter(Boolean),
+    status: t.status,
+    solved: TICKET_TERMINAL_STATUSES.includes(t.status) && t.status !== 'rejected_by_customer',
+    score: Math.min(1, score),
+  }));
 }
 
 export function summarizeMatches(matches) {

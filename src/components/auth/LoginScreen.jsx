@@ -22,10 +22,12 @@ import { apiLimiter } from '../../utils/rateLimiter';
 import { hashPassword, verifyPassword } from '../../utils/security';
 import { saveUserToStorage } from '../../utils/userStorage';
 import { requestPasswordReset } from '../../utils/passwordReset';
-import { loginWithServer, shouldUseLegacyFallback } from '../../utils/authSession';
+import { endSession, loginWithServer, shouldUseLegacyFallback } from '../../utils/authSession';
+import { AUTH_MODE, USE_LOGIN_FUNCTION, authErrorMessage, firebaseEmailLogin, migrateAfterLegacyLogin, sendResetLink } from '../../utils/secureAuth';
+import { workHoursCheck } from '../../utils/permissions';
 
 export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, onRetry, isConnecting, firebaseError }) {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => { try { return localStorage.getItem('last_email') || ''; } catch { return ''; } });
   const [pass, setPass] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -44,7 +46,9 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
     if (!resetEmail.trim()) return;
     setResetLoading(true);
     try {
-      await requestPasswordReset(resetEmail, {
+      // في الدخول الآمن Firebase نفسه بيبعت رابط تغيير الباسورد (مجاني)
+      if (AUTH_MODE === 'firebase') await sendResetLink(resetEmail).catch(() => {});
+      else await requestPasswordReset(resetEmail, {
         emailWebhookUrl: systemSettings?.emailWebhookUrl,
       });
       // بنعرض نفس الرسالة سواء الإيميل موجود أو لأ (أمان: منمنعش حد يكتشف
@@ -84,6 +88,8 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
 
   // تحديث حالة القفل بناءً على البريد الحالي (يعمل عند تحميل الشاشة وعند تغيير البريد)
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     const state = readLockState(email);
     const remaining = (state.lockedUntil || 0) - Date.now();
     if (remaining > 0) {
@@ -95,6 +101,8 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
       setLockRemainingMs(0);
       setLoginAttempts(state.attempts || 0);
     }
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- مقصود: التأثير ده بيشتغل على التغيير في القيم المذكورة بس (إضافة الباقي بتسبب إعادة تحميل/حلقات)
   }, [email]);
 
@@ -117,13 +125,6 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
   // eslint-disable-next-line react-hooks/exhaustive-deps -- مقصود: التأثير ده بيشتغل على التغيير في القيم المذكورة بس (إضافة الباقي بتسبب إعادة تحميل/حلقات)
   }, [isLocked, email]);
 
-  // تحميل البريد الإلكتروني المحفوظ
-  useEffect(() => {
-    const savedEmail = localStorage.getItem('last_email');
-    if (savedEmail) {
-      setEmail(savedEmail);
-    }
-  }, []);
 
   const registerFailedAttempt = (em) => {
     const state = readLockState(em);
@@ -171,37 +172,68 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
     
     setLoading(true);
 
-    // 🆕 الدخول الحقيقي: السيرفر (Cloud Function) بيتحقق من الباسورد ويعمل
-    // الجلسة. الدخول القديم تحت بيشتغل بس لو الدالة مش منشورة (فترة الانتقال).
-    try {
-      const userWithId = await loginWithServer(email.trim().toLowerCase(), pass);
-      clearLockState(email);
-      if (rememberMe) localStorage.setItem('last_email', email);
-      await logUserLogin(userWithId);
-      saveUserToStorage(userWithId);
-      onLoginSuccess(userWithId);
-      showSuccess(`أهلاً بك مجدداً يا ${userWithId.name}`);
-      await logUserActivity(userWithId, 'تسجيل دخول', 'قام بتسجيل الدخول إلى النظام');
+    // 🔐 (54) الدخول الآمن (Firebase Auth) — بيشتغل بس لو VITE_AUTH_MODE=firebase
+    if (AUTH_MODE === 'firebase') {
+      try {
+        const u = await firebaseEmailLogin(email, pass);
+        const wh = workHoursCheck(u);
+        if (!wh.ok) {
+          await endSession();
+          const m = `مسموح لك تدخل من ${wh.from} لـ ${wh.to} بس.`;
+          setError(m); showError(m); setLoading(false); return;
+        }
+        clearLockState(email);
+        if (rememberMe) localStorage.setItem('last_email', email);
+        await logUserLogin(u);
+        saveUserToStorage(u);
+        onLoginSuccess(u);
+        showSuccess(`أهلاً بك مجدداً يا ${u.name}`);
+        await logUserActivity(u, 'تسجيل دخول', 'قام بتسجيل الدخول إلى النظام (دخول آمن)');
+      } catch (e) {
+        if (['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found'].includes(e?.code)) registerFailedAttempt(email);
+        const m = authErrorMessage(e);
+        setError(m); showError(m);
+      }
       setLoading(false);
       return;
-    } catch (serverErr) {
-      if (!shouldUseLegacyFallback(serverErr)) {
-        const code = serverErr?.code || '';
-        let msg = serverErr?.message || 'فشل تسجيل الدخول';
-        if (code === 'functions/unauthenticated') {
-          registerFailedAttempt(email);
-          msg = 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
-        } else if (code === 'functions/resource-exhausted' || code === 'functions/permission-denied' || code === 'functions/failed-precondition') {
-          // الرسالة جاية جاهزة من السيرفر (قفل / حساب موقوف / إيميل مكرر)
-        } else if (code === 'functions/unavailable' || code === 'functions/not-found' || code === 'functions/internal') {
-          msg = 'خدمة تسجيل الدخول غير متاحة حاليًا. حاول مرة أخرى بعد قليل.';
-        }
-        setError(msg);
-        showError(msg);
+    }
+
+    // دخول عن طريق Cloud Function (محتاج خطة Blaze) — مقفول إلا لو VITE_USE_LOGIN_FUNCTION=true
+    if (USE_LOGIN_FUNCTION) {
+      // 🆕 الدخول الحقيقي: السيرفر (Cloud Function) بيتحقق من الباسورد ويعمل
+      // الجلسة. الدخول القديم تحت بيشتغل بس لو الدالة مش منشورة (فترة الانتقال).
+      try {
+        const userWithId = await loginWithServer(email.trim().toLowerCase(), pass);
+        clearLockState(email);
+        if (rememberMe) localStorage.setItem('last_email', email);
+        await logUserLogin(userWithId);
+        saveUserToStorage(userWithId);
+        onLoginSuccess(userWithId);
+        showSuccess(`أهلاً بك مجدداً يا ${userWithId.name}`);
+        await logUserActivity(userWithId, 'تسجيل دخول', 'قام بتسجيل الدخول إلى النظام');
         setLoading(false);
         return;
+      } catch (serverErr) {
+        if (!shouldUseLegacyFallback(serverErr)) {
+          const code = serverErr?.code || '';
+          let msg = serverErr?.message || 'فشل تسجيل الدخول';
+          if (code === 'functions/unauthenticated') {
+            registerFailedAttempt(email);
+            msg = 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+          } else if (code === 'functions/resource-exhausted' || code === 'functions/permission-denied' || code === 'functions/failed-precondition') {
+            // الرسالة جاية جاهزة من السيرفر (قفل / حساب موقوف / إيميل مكرر)
+          } else if (code === 'functions/unavailable' || code === 'functions/not-found' || code === 'functions/internal') {
+            msg = 'خدمة تسجيل الدخول غير متاحة حاليًا. حاول مرة أخرى بعد قليل.';
+          }
+          setError(msg);
+          showError(msg);
+          setLoading(false);
+          return;
+        }
+        console.warn('customLogin غير متاحة - استخدام الدخول القديم مؤقتًا:', serverErr?.code);
       }
-      console.warn('customLogin غير متاحة - استخدام الدخول القديم مؤقتًا:', serverErr?.code);
+
+
     }
 
     try {
@@ -254,6 +286,14 @@ export function LoginScreen({ fbReady, onLoginSuccess, systemSettings, notify, o
            }
            
            const userWithId = { id: userDoc.id, ...userData, permissions: userData.permissions || {} };
+           // 🔑 مواعيد الدخول المسموحة
+           const wh = workHoursCheck(userWithId);
+           if (!wh.ok) {
+             const m = `مسموح لك تدخل من ${wh.from} لـ ${wh.to} بس.`;
+             setError(m); showError(m); setLoading(false); return;
+           }
+           // 🔐 ترحيل هادي لحساب Firebase Auth (لو VITE_AUTH_MODE=migrate) — مش بيأخّر الدخول
+           migrateAfterLegacyLogin(email, pass, userDoc).catch(() => {});
            
            await logUserLogin(userWithId);
            

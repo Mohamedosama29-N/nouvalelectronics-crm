@@ -1,15 +1,13 @@
-import React, { useState, useEffect, useContext } from 'react';
-
-const ThemeContext = React.createContext();
+import React, { useState, useEffect } from 'react';
+import { ThemeContext } from '../../hooks/useTheme';
 
 export function ThemeProvider({ children }) {
   const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('darkMode');
-    return saved ? JSON.parse(saved) : false;
+    try { const saved = localStorage.getItem('darkMode'); return saved ? JSON.parse(saved) : false; } catch { return false; }
   });
 
   useEffect(() => {
-    localStorage.setItem('darkMode', JSON.stringify(darkMode));
+    try { localStorage.setItem('darkMode', JSON.stringify(darkMode)); } catch { /* التخزين مش متاح */ }
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -26,13 +24,6 @@ export function ThemeProvider({ children }) {
   );
 }
 
-export const useTheme = () => {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error('useTheme must be used within ThemeProvider');
-  }
-  return context;
-};
 
 // ==========================================================================
 // 👤 عرض ملف الموظف

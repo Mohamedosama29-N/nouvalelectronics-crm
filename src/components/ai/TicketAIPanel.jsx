@@ -1,20 +1,12 @@
 import React, { useState } from 'react';
-import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
 import { Sparkles, Search, MessageCircle, FileText, Copy, ExternalLink, Loader2, Wand2, ChevronDown } from 'lucide-react';
-import { db } from '../../firebase/config';
+import { loadRecentTickets } from '../../ai/ticketPool';
 import { findSimilarTickets, summarizeMatches, templateMessage, whatsappLink, localTicketSummary, statusLabel } from '../../ai/ticketAssist';
 import { isAIFeatureOn, friendlyAIError } from '../../ai/aiClient';
 import { suggestDiagnosis, polishCustomerMessage, summarizeTicketAI } from '../../ai/aiServices';
 import { showError, showSuccess } from '../../utils/alerts';
 
-// كاش للتذاكر الحديثة (لمقارنة التشابه) — بيتحمّل مرة كل 10 دقايق بس عند الطلب
-let poolCache = { at: 0, list: [] };
-const loadPool = async () => {
-  if (Date.now() - poolCache.at < 10 * 60 * 1000 && poolCache.list.length) return poolCache.list;
-  const snap = await getDocs(query(collection(db, 'tickets'), orderBy('updatedAt', 'desc'), limit(400)));
-  poolCache = { at: Date.now(), list: snap.docs.map((d) => ({ id: d.id, ...d.data() })) };
-  return poolCache.list;
-};
+const loadPool = () => loadRecentTickets(800);
 
 const Tab = ({ active, onClick, icon, children }) => (
   <button type="button" onClick={onClick}

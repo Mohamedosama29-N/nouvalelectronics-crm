@@ -17,6 +17,8 @@ export function EmployeeProfileView({ userToView, warehouseMap }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     if (!userToView) return;
     setLoading(true);
     
@@ -54,6 +56,8 @@ export function EmployeeProfileView({ userToView, warehouseMap }) {
     });
 
     return () => unsub();
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [userToView]);
 
   if (!userToView) return null;

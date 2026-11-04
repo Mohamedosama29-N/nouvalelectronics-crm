@@ -1,15 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Sparkles, X, Send, Loader2, TrendingUp, TrendingDown, Minus, Cpu } from 'lucide-react';
-import { understandQuestion } from '../../ai/aiServices';
+import { Sparkles, X, Send, Loader2, TrendingUp, TrendingDown, Minus, Cpu, Lightbulb, RotateCcw } from 'lucide-react';
+import { understandQuestion, explainAnswer } from '../../ai/aiServices';
 import { executeIntent, friendlyQueryError } from '../../ai/askExecutor';
 import { formatAnswer, METRICS, PERIODS, SUGGESTED_QUESTIONS } from '../../ai/askIntent';
-import { isAIFeatureOn } from '../../ai/aiClient';
+import { isAIFeatureOn, friendlyAIError } from '../../ai/aiClient';
+import { formatDuration } from '../../ai/repairTime';
 import { onAsk } from '../../utils/appEvents';
 
 const Change = ({ c }) => {
   if (!c) return null;
   const Icon = c.dir === 'up' ? TrendingUp : c.dir === 'down' ? TrendingDown : Minus;
-  const cls = c.dir === 'up' ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30' : c.dir === 'down' ? 'text-rose-600 bg-rose-50 dark:bg-rose-900/30' : 'text-slate-500 bg-slate-100 dark:bg-slate-800';
+  const tone = c.tone || (c.dir === 'up' ? 'good' : c.dir === 'down' ? 'bad' : 'neutral');
+  const cls = tone === 'good' ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30' : tone === 'bad' ? 'text-rose-600 bg-rose-50 dark:bg-rose-900/30' : 'text-slate-500 bg-slate-100 dark:bg-slate-800';
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold ${cls}`}>
       <Icon size={13} /> {c.pct === null ? 'مفيش أساس للمقارنة' : `${c.pct > 0 ? '+' : ''}${c.pct}%`} <span className="font-normal opacity-80">(قبلها: {c.previous})</span>
@@ -17,7 +19,7 @@ const Change = ({ c }) => {
   );
 };
 
-function AnswerCard({ item }) {
+function AnswerCard({ item, onExplain }) {
   if (item.error) {
     return <div className="anim-pop rounded-2xl p-3 bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 text-sm">{item.error}</div>;
   }
@@ -27,7 +29,7 @@ function AnswerCard({ item }) {
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{a.title}</p>
         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${item.intent.source === 'ai' ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}`}>
-          <Cpu size={10} /> {item.intent.source === 'ai' ? 'فهم Gemini' : 'فهم محلي'}
+          <Cpu size={10} /> {item.intent.source === 'ai' ? 'فهم Gemini' : item.intent.source === 'followup' ? 'متابعة للسؤال اللي فات' : 'فهم محلي'}
         </span>
       </div>
       {a.list ? (
@@ -39,7 +41,7 @@ function AnswerCard({ item }) {
                 <span className="w-6 h-6 shrink-0 rounded-full bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 text-xs font-black flex items-center justify-center">{p.rank}</span>
                 <span className="font-bold text-slate-800 dark:text-white truncate">{p.name}</span>
               </span>
-              <span className="text-xs text-slate-500 shrink-0">{p.qty.toLocaleString()} قطعة · <b className="text-teal-700 dark:text-teal-300">{Math.round(p.revenue).toLocaleString()} ج</b></span>
+              <span className="text-xs font-bold text-teal-700 dark:text-teal-300 shrink-0">{p.right}</span>
             </li>
           ))}
         </ol>
@@ -52,6 +54,13 @@ function AnswerCard({ item }) {
         {a.scope}{a.range ? ` · ${a.range}` : ''}{item.intent.scoped ? ' · (حسب صلاحياتك على مخزنك)' : ''} — الرقم محسوب مباشرة من قاعدة البيانات
       </p>
       {item.note && <p className="text-[10px] text-amber-600">{item.note}</p>}
+      {item.explanation && <div className="anim-fade whitespace-pre-wrap text-xs leading-6 text-slate-700 dark:text-slate-200 bg-violet-50 dark:bg-violet-950/40 rounded-xl p-3">{item.explanation}</div>}
+      {onExplain && !item.explanation && (
+        <button type="button" onClick={() => onExplain(item)} disabled={item.explaining}
+          className="flex items-center gap-1.5 text-[11px] font-bold text-violet-700 dark:text-violet-300 hover:underline disabled:opacity-50">
+          {item.explaining ? <Loader2 size={12} className="animate-spin" /> : <Lightbulb size={12} />} اشرحلي واقترح أعمل إيه
+        </button>
+      )}
     </div>
   );
 }
@@ -64,6 +73,8 @@ export function AskAssistant({ appUser, warehouses = [], systemSettings, hideLau
   const endRef = useRef(null);
   const inputRef = useRef(null);
   const idRef = useRef(0);
+  const itemsRef = useRef([]);
+  useEffect(() => { itemsRef.current = items; }, [items]);
   const aiOn = isAIFeatureOn(systemSettings, 'ask');
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [items, busy]);
@@ -88,19 +99,30 @@ export function AskAssistant({ appUser, warehouses = [], systemSettings, hideLau
     idRef.current += 1;
     const id = idRef.current;
     try {
-      const { intent, note } = await understandQuestion(question, { systemSettings, user: appUser, warehouses: whList });
+      const previous = [...itemsRef.current].reverse().find((x) => x.intent)?.intent || null;
+      const { intent, note } = await understandQuestion(question, { systemSettings, user: appUser, warehouses: whList, previous });
       if (!intent || intent.metric === 'unsupported') {
         setItems((p) => [...p, { id, question, error: `مش قادر أجاوب على ده لسه. أقدر أجاوب عن: ${Object.values(METRICS).join('، ')}.` }]);
         return;
       }
       try {
-        const result = await executeIntent(intent);
-        setItems((p) => [...p, { id, question, intent, note, answer: formatAnswer(intent, result, { warehouseName: whName(intent.warehouseId) }) }]);
+        const result = await executeIntent(intent, new Date(), { slaHours: systemSettings?.ticketSLA, warehouses: whList });
+        setItems((p) => [...p, { id, question, intent, note, answer: formatAnswer(intent, result, { warehouseName: whName(intent.warehouseId), formatDuration }) }]);
       } catch (e) {
         console.error(e);
         setItems((p) => [...p, { id, question, error: friendlyQueryError(e) }]);
       }
     } finally { setBusy(false); }
+  };
+
+  const explain = async (item) => {
+    setItems((p) => p.map((x) => (x.id === item.id ? { ...x, explaining: true } : x)));
+    try {
+      const text = await explainAnswer(systemSettings, item.intent, item.answer);
+      setItems((p) => p.map((x) => (x.id === item.id ? { ...x, explaining: false, explanation: text } : x)));
+    } catch (e) {
+      setItems((p) => p.map((x) => (x.id === item.id ? { ...x, explaining: false, explanation: `⚠️ ${friendlyAIError(e)}` } : x)));
+    }
   };
 
   // سؤال جاي من البحث السريع (Ctrl+K)
@@ -134,7 +156,10 @@ export function AskAssistant({ appUser, warehouses = [], systemSettings, hideLau
               <p className="font-black flex items-center gap-2"><Sparkles size={16} /> اسأل السيستم</p>
               <p className="text-[11px] text-white/80">{aiOn ? 'Gemini بيفهم السؤال، والأرقام من بياناتك' : 'فهم محلي مجاني — فعّل Gemini من الإعدادات لفهم أدق'}</p>
             </div>
-            <button type="button" aria-label="إغلاق" onClick={() => setOpen(false)} className="p-1.5 rounded-lg hover:bg-white/20"><X size={18} /></button>
+            <div className="flex items-center gap-1">
+              {items.length > 0 && <button type="button" aria-label="محادثة جديدة" title="محادثة جديدة" onClick={() => setItems([])} className="p-1.5 rounded-lg hover:bg-white/20"><RotateCcw size={16} /></button>}
+              <button type="button" aria-label="إغلاق" onClick={() => setOpen(false)} className="p-1.5 rounded-lg hover:bg-white/20"><X size={18} /></button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3">
@@ -153,7 +178,7 @@ export function AskAssistant({ appUser, warehouses = [], systemSettings, hideLau
             {items.map((it) => (
               <div key={it.id} className="space-y-2">
                 <div className="flex justify-start"><p className="anim-fade max-w-[85%] px-3 py-2 rounded-2xl rounded-tr-sm bg-teal-600 text-white text-sm">{it.question}</p></div>
-                <AnswerCard item={it} />
+                <AnswerCard item={it} onExplain={aiOn && it.answer ? explain : null} />
               </div>
             ))}
             {busy && (

@@ -1,7 +1,11 @@
 import { writeObjectsToXlsx } from './xlsxIO';
+import { exportAllowed } from './permissions';
+import { showError } from './alerts';
+
+const blocked = () => { if (exportAllowed()) return false; showError('مش مسموح لك بتصدير البيانات. كلّم مدير النظام.'); return true; };
 
 export const exportToCSV = (data, filename) => {
-  if (!data || !data.length) return false;
+  if (!data || !data.length || blocked()) return false;
   try {
     const headers = Object.keys(data[0]);
     const csvContent = [
@@ -33,7 +37,7 @@ export const exportToCSV = (data, filename) => {
 // ✨ ميزة جديدة: تصدير Excel حقيقي (.xlsx) بدل CSV بس، باستخدام SheetJS
 
 export const exportToExcel = (data, filename, sheetName = 'Sheet1') => {
-  if (!data || !data.length) return false;
+  if (!data || !data.length || blocked()) return false;
   try {
     // async في الخلفية: الدالة بتفضل ترجّع true فورًا زي الأول، والخطأ بيتسجل في الكونسول
     writeObjectsToXlsx(data, filename, sheetName).catch((error) => console.error('Excel export error:', error));

@@ -73,6 +73,12 @@ export const ALL_PERMISSIONS = [
   { key: 'changeTicketStatus', label: 'تغيير حالة التذكرة', category: 'صيانة' },
   { key: 'assignTechnician', label: 'تعيين فني', category: 'صيانة' },
   { key: 'assignMaintenanceCenter', label: 'تعيين مركز صيانة', category: 'صيانة' },
+  { key: 'centerPortal', label: 'بوابة مركز الصيانة (تذاكر المركز بتاعه)', category: 'صيانة' },
+  { key: 'viewNetwork', label: 'شبكة المراكز (قطع الغيار، المطالبات، الضمان، العقود)', category: 'صيانة' },
+  { key: 'approvePartRequests', label: 'الموافقة على طلبات قطع الغيار وشحنها', category: 'صيانة' },
+  { key: 'myTickets', label: 'شاشة "تذاكري" للفني', category: 'صيانة' },
+  { key: 'techHub', label: 'الفنيين والزيارات (الزيارات، قوالب الأعطال، الحضور)', category: 'صيانة' },
+  { key: 'knowledgeHub', label: 'قاعدة المعرفة والبحث بالمعنى وتوقع حجم التذاكر ومزاج العملاء', category: 'صيانة' },
   { key: 'assignCallCenter', label: 'تعيين كول سنتر', category: 'صيانة' },
   { key: 'viewAllTickets', label: 'رؤية كل تذاكر الصيانة (حتى تذاكر الفروع الأخرى)', category: 'صيانة' },
   
@@ -134,7 +140,15 @@ export const ALL_PERMISSIONS = [
 
 
   { key: 'viewReturnsWarehouse', label: 'عرض مخزن المرتجعات', category: 'مخزون' },
-  { key: 'manageReturnsWarehouse', label: 'إدارة مخزن المرتجعات', category: 'مخزون' }
+  { key: 'manageReturnsWarehouse', label: 'إدارة مخزن المرتجعات', category: 'مخزون' },
+  { key: 'accountsHub', label: 'المشتريات والجرد والوردية وكشف الحساب والملصقات', category: 'مخزون' },
+  { key: 'viewMargins', label: 'تقرير الأرباح الحقيقية (التكلفة والهامش)', category: 'مالية' },
+  { key: 'viewCostPrices', label: 'رؤية وتعديل سعر التكلفة في المخزون', category: 'مخزون' },
+  { key: 'exportData', label: 'تصدير البيانات (Excel / CSV / PDF) — مسموح افتراضيًا', category: 'تقارير' },
+  { key: 'editClosedTickets', label: 'تعديل التذاكر المقفولة/المسلّمة — مسموح افتراضيًا', category: 'صيانة' },
+  { key: 'manageComplaints', label: 'إدارة الشكاوى والتصعيد (التعيين والقفل)', category: 'صيانة' },
+  { key: 'revertChanges', label: 'التراجع عن التعديلات من سجل التعديلات', category: 'إعدادات' },
+  { key: 'securityCenter', label: 'الأمان والنسخ الاحتياطي وسجل التعديلات', category: 'إعدادات' }
 
 ];
 
@@ -228,6 +242,8 @@ export const ROLE_DEFAULT_PERMISSIONS = {
   },
   
   technician: {
+    myTickets: true,
+    knowledgeHub: true,
     viewDashboard: true,
     viewInventory: false,
     addInventoryItem: false,
@@ -266,6 +282,7 @@ export const ROLE_DEFAULT_PERMISSIONS = {
   },
   
   maintenance_center: {
+    centerPortal: true,
     viewDashboard: true,
     viewInventory: true,
     viewLowStock: true,

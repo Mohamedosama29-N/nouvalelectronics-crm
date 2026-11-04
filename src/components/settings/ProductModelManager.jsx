@@ -39,11 +39,15 @@ export function ProductModelManager() {
   const [savingProductCode, setSavingProductCode] = useState(false);
 
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     const current = subFaults.find(f => f.id === selectedSubFaultId);
     setProductCodeInput(current?.productCode || '');
     setMatchedItem(null);
     setMatchStatus(null);
     setMatchCandidates([]);
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [selectedSubFaultId, subFaults]);
 
   // نفس منطق المطابقة المستخدم في التذاكر بالظبط (utils/productCodeLookup): المعاينة هنا
@@ -85,7 +89,11 @@ export function ProductModelManager() {
 
   // تحميل المنتجات
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     loadProducts();
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, []);
 
   const addProduct = async () => {
@@ -129,6 +137,8 @@ export function ProductModelManager() {
 
   // تحميل الموديلات عند اختيار منتج
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     if (selectedProductId) {
       const q = query(collection(db, 'models'), where('productId', '==', selectedProductId));
       const unsub = onSnapshot(q, snap => setModels(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -137,6 +147,8 @@ export function ProductModelManager() {
       setModels([]);
       setSelectedModelId('');
     }
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [selectedProductId]);
 
   const addModel = async () => {
@@ -166,6 +178,8 @@ export function ProductModelManager() {
 
   // تحميل أكواد الأعطال الرئيسية عند اختيار موديل
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     if (selectedModelId) {
       const q = query(collection(db, 'mainFaultCodes'), where('modelId', '==', selectedModelId));
       const unsub = onSnapshot(q, snap => setMainFaults(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -174,6 +188,8 @@ export function ProductModelManager() {
       setMainFaults([]);
       setSelectedMainFaultId('');
     }
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [selectedModelId]);
 
   const addMainFault = async () => {
@@ -203,6 +219,8 @@ export function ProductModelManager() {
 
   // تحميل أكواد الأعطال الفرعية عند اختيار كود رئيسي
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     setSelectedSubFaultId('');
     if (selectedMainFaultId) {
       const q = query(collection(db, 'subFaultCodes'), where('mainFaultId', '==', selectedMainFaultId));
@@ -211,6 +229,8 @@ export function ProductModelManager() {
     } else {
       setSubFaults([]);
     }
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [selectedMainFaultId]);
 
   const addSubFault = async () => {

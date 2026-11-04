@@ -38,6 +38,8 @@ import { EGYPT_GOVERNORATES } from '../../constants/misc';
 import { TICKET_STATUSES, TICKET_TERMINAL_STATUSES } from '../../constants/tickets';
 import { SignatureModal } from '../common/SignaturePad';
 import { db } from '../../firebase/config';
+import { hasPerm } from '../../utils/permissions';
+import { recordAudit } from '../../utils/audit';
 import { useDebounce } from '../../hooks/useDebounce';
 import { showConfirm, showError, showInfo, showSuccess } from '../../utils/alerts';
 import { sendWebhookNotification } from '../../utils/communications';
@@ -49,6 +51,14 @@ import { describeMatchResult } from '../../utils/productCodeMatch';
 import { resolveProductCode } from '../../utils/productCodeLookup';
 import { TicketAIPanel } from '../ai/TicketAIPanel';
 import { TicketIntakeAssist } from '../ai/TicketIntakeAssist';
+import { TicketPhotoReader } from '../ai/TicketPhotoReader';
+import { TicketInsights } from '../ai/TicketInsights';
+import { TicketSmartPanel } from '../ai/TicketSmartPanel';
+import { TicketQualityCheck } from '../ai/TicketQualityCheck';
+import { TicketCustomerTools } from '../ai/TicketCustomerTools';
+import { TicketNetworkTools } from '../ai/TicketNetworkTools';
+import { makeTrackToken, refreshTrackingIfAny } from '../../utils/ticketTracking';
+import { notify } from '../../utils/notifications';
 import { useIntent } from '../../hooks/useIntent';
 
 export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUser, warehouseMap, onGenerateInvoice }) {
@@ -254,6 +264,8 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
   }, []);
 
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     if (!selectedProductId) {
       setModels([]);
       setSelectedModelId('');
@@ -264,9 +276,13 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
       setModels(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
     return () => unsub();
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [selectedProductId]);
 
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     if (!selectedModelId) {
       setMainFaults([]);
       setSelectedMainFaultId('');
@@ -277,9 +293,13 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
       setMainFaults(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
     return () => unsub();
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [selectedModelId]);
 
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     if (!selectedMainFaultId) {
       setSubFaults([]);
       setSelectedSubFaultId('');
@@ -290,10 +310,14 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
       setSubFaults(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
     return () => unsub();
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [selectedMainFaultId]);
 
   // 🆕 نفس سلسلة تحميل موديل/كود رئيسي/كود فرعي، بس لسياق التعديل
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     if (!editSelectedProductId) {
       setEditModels([]);
       setEditSelectedModelId('');
@@ -304,9 +328,13 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
       setEditModels(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
     return () => unsub();
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [editSelectedProductId]);
 
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     if (!editSelectedModelId) {
       setEditMainFaults([]);
       setEditSelectedMainFaultId('');
@@ -317,9 +345,13 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
       setEditMainFaults(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
     return () => unsub();
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [editSelectedModelId]);
 
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     if (!editSelectedMainFaultId) {
       setEditSubFaults([]);
       setEditSelectedSubFaultId('');
@@ -330,6 +362,8 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
       setEditSubFaults(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
     return () => unsub();
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [editSelectedMainFaultId]);
 
   const handleEditSelectSubFault = async (subFaultId) => {
@@ -453,7 +487,8 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
         subFaultCode: selected.code,
         subFaultDescription: selected.description,
         productCode: selected.productCode || '',
-        issue: `${selected.code} - ${selected.description}`
+        // 🛠️ FIX: كان بيمسح وصف المشكلة اللي الموظف كتبه ويحط مكانه نص الكود
+        issue: prev.issue && prev.issue.trim() ? prev.issue : `${selected.code} - ${selected.description}`
       }));
 
       // 🆕 لو كود العطل ده مرتبط بكود منتج، ندوّر عليه في المخزون
@@ -557,6 +592,8 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
   // الكتابة بس: رقم (بداية الهاتف) أو كلمات الاسم (searchTokens)، بحد أقصى 10 نتائج.
   const debouncedCustomerSearch = useDebounce(customerSearch, 350);
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     const term = normalizeSearch(debouncedCustomerSearch);
     if (term.length < 2) { setCustomers([]); return undefined; }
     let cancelled = false;
@@ -575,6 +612,8 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
     };
     run();
     return () => { cancelled = true; };
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [debouncedCustomerSearch]);
 
   const filteredCustomers = customerSearch.trim().length >= 2 ? customers : [];
@@ -599,6 +638,8 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
 
   // ========== جلب الفنيين ومراكز الصيانة من systemSettings ==========
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     setTechnicians(systemSettings?.technicians || []);
     
     const centers = (systemSettings?.maintenanceCenters || []).map(center => 
@@ -620,6 +661,8 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
       }
     };
     fetchCallCenters();
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [systemSettings]);
 
   // ========== تحميل التذاكر ==========
@@ -736,8 +779,12 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     filterTicketType, filterSource, filterBranch, filterTechnician, filterMaintenanceCenter, dateRange]);
 
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     ticketsPageCursorsRef.current = { 1: null };
     loadTickets(1);
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [loadTickets]);
 
   // 🛠️ FIX: بدل ما التصدير ياخد بس الـ 30 تذكرة الظاهرة في الصفحة الحالية،
@@ -1097,7 +1144,14 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   followUpBy: ''
       };
 
+      // 🔗 رابط "تابع تذكرتك" بيتعمل مع التذكرة على طول (عشان الإيصال)
+      ticketData.trackToken = makeTrackToken();
       const docRef = await addDoc(collection(db, 'tickets'), ticketData);
+      refreshTrackingIfAny(ticketData, trackingOpts(ticketData));
+      // 🔔 إشعار للفني/المركز المعيّن
+      const devLabel = [ticketData.device, ticketData.deviceModel].filter(Boolean).join(' ');
+      if (ticketData.assignedTechnician) notify({ toName: ticketData.assignedTechnician, title: `تذكرة جديدة ليك: ${generatedTicketNumber}`, body: `${devLabel} — ${String(ticketData.issue || '').slice(0, 80)}`, view: 'my_tickets', from: appUser.name });
+      if (ticketData.assignedMaintenanceCenter) notify({ toCenter: ticketData.assignedMaintenanceCenter, title: `تذكرة جديدة للمركز: ${generatedTicketNumber}`, body: devLabel, view: 'center_portal', from: appUser.name });
       
       setFullTicketView({ id: docRef.id, ...ticketData });
       setShowFullTicketModal(true);
@@ -1156,6 +1210,12 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     return applyStatusChange(ticketId, newStatus);
   };
 
+  const trackingOpts = (t) => ({
+    centerName: warehouseMap?.[t?.assignedCenter] || '',
+    company: systemSettings?.storeName || '',
+    companyPhone: systemSettings?.storePhone || systemSettings?.companyPhone || '',
+  });
+
   const makeRatingToken = () => {
     const a = new Uint8Array(12);
     crypto.getRandomValues(a);
@@ -1194,6 +1254,8 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       });
       
       showSuccess("تم تحديث حالة التذكرة");
+      // 🔗 تحديث صفحة "تابع تذكرتك" لو التذكرة ليها رابط
+      refreshTrackingIfAny({ ...current, status: newStatus, statusHistory, ...extraFields }, trackingOpts(current));
 
       // ✨ ميزة جديدة: إشعار تلقائي للعميل عند تغيير حالة تذكرته (عبر Webhook
       // مربوط بخدمة زي Zapier/Make بتحوّل الإشعار لرسالة SMS أو واتساب)
@@ -1468,6 +1530,11 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         });
       }
 
+      // 🔔 إشعار بالتعيين
+      const tNo = snap.data().ticketNumber || '';
+      if (updates.assignedTechnician) notify({ toName: updates.assignedTechnician, title: `اتعيّنتلك تذكرة ${tNo}`, body: [snap.data().device, snap.data().deviceModel].filter(Boolean).join(' '), view: 'my_tickets', from: appUser.name });
+      if (updates.assignedMaintenanceCenter) notify({ toCenter: updates.assignedMaintenanceCenter, title: `تذكرة ${tNo} اتحوّلت لمركزكم`, view: 'center_portal', from: appUser.name });
+
       await updateDoc(ticketRef, {
         ...updates,
         updatedAt: serverTimestamp(),
@@ -1634,6 +1701,10 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   const handleUpdateTicket = async (e) => {
     e.preventDefault();
     if (!editingTicket) return;
+    if (TICKET_TERMINAL_STATUSES.includes(editingTicket.status) && !hasPerm(appUser, 'editClosedTickets')) {
+      showError('التذكرة دي مقفولة، ومش مسموح لك تعدّل التذاكر المقفولة.');
+      return;
+    }
 
     setGlobalLoading(true);
     
@@ -1741,9 +1812,24 @@ const loadTickets = useCallback(async (targetPage = 1) => {
           }]
         : currentHistory;
       updateData.history = history;
+
+      // 🛠️ FIX: تغيير الحالة من فورم التعديل مكانش بيتسجل في statusHistory (ولا بيجهّز
+      // رابط التقييم)، فحسابات وقت الصيانة والـ SLA كانت بتطلع غلط للتذاكر دي.
+      if (updateData.status && updateData.status !== beforeData.status) {
+        updateData.statusHistory = [...(beforeData.statusHistory || []), {
+          status: updateData.status,
+          timestamp: new Date().toISOString(),
+          by: appUser.name
+        }];
+        if (TICKET_TERMINAL_STATUSES.includes(updateData.status) && !beforeData.ratingToken) {
+          updateData.ratingToken = makeRatingToken();
+        }
+      }
       
       await updateDoc(ticketRef, updateData);
+      recordAudit({ coll: 'tickets', docId: editingTicket.id, label: `تعديل التذكرة ${beforeData.ticketNumber || ''}`, before: beforeData, patch: updateData, user: appUser });
       showSuccess("تم تحديث التذكرة بنجاح");
+      refreshTrackingIfAny({ ...beforeData, ...updateData }, trackingOpts({ ...beforeData, ...updateData }));
       
       setEditingTicket(null);
       setEditFormData({});
@@ -1803,6 +1889,8 @@ const loadTickets = useCallback(async (targetPage = 1) => {
            <form onSubmit={handleAddTicket} className="space-y-4">
   {/* 📋 إدخال ذكي من رسالة العميل */}
   <TicketIntakeAssist systemSettings={systemSettings} onApply={(prefill) => setNewTicket((p) => ({ ...p, ...prefill }))} />
+  {/* 📷 قراءة الفاتورة / ملصق السيريال من صورة */}
+  <TicketPhotoReader systemSettings={systemSettings} onApply={({ __appendNotes, ...prefill }) => setNewTicket((p) => ({ ...p, ...prefill, ...(__appendNotes ? { notes: [p.notes, __appendNotes].filter(Boolean).join('\n') } : {}) }))} />
   {/* البحث عن عميل */}
   <div className="relative">
     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">🔍 البحث عن عميل موجود</label>
@@ -2050,6 +2138,20 @@ const loadTickets = useCallback(async (targetPage = 1) => {
     <label className="block text-xs font-bold mb-1">ملاحظات إضافية</label>
     <textarea rows="2" className="w-full border p-3 rounded-xl text-sm resize-none" value={newTicket.notes} onChange={e => setNewTicket({...newTicket, notes: e.target.value})} placeholder="أي ملاحظات إضافية..." />
   </div>
+
+  {/* 🧠 اقتراحات ذكية: كود العطل، المدة، القطع والتكلفة، أنسب فني */}
+  <TicketSmartPanel
+    draft={newTicket}
+    mainFaults={mainFaults}
+    subFaults={subFaults}
+    selectedMainFaultId={selectedMainFaultId}
+    selectedSubFaultId={selectedSubFaultId}
+    onPickMainFault={(id) => { setSelectedMainFaultId(id); setSelectedSubFaultId(''); }}
+    onPickSubFault={(id) => handleSelectSubFault(id)}
+    technicians={systemSettings?.technicians || []}
+    onApply={(patch) => setNewTicket((p) => ({ ...p, ...patch }))}
+    systemSettings={systemSettings}
+  />
 
   {/* الضمان والنوع والمصدر */}
   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -2395,6 +2497,9 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       </div>
     </div>
   </div>
+
+  {/* ✅ مراجعة قبل الحفظ */}
+  <TicketQualityCheck draft={newTicket} />
 
   {/* الأزرار */}
   <div className="flex gap-3 pt-4 border-t">
@@ -3084,8 +3189,18 @@ const loadTickets = useCallback(async (targetPage = 1) => {
             </div>
 
             <div className="p-6 space-y-6">
+  {/* 🧾 إيصال الاستلام + رابط التتبع + رد على رسالة العميل */}
+  <TicketCustomerTools ticket={fullTicketView} systemSettings={systemSettings} warehouseMap={warehouseMap}
+    onTokenCreated={(token) => setFullTicketView((p) => (p ? { ...p, trackToken: token } : p))} />
+  {/* 🏢 المركز وقطع الغيار والضمان */}
+  <TicketNetworkTools ticket={fullTicketView} systemSettings={systemSettings} appUser={appUser}
+    warehouses={Object.entries(warehouseMap || {}).map(([id, name]) => ({ id, name: typeof name === 'string' ? name : name?.name || id }))}
+    onTicketPatched={(patch) => { setFullTicketView((p) => (p ? { ...p, ...patch } : p)); setTickets((prev) => prev.map((t) => (t.id === fullTicketView.id ? { ...t, ...patch } : t))); }} />
   {/* 🤖 المساعد الذكي: تذاكر مشابهة + اقتراح تشخيص + رسالة واتساب + ملخص */}
   <TicketAIPanel ticket={fullTicketView} systemSettings={systemSettings} />
+  {/* 🧠 قاعدة المعرفة + صور التلف + مؤشرات الضمان + مزاج العميل */}
+  <TicketInsights ticket={fullTicketView} systemSettings={systemSettings} appUser={appUser}
+    onTicketPatched={(patch) => { setFullTicketView((p) => (p ? { ...p, ...patch } : p)); setTickets((prev) => prev.map((t) => (t.id === fullTicketView.id ? { ...t, ...patch } : t))); }} />
   {/* معلومات العميل */}
   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
     <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">

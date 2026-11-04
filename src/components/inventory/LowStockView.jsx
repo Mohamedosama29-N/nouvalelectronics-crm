@@ -18,7 +18,9 @@ export function LowStockView({ lowStockItems = [], appUser, warehouseMap, system
   const [search,setSearch] = useState("");
   const [loading,setLoading] = useState(false);
 
-  useEffect(()=>{
+  useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
 
     if(lowStockItems.length > 0){
       setItems(lowStockItems);
@@ -93,6 +95,8 @@ export function LowStockView({ lowStockItems = [], appUser, warehouseMap, system
 
     fetchLowStock();
 
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   },[lowStockItems,appUser]);
   const filteredItems = (items || []).filter(item => {
 
@@ -189,12 +193,16 @@ export function LowStockView({ lowStockItems = [], appUser, warehouseMap, system
   // محاولة إرسال تلقائي لما الشاشة تفتح، بس لو عدّى الوقت المحدد من آخر إرسال
   // (بما إن التطبيق يعمل من المتصفح، ده مش بديل لسيرفر شغال 24 ساعة)
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     if (!alertConfig.enabled || !alertConfig.webhookUrl || items.length === 0) return;
     const lastSent = Number(localStorage.getItem('lastLowStockAlertSentAt') || 0);
     const hoursSince = (Date.now() - lastSent) / (1000 * 60 * 60);
     if (hoursSince >= (alertConfig.frequencyHours || 24)) {
       sendLowStockAlert(true);
     }
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alertConfig.enabled, items.length]);
 

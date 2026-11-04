@@ -156,8 +156,12 @@ export function InvoicesManager({ systemSettings, appUser }) {
   }, [appUser, filterDateFrom, filterDateTo]);
 
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     lastDocRef.current = null;
     loadInvoices(false);
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [loadInvoices]);
 
   const filtered = invoices.filter(inv => {

@@ -11,7 +11,7 @@ const ageDays = (t, now) => {
 const tRec = (t, extra = '') => ({ id: t.id, label: `${t.ticketNumber || 'تذكرة'} · ${t.customerName || ''}${extra ? ` · ${extra}` : ''}` });
 const oldestFirst = (now) => (a, b) => ageDays(b, now) - ageDays(a, now);
 
-export function buildActionItems({ tickets = [], transfers = [], returns = [], transactions = [], lowStock = [], isOverdue = () => false, now = new Date() } = {}, perms = {}) {
+export function buildActionItems({ tickets = [], transfers = [], returns = [], transactions = [], lowStock = [], isOverdue = () => false, atRisk = [], now = new Date() } = {}, perms = {}) {
   const items = [];
   const open = tickets.filter((t) => !TICKET_TERMINAL_STATUSES.includes(t.status));
 
@@ -21,6 +21,9 @@ export function buildActionItems({ tickets = [], transfers = [], returns = [], t
 
     const overdue = open.filter(isOverdue).sort(oldestFirst(now));
     if (overdue.length) items.push({ id: 'overdue', level: 'danger', title: 'تذاكر متأخرة عن الـ SLA', count: overdue.length, hint: 'الأقدم الأول', records: overdue.slice(0, 5).map((t) => tRec(t, `${Math.floor(ageDays(t, now))} يوم`)), action: { view: 'tickets' } });
+
+    // ⚠️ إنذار مبكر: لسه متأخرتش بس غالبًا هتعدّي الـ SLA
+    if (atRisk.length) items.push({ id: 'atRisk', level: 'warn', title: 'تذاكر غالبًا هتتأخر قريب', count: atRisk.length, hint: 'اتصرف دلوقتي قبل ما تعدّي الـ SLA', records: atRisk.slice(0, 5).map(({ ticket, risk }) => tRec(ticket, risk.reason || '')), action: { view: 'tickets' } });
 
     const approval = open.filter((t) => t.status === 'waiting_customer_approval_cost' && ageDays(t, now) >= 2).sort(oldestFirst(now));
     if (approval.length) items.push({ id: 'approval', level: 'warn', title: 'مستنيين موافقة العميل من يومين+', count: approval.length, hint: 'كلّم العميل أو ابعتله رسالة من المساعد الذكي', records: approval.slice(0, 5).map((t) => tRec(t)), action: { view: 'tickets' } });

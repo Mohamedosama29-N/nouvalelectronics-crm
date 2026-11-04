@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, serverTimestamp, onSnapshot, writeBatch, limit
 } from 'firebase/firestore';
@@ -20,6 +20,8 @@ import {
 import { DASHBOARD_WIDGETS } from '../../constants/dashboard';
 import { ALL_PERMISSIONS, ROLE_DEFAULT_PERMISSIONS, USER_ROLES } from '../../constants/roles';
 import { db } from '../../firebase/config';
+import { OPT_OUT } from '../../utils/permissions';
+import { recordAudit } from '../../utils/audit';
 import { logUserActivity } from '../../utils/activityLog';
 import { showConfirm, showError, showSuccess } from '../../utils/alerts';
 import { getDashboardWidgetConfig } from '../../utils/dashboardHelpers';
@@ -29,7 +31,9 @@ import { getRoleColor, getRoleColorClasses, getRoleIcon } from '../../utils/role
 import { hashPassword } from '../../utils/security';
 import { validators } from '../../utils/validators';
 
-export function EnhancedUserManagement({ appUser, warehouses, setGlobalLoading, onViewProfile }) {
+export function EnhancedUserManagement({ appUser, warehouses, setGlobalLoading, onViewProfile, systemSettings }) {
+  // 🆕 مراكز الصيانة (لربط موظف المركز ببوابة مركزه)
+  const maintenanceCenterNames = (systemSettings?.maintenanceCenters || []).map((c) => (typeof c === 'string' ? c : c?.name)).filter(Boolean);
   const [usersList, setUsersList] = useState([]);
   const [editingUser, setEditingUser] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -46,7 +50,6 @@ export function EnhancedUserManagement({ appUser, warehouses, setGlobalLoading, 
     salary: 0,
     notes: ''
   });
-  const [permissionsByCategory, setPermissionsByCategory] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [filterWarehouse, setFilterWarehouse] = useState('all');
@@ -86,15 +89,13 @@ const WARRANTY_PERIODS = [
     return () => unsub();
   }, [appUser]);
 
-  useEffect(() => {
+  const permissionsByCategory = useMemo(() => {
     const categories = {};
     ALL_PERMISSIONS.forEach(p => {
-      if (!categories[p.category]) {
-        categories[p.category] = [];
-      }
+      if (!categories[p.category]) categories[p.category] = [];
       categories[p.category].push(p);
     });
-    setPermissionsByCategory(categories);
+    return categories;
   }, []);
 
   // دوال التحديد المتعدد
@@ -210,6 +211,7 @@ const WARRANTY_PERIODS = [
             salary: editingUser.salary || 0,
             notes: editingUser.notes || '',
             assignedWarehouseId: editingUser.assignedWarehouseId,
+            maintenanceCenter: editingUser.maintenanceCenter || '',
             isDisabled: editingUser.isDisabled || false,
             permissions: editingUser.permissions || {}
         };
@@ -268,6 +270,7 @@ const WARRANTY_PERIODS = [
             salary: Number(newUser.salary) || 0,
             notes: newUser.notes || '',
             assignedWarehouseId: newUser.assignedWarehouseId,
+            maintenanceCenter: newUser.maintenanceCenter || '',
             permissions: defaultPermissions,
             isDisabled: false,
             createdAt: serverTimestamp(),
@@ -341,9 +344,9 @@ const WARRANTY_PERIODS = [
     if (!permissionsUser) return;
     setGlobalLoading(true);
     try {
-      await updateDoc(doc(db, 'employees', permissionsUser.id), {
-        permissions: permissionsUser.permissions
-      });
+      const permPatch = { permissions: permissionsUser.permissions, limits: permissionsUser.limits || {} };
+      await updateDoc(doc(db, 'employees', permissionsUser.id), permPatch);
+      recordAudit({ coll: 'employees', docId: permissionsUser.id, label: `تعديل صلاحيات ${permissionsUser.name}`, before: usersList.find((u) => u.id === permissionsUser.id), patch: permPatch, user: appUser });
       await logUserActivity(appUser, 'تعديل صلاحيات', `تعديل صلاحيات المستخدم: ${permissionsUser.name}`);
       showSuccess("تم حفظ الصلاحيات بنجاح");
       setShowPermissionsModal(false);
@@ -509,6 +512,14 @@ const WARRANTY_PERIODS = [
                     </select>
                   </div>
                   <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">مركز الصيانة (لبوابة المركز)</label>
+                    <select className="w-full border p-3 rounded-xl font-bold bg-white dark:bg-slate-900 outline-none focus:border-teal-500"
+                      value={editingUser.maintenanceCenter || ''} onChange={e=>setEditingUser({...editingUser, maintenanceCenter:e.target.value})}>
+                      <option value="">— مش تابع لمركز —</option>
+                      {maintenanceCenterNames.map(n=><option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                  <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">القسم</label>
                     <select 
                       className="w-full border p-3 rounded-xl font-bold bg-white dark:bg-slate-900 outline-none focus:border-teal-500" 
@@ -669,6 +680,14 @@ const WARRANTY_PERIODS = [
                     </select>
                   </div>
                   <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">مركز الصيانة (لبوابة المركز)</label>
+                    <select className="w-full border p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500"
+                      value={newUser.maintenanceCenter || ''} onChange={e=>setNewUser({...newUser, maintenanceCenter:e.target.value})}>
+                      <option value="">— مش تابع لمركز —</option>
+                      {maintenanceCenterNames.map(n=><option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                  <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">المسمى الوظيفي</label>
                     <input 
                       className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold bg-slate-50 dark:bg-slate-900 outline-none focus:border-teal-500" 
@@ -755,6 +774,24 @@ const WARRANTY_PERIODS = [
               </select>
             </div>
             
+            {/* 🔑 حدود أدق للموظف (فاضي = من غير حد) */}
+            <div className="mb-6 bg-amber-50/60 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl p-4 grid sm:grid-cols-3 gap-3">
+              <h5 className="sm:col-span-3 font-bold text-amber-700 dark:text-amber-300 text-sm">حدود إضافية</h5>
+              <label className="text-xs font-bold">أقصى خصم في الكاشير %
+                <input type="number" min="0" max="100" aria-label="أقصى خصم" className="mt-1 w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-900"
+                  value={permissionsUser.limits?.maxDiscountPercent ?? ''} onChange={(e) => setPermissionsUser({ ...permissionsUser, limits: { ...(permissionsUser.limits || {}), maxDiscountPercent: e.target.value === '' ? '' : Number(e.target.value) } })} />
+              </label>
+              <label className="text-xs font-bold">مسموح بالدخول من الساعة
+                <input type="time" aria-label="الدخول من" className="mt-1 w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-900"
+                  value={permissionsUser.limits?.workFrom || ''} onChange={(e) => setPermissionsUser({ ...permissionsUser, limits: { ...(permissionsUser.limits || {}), workFrom: e.target.value } })} />
+              </label>
+              <label className="text-xs font-bold">لحد الساعة
+                <input type="time" aria-label="الدخول لحد" className="mt-1 w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-900"
+                  value={permissionsUser.limits?.workTo || ''} onChange={(e) => setPermissionsUser({ ...permissionsUser, limits: { ...(permissionsUser.limits || {}), workTo: e.target.value } })} />
+              </label>
+              <p className="sm:col-span-3 text-[11px] text-slate-500">الحدود دي مش بتنطبق على مدير النظام. مواعيد الدخول بتتفحص وقت تسجيل الدخول.</p>
+            </div>
+
             <div className="space-y-6">
               {Object.entries(permissionsByCategory).map(([category, perms]) => (
                 <div key={category} className="mb-6 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-xl p-4">
@@ -799,7 +836,7 @@ const WARRANTY_PERIODS = [
                            <input 
                              type="checkbox" 
                              className="w-4 h-4 accent-teal-600" 
-                             checked={permissionsUser.permissions?.[p.key] || false} 
+                             checked={OPT_OUT.has(p.key) ? permissionsUser.permissions?.[p.key] !== false : (permissionsUser.permissions?.[p.key] || false)} 
                              onChange={e => setPermissionsUser({
                                ...permissionsUser, 
                                permissions: {

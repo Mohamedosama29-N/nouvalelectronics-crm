@@ -29,10 +29,20 @@ import {
   Moon,
   Webhook,
   Search as SearchIcon,
+  PhoneCall,
+  Network,
+  Building2,
+  Wrench,
+  HardHat,
+  Truck,
+  Brain,
   RotateCcw
 } from 'lucide-react';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { REQUIRE_REAL_AUTH, initFirebaseAuth, isRealSession, endSession } from './utils/authSession';
+import { initAppCheck } from './utils/secureAuth';
+import { BackupReminder } from './components/ai/BackupReminder';
+import { hasPerm, setExportGuard } from './utils/permissions';
 import { ThemeProvider } from './components/common/ThemeProvider';
 import { USER_ROLES } from './constants/roles';
 import { auth, db } from './firebase/config';
@@ -68,10 +78,20 @@ const SettingsManager = lazyPage(() => import('./components/settings/SettingsMan
 const StockForecastPanel = lazyPage(() => import('./components/ai/StockForecastPanel'), 'StockForecastPanel');
 const AskAssistant = lazyPage(() => import('./components/ai/AskAssistant'), 'AskAssistant');
 const CommandPalette = lazyPage(() => import('./components/ai/CommandPalette'), 'CommandPalette');
+const CallCenterView = lazyPage(() => import('./components/ai/CallCenterView'), 'CallCenterView');
+const NetworkHub = lazyPage(() => import('./components/ai/NetworkHub'), 'NetworkHub');
+const CenterPortal = lazyPage(() => import('./components/ai/CenterPortal'), 'CenterPortal');
+const MyTickets = lazyPage(() => import('./components/ai/MyTickets'), 'MyTickets');
+const TechHub = lazyPage(() => import('./components/ai/TechHub'), 'TechHub');
+const AccountsHub = lazyPage(() => import('./components/ai/AccountsHub'), 'AccountsHub');
+const KnowledgeHub = lazyPage(() => import('./components/ai/KnowledgeHub'), 'KnowledgeHub');
+const SecurityCenter = lazyPage(() => import('./components/ai/SecurityCenter'), 'SecurityCenter');
+const NotificationBell = lazyPage(() => import('./components/ai/NotificationBell'), 'NotificationBell');
 const EnhancedWarehouseManager = lazyPage(() => import('./components/warehouses/EnhancedWarehouseManager'), 'EnhancedWarehouseManager');
 const EnhancedUserManagement = lazyPage(() => import('./components/users/EnhancedUserManagement'), 'EnhancedUserManagement');
 const EmployeeProfileView = lazyPage(() => import('./components/users/EmployeeProfileView'), 'EmployeeProfileView');
 const PublicRatingPage = React.lazy(() => import('./components/tickets/PublicRatingPage'));
+const PublicTrackPage = React.lazy(() => import('./components/tickets/PublicTrackPage'));
 const ResetPasswordScreen = lazyPage(() => import('./components/auth/ResetPasswordScreen'), 'ResetPasswordScreen');
 
 function PageLoadingFallback() {
@@ -83,10 +103,11 @@ function PageLoadingFallback() {
 }
 
 export default function App() {
-  const [appUser, setAppUser] = useState(null);
+  // استعادة المستخدم من localStorage عند تحميل التطبيق (في الوضع الصارم بعد التأكد من جلسة Firebase)
+  const [appUser, setAppUser] = useState(() => (REQUIRE_REAL_AUTH ? null : loadUserFromStorage()));
   const [fbReady, setFbReady] = useState(false);
   const [firebaseError, setFirebaseError] = useState(null);
-  const [isConnecting, setIsConnecting] = useState(true);
+  const [isConnecting, setIsConnecting] = useState(!REQUIRE_REAL_AUTH);
   
 const [currentView, setCurrentView] = useState(() => {
   // محاولة استعادة الصفحة من localStorage
@@ -218,24 +239,15 @@ useEffect(() => {
     }
   }, []);
 
-  // استعادة المستخدم من localStorage عند تحميل التطبيق
   useEffect(() => {
-    // في الوضع الصارم الاستعادة بتتم بعد التأكد من جلسة Firebase (فوق)
-    const savedUser = REQUIRE_REAL_AUTH ? null : loadUserFromStorage();
-    if (savedUser) {
-      setAppUser(savedUser);
-    }
-
-  }, []);
-
-  useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     // الوضع الصارم: القواعد بتمنع القراءة قبل تسجيل الدخول، فاختبار الاتصال
     // بيتأجل لحد ما الموظف يدخل (أخطاء الاتصال هتظهر في شاشة الدخول نفسها).
-    if (REQUIRE_REAL_AUTH) {
-      setIsConnecting(false);
-      return;
-    }
+    if (REQUIRE_REAL_AUTH) return;
     testFirebaseConnection();
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- مقصود: التأثير ده بيشتغل على التغيير في القيم المذكورة بس (إضافة الباقي بتسبب إعادة تحميل/حلقات)
   }, []);
 
@@ -338,12 +350,13 @@ useEffect(() => {
   useEffect(() => {
     const initAuth = async () => {
        try {
+           await initAppCheck(); // مقفول إلا لو VITE_APPCHECK_SITE_KEY متضبط
            await initFirebaseAuth();
            // الوضع الصارم: بنرجّع المستخدم المحفوظ بس لو جلسة Firebase الحقيقية
            // لسه شغالة ولنفس الموظف، وإلا لازم يسجل دخول من جديد.
            if (REQUIRE_REAL_AUTH) {
              const saved = loadUserFromStorage();
-             if (saved && isRealSession() && auth.currentUser.uid === saved.id) {
+             if (saved && isRealSession() && (auth.currentUser.uid === saved.id || auth.currentUser.uid === saved.authUid)) {
                setAppUser(saved);
              } else if (saved) {
                clearUserFromStorage();
@@ -357,6 +370,9 @@ useEffect(() => {
     };
     initAuth();
   }, []);
+
+  // 🔑 حارس التصدير حسب صلاحية الموظف الحالي
+  useEffect(() => { setExportGuard(() => hasPerm(appUser, 'exportData')); }, [appUser]);
 
   useEffect(() => {
     if (!appUser || !fbReady || firebaseError) return;
@@ -466,6 +482,16 @@ useEffect(() => {
             window.location.reload();
           }}
         />
+      </React.Suspense>
+    );
+  }
+
+  // 🆕 صفحة "تابع تذكرتك" (?track=<token>) - عامة من غير تسجيل دخول
+  const trackToken = new URLSearchParams(window.location.search).get('track');
+  if (trackToken) {
+    return (
+      <React.Suspense fallback={<PageLoadingFallback />}>
+        <PublicTrackPage token={trackToken} />
       </React.Suspense>
     );
   }
@@ -592,6 +618,14 @@ useEffect(() => {
                { id: 'transactions', label: 'نقطة البيع', icon: Receipt, permission: 'viewPOS' },
                { id: 'customers', label: 'سجل العملاء', icon: Users, permission: 'viewCustomers' },
                { id: 'tickets', label: 'تذاكر الصيانة', icon: MessageSquare, permission: 'manageTickets' },
+               { id: 'callcenter', label: 'الكول سنتر', icon: PhoneCall, permission: 'manageTickets' },
+               { id: 'network', label: 'شبكة المراكز والضمان', icon: Network, permission: 'viewNetwork' },
+               { id: 'center_portal', label: 'بوابة المركز', icon: Building2, permission: 'centerPortal' },
+               { id: 'my_tickets', label: 'تذاكري', icon: Wrench, permission: 'myTickets' },
+               { id: 'tech_hub', label: 'الفنيين والزيارات', icon: HardHat, permission: 'techHub' },
+               { id: 'accounts_hub', label: 'المشتريات والجرد والخزنة', icon: Truck, permission: 'accountsHub' },
+               { id: 'knowledge', label: 'قاعدة المعرفة والتحليلات', icon: Brain, permission: 'knowledgeHub' },
+               { id: 'security', label: 'الأمان والنسخ الاحتياطي', icon: ShieldCheck, permission: 'securityCenter' },
                { id: 'invoices', label: 'أرشيف الفواتير', icon: FileText, permission: 'viewInvoices' },
                { id: 'reports', label: 'التقارير', icon: History, permission: 'viewReports' },
                { id: 'finance', label: 'الملف المالي', icon: Wallet, permission: 'viewFinance' },
@@ -784,6 +818,14 @@ useEffect(() => {
                 {currentView === 'transactions' && 'نقطة البيع'}
                 {currentView === 'customers' && 'إدارة العملاء'}
                 {currentView === 'tickets' && 'تذاكر الصيانة'}
+                {currentView === 'callcenter' && 'الكول سنتر'}
+                {currentView === 'network' && 'شبكة المراكز وقطع الغيار والضمان'}
+                {currentView === 'center_portal' && 'بوابة مركز الصيانة'}
+                {currentView === 'my_tickets' && 'تذاكري'}
+                {currentView === 'tech_hub' && 'الفنيين والزيارات'}
+                {currentView === 'accounts_hub' && 'المشتريات والجرد والخزنة'}
+                {currentView === 'knowledge' && 'قاعدة المعرفة والتحليلات الذكية'}
+                {currentView === 'security' && 'الأمان والنسخ الاحتياطي'}
                 {currentView === 'invoices' && 'أرشيف الفواتير'}
                 {currentView === 'reports' && 'التقارير'}
                 {currentView === 'finance' && 'الملف المالي'}
@@ -796,6 +838,8 @@ useEffect(() => {
               </h2>
             </div>
             <div className="flex items-center gap-3 font-bold">
+               {/* 🔔 الإشعارات الداخلية */}
+               <React.Suspense fallback={null}><NotificationBell appUser={appUser} /></React.Suspense>
                {/* ⌨️ بحث سريع في السيستم كله */}
                <button type="button" onClick={() => window.dispatchEvent(new Event('erp:open-palette'))}
                  className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-teal-600 hover:border-teal-300 transition-colors text-xs print:hidden"
@@ -828,6 +872,7 @@ useEffect(() => {
                   </div>
                 )}
                 
+                {currentView !== 'security' && <BackupReminder appUser={appUser} systemSettings={systemSettings} onOpen={() => setCurrentView('security')} />}
                 {/* الصفحات المختلفة - كل صفحة بتتحمّل عند الحاجة فقط (React.lazy) */}
                 <React.Suspense fallback={<PageLoadingFallback />}>
                 {currentView === 'dashboard' && <DashboardView appUser={appUser} warehouses={warehouses} onNavigateToInventory={handleNavigateToInventory} notify={notify} systemSettings={systemSettings} />}
@@ -860,6 +905,32 @@ useEffect(() => {
                   />
                 )}
                 
+                {currentView === 'network' && (appUser.permissions?.viewNetwork || appUser.role === 'admin') && (
+                  <NetworkHub appUser={appUser} systemSettings={systemSettings} />
+                )}
+                {currentView === 'my_tickets' && (appUser.permissions?.myTickets || appUser.role === 'admin') && (
+                  <MyTickets appUser={appUser} systemSettings={systemSettings} warehouses={warehouses} />
+                )}
+                {currentView === 'tech_hub' && (appUser.permissions?.techHub || appUser.role === 'admin') && (
+                  <TechHub appUser={appUser} systemSettings={systemSettings} />
+                )}
+                {currentView === 'accounts_hub' && (appUser.permissions?.accountsHub || appUser.role === 'admin') && (
+                  <AccountsHub appUser={appUser} systemSettings={systemSettings} />
+                )}
+                {currentView === 'knowledge' && (appUser.permissions?.knowledgeHub || appUser.role === 'admin') && (
+                  <KnowledgeHub appUser={appUser} systemSettings={systemSettings} warehouses={warehouses} />
+                )}
+                {currentView === 'security' && (appUser.permissions?.securityCenter || appUser.role === 'admin') && (
+                  <SecurityCenter appUser={appUser} systemSettings={systemSettings} />
+                )}
+                {currentView === 'center_portal' && (appUser.permissions?.centerPortal || appUser.role === 'admin') && (
+                  <CenterPortal appUser={appUser} systemSettings={systemSettings} warehouses={warehouses} />
+                )}
+
+                {currentView === 'callcenter' && (appUser.permissions?.manageTickets || appUser.role === 'admin') && (
+                  <CallCenterView appUser={appUser} systemSettings={systemSettings} />
+                )}
+
                 {currentView === 'tickets' && appUser.permissions?.manageTickets && 
                   <EnhancedTicketManager appUser={appUser} systemSettings={systemSettings} notify={notify} setGlobalLoading={setGlobalLoading} warehouseMap={warehouseMap} onGenerateInvoice={handleGenerateInvoiceFromTicket} />
                 }
@@ -926,7 +997,7 @@ useEffect(() => {
                 }
                 
                 {currentView === 'users' && appUser.role === 'admin' && 
-                  <EnhancedUserManagement appUser={appUser} warehouses={warehouses} notify={notify} setGlobalLoading={setGlobalLoading} onViewProfile={openProfileView} />
+                  <EnhancedUserManagement appUser={appUser} warehouses={warehouses} notify={notify} setGlobalLoading={setGlobalLoading} onViewProfile={openProfileView} systemSettings={systemSettings} />
                 }
                 
                 {currentView === 'user_profile' && 
@@ -936,7 +1007,7 @@ useEffect(() => {
                 {/* رسالة عدم الصلاحية */}
                 {currentView !== 'dashboard' && 
                  currentView !== 'user_profile' && 
-                 !['inventory','transfers','transactions','customers','invoices','tickets','reports','finance','lowstock','settings','warehouses','users'].includes(currentView) && 
+                 !['inventory','transfers','transactions','customers','invoices','tickets','callcenter','network','center_portal','my_tickets','tech_hub','accounts_hub','knowledge','security','reports','finance','lowstock','settings','warehouses','users'].includes(currentView) && 
                  appUser.role !== 'admin' && 
                  !appUser.permissions?.[`view${currentView.charAt(0).toUpperCase() + currentView.slice(1)}`] && (
                   <div className="flex flex-col items-center justify-center h-96 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">

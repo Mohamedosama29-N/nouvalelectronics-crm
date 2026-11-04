@@ -13,6 +13,7 @@ import { db } from '../../firebase/config';
 import { showError, showSuccess } from '../../utils/alerts';
 import { sendWebhookNotification } from '../../utils/communications';
 import { exportToCSV } from '../../utils/exportUtils';
+import { whatsappLink } from '../../ai/ticketAssist';
 
 export function WarrantyAlertsView({ systemSettings }) {
   const [loading, setLoading] = useState(true);
@@ -140,6 +141,7 @@ export function WarrantyAlertsView({ systemSettings }) {
               <th className="p-3 text-right">الهاتف</th>
               <th className="p-3 text-right">تاريخ انتهاء الضمان</th>
               <th className="p-3 text-right">الحالة</th>
+              <th className="p-3 text-right">تذكير</th>
             </tr>
           </thead>
           <tbody>
@@ -161,10 +163,21 @@ export function WarrantyAlertsView({ systemSettings }) {
                     </span>
                   )}
                 </td>
+                <td className="p-3">
+                  {(() => {
+                    // 🆕 تذكير واتساب جاهز (بتبعته انت يدوي — مجاني)
+                    const name = String(item.customerName || '').trim().split(/\s+/)[0];
+                    const msg = item.expired
+                      ? `أهلاً${name ? ` أستاذ/ة ${name}` : ''}، ضمان ${item.name} انتهى. لو محتاج صيانة أو فحص إحنا في الخدمة.${systemSettings?.storeName ? `\n${systemSettings.storeName}` : ''}`
+                      : `أهلاً${name ? ` أستاذ/ة ${name}` : ''}، حابين نفكّرك إن ضمان ${item.name} هينتهي يوم ${item.warrantyEndDate}. لو فيه أي ملاحظة على الجهاز كلّمنا قبلها عشان نصلّحه تحت الضمان.${systemSettings?.storeName ? `\n${systemSettings.storeName}` : ''}`;
+                    const link = whatsappLink(item.customerPhone, msg);
+                    return link ? <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700">واتساب</a> : <span className="text-xs text-slate-400">-</span>;
+                  })()}
+                </td>
               </tr>
             ))}
             {warrantyItems.length === 0 && (
-              <tr><td colSpan="6" className="p-8 text-center text-slate-400">لا توجد منتجات قريبة من انتهاء الضمان حاليًا</td></tr>
+              <tr><td colSpan="7" className="p-8 text-center text-slate-400">لا توجد منتجات قريبة من انتهاء الضمان حاليًا</td></tr>
             )}
           </tbody>
         </table>

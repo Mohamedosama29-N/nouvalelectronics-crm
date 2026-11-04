@@ -70,8 +70,12 @@ export function AuditLogManager() {
   }, [filterUserId, filterAction, filterDateFrom, filterDateTo]);
 
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     lastDocRef.current = null;
     loadLogs(false);
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [loadLogs]);
 
   const filteredLogs = logs.filter(log => {

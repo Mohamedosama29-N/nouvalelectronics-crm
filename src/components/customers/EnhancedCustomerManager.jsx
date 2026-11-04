@@ -125,6 +125,8 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
   // عميل من مكان تاني (زي تسجيل عميل جديد أثناء عمل تذكرة) كان مش بيبان هنا
   // إلا لو عملت رفريش يدوي للصفحة. onSnapshot بيخلي القائمة تتحدث لحظيًا.
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     setLoadingData(true);
     let constraints = [];
 
@@ -181,12 +183,18 @@ export function EnhancedCustomerManager({ systemSettings, notify, setGlobalLoadi
     });
 
     return () => unsub();
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [appUser, debouncedSearch, filterGovernorate, filterCity, filterTechnician, filterTag, currentCustomersPage]);
 
   // أي تغيير في الفلاتر أو البحث يرجّعنا لأول صفحة
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     customersPageCursorsRef.current = { 1: null };
     setCurrentCustomersPage(1);
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [debouncedSearch, filterGovernorate, filterCity, filterTechnician, filterTag]);
 
   const toggleSelectItem = (itemId) => {

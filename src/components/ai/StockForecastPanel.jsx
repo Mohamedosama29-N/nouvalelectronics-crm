@@ -6,6 +6,8 @@ import { buildForecast } from '../../ai/stockForecast';
 import { exportToExcel } from '../../utils/exportUtils';
 import { showError } from '../../utils/alerts';
 import { AnimatedNumber } from '../common/AnimatedNumber';
+import { poItemsFromForecast } from '../../ai/accounts';
+import { requestNavigation } from '../../utils/appEvents';
 
 const LEVELS = {
   out: { label: 'نفد', cls: 'bg-rose-600 text-white' },
@@ -142,6 +144,16 @@ export function StockForecastPanel({ appUser, warehouseMap = {} }) {
         {forecast && (
           <button type="button" onClick={exportRows} className="mr-auto flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200">
             <Download size={14} /> تصدير Excel
+          </button>
+        )}
+        {forecast && (appUser?.role === 'admin' || appUser?.permissions?.accountsHub) && (
+          <button type="button" onClick={() => {
+            const wh = seeAll ? (warehouse === 'all' ? 'main' : warehouse) : own;
+            const items = poItemsFromForecast(forecast.rows, wh);
+            if (!items.length) { showError('مفيش أصناف محتاجة طلب في المخزن ده'); return; }
+            requestNavigation('accounts_hub', { kind: 'po-new', items, warehouseId: wh });
+          }} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-teal-600 text-white hover:bg-teal-700">
+            <ShoppingCart size={14} /> اعمل أمر شراء
           </button>
         )}
       </div>

@@ -1,3 +1,5 @@
+import { exportAllowed } from './permissions';
+import { showError } from './alerts';
 // 🛠️ FIX: النسخة القديمة كانت بتستخدم jsPDF مع خط 'cairo' غير مسجّل، فالنص
 // العربي كان بيطلع فاضي أو مقلوب. دلوقتي بنرسم التقرير كصفحات HTML (RTL، بنفس
 // خطوط المتصفح اللي بتشكّل العربي صح) ونحوّلها لصور داخل PDF. المكتبات بتتحمّل
@@ -29,6 +31,7 @@ const buildPageHtml = ({ title, headers, rows, summary, pageNo, pageCount, first
   </div>`;
 
 export const exportToPDF = async (data, title, headers, options = {}) => {
+  if (!exportAllowed()) { showError('مش مسموح لك بتصدير البيانات. كلّم مدير النظام.'); return false; }
   const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([import('jspdf'), import('html2canvas')]);
   const hdrs = headers || Object.keys(data[0] || {});
   const all = data.slice(0, MAX_ROWS);

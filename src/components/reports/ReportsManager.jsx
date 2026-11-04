@@ -22,22 +22,29 @@ import { exportToCSV, exportToExcel } from '../../utils/exportUtils';
 import { formatDate } from '../../utils/format';
 import { exportToPDF } from '../../utils/pdfExport';
 import { LiveReportsHub } from './LiveReportsHub';
+import { RepairTimeReport } from '../ai/RepairTimeReport';
+import { QualityCenter } from '../ai/QualityCenter';
+import { useIntent } from '../../hooks/useIntent';
 import { MonthlyComparison } from './MonthlyComparison';
 
 export function ReportsManager({ appUser, systemSettings }) {
   const [reportsTab, setReportsTab] = useState('live');
+  // 🔀 فتح تبويب معيّن من البحث السريع / المساعد
+  useIntent('reports-tab', ({ tab }) => setReportsTab(tab || 'live'));
   // 🆕 مركز التصدير الشامل: تصدير Excel لأي مصدر بيانات في السيستم، مش
   // بس المبيعات (اللي كانت الصفحة دي مقتصرة عليها قبل كده)
   const [exportSource, setExportSource] = useState('transactions');
   const [exportingCenter, setExportingCenter] = useState(false);
 
   const EXPORT_SOURCES = [
-    { id: 'transactions', label: 'المبيعات والمعاملات', collection: 'transactions', permission: 'exportTransactions' },
-    { id: 'inventory', label: 'المخزون', collection: 'inventory', permission: 'exportInventoryCSV' },
+    // scopeField: موظف الفرع (من غير viewAllWarehouses) بيصدّر بيانات فرعه بس
+    { id: 'transactions', label: 'المبيعات والمعاملات', collection: 'transactions', permission: 'exportTransactions', scopeField: 'warehouseId' },
+    { id: 'inventory', label: 'المخزون', collection: 'inventory', permission: 'exportInventoryCSV', scopeField: 'warehouseId' },
     { id: 'customers', label: 'العملاء', collection: 'customers', permission: 'exportCustomersCSV' },
-    { id: 'tickets', label: 'تذاكر الصيانة', collection: 'tickets', permission: 'manageTickets' },
-    { id: 'transfers', label: 'التحويلات المخزنية', collection: 'transfers', permission: 'viewTransfers' },
-    { id: 'invoices', label: 'الفواتير', collection: 'invoices', permission: 'viewInvoices' },
+    { id: 'tickets', label: 'تذاكر الصيانة', collection: 'tickets', permission: 'manageTickets', scopeField: 'assignedCenter' },
+    { id: 'transfers', label: 'التحويلات المخزنية', collection: 'transfers', permission: 'viewTransfers', scopeFilter: (d, own) => d.fromWarehouseId === own || d.toWarehouseId === own },
+    // 🛠️ FIX: كان بيقرا من كوليكشن 'invoices' اللي مش موجود أصلًا (الفواتير متسجلة في transactions)، فالتصدير كان دايمًا فاضي
+    { id: 'invoices', label: 'الفواتير', collection: 'transactions', where: [['type', '==', 'sell']], permission: 'viewInvoices', scopeField: 'warehouseId' },
     { id: 'users', label: 'المستخدمين', collection: 'employees', permission: 'viewUsers' }
   ];
 
@@ -86,8 +93,14 @@ export function ReportsManager({ appUser, systemSettings }) {
     if (!sourceDef) return;
     setExportingCenter(true);
     try {
-      const snap = await getDocs(collection(db, sourceDef.collection));
-      const rows = snap.docs.map(d => mapRowForExport(exportSource, { id: d.id, ...d.data() }));
+      const seeAllWh = appUser?.role === 'admin' || appUser?.permissions?.viewAllWarehouses;
+      const ownWh = appUser?.assignedWarehouseId || 'main';
+      const cons = (sourceDef.where || []).map(([f, op, v]) => where(f, op, v));
+      if (!seeAllWh && sourceDef.scopeField) cons.push(where(sourceDef.scopeField, '==', ownWh));
+      const snap = await getDocs(cons.length ? query(collection(db, sourceDef.collection), ...cons) : collection(db, sourceDef.collection));
+      let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (!seeAllWh && sourceDef.scopeFilter) docs = docs.filter(d => sourceDef.scopeFilter(d, ownWh));
+      const rows = docs.map(d => mapRowForExport(exportSource, d));
       if (rows.length === 0) {
         showError("لا توجد بيانات في هذا القسم للتصدير");
       } else if (exportToExcel(rows, `${sourceDef.label}_${new Date().toISOString().split('T')[0]}`, sourceDef.label)) {
@@ -114,7 +127,10 @@ export function ReportsManager({ appUser, systemSettings }) {
   const [error, setError] = useState(null);
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
   const [reportType, setReportType] = useState('all');
-  const [warehouse, setWarehouse] = useState('all');
+  const seeAllWarehouses = appUser?.role === 'admin' || appUser?.permissions?.viewAllWarehouses;
+  const ownWarehouse = appUser?.assignedWarehouseId || 'main';
+  // موظف الفرع بيشوف فرعه بس (زي الداشبورد والتقارير الحية)
+  const [warehouse, setWarehouse] = useState(seeAllWarehouses ? 'all' : ownWarehouse);
   const [exportFormat, setExportFormat] = useState('csv');
   const [summary, setSummary] = useState({ total: 0, count: 0, avg: 0, min: 0, max: 0 });
   const [chartData, setChartData] = useState([]);
@@ -216,8 +232,12 @@ export function ReportsManager({ appUser, systemSettings }) {
   }, [dateRange, reportType, warehouse]);
 
   useEffect(() => {
+    let cleanup;
+    const timer = setTimeout(() => { cleanup = (() => {
     lastDocRef.current = null;
     loadReports(false);
+  })(); }, 0);
+    return () => { clearTimeout(timer); if (typeof cleanup === 'function') cleanup(); };
   }, [loadReports]);
 
   const handleExport = async () => {
@@ -274,7 +294,7 @@ export function ReportsManager({ appUser, systemSettings }) {
   const handleResetFilters = () => {
     setDateRange({ from: '', to: '' });
     setReportType('all');
-    setWarehouse('all');
+    setWarehouse(seeAllWarehouses ? 'all' : ownWarehouse);
   };
 
   const exportCenterPanel = (
@@ -307,7 +327,9 @@ export function ReportsManager({ appUser, systemSettings }) {
 
   const tabsBar = (
     <div className="flex gap-2 mb-5 print:hidden" dir="rtl">
-      {[['live', 'التقارير الحية لكل الأقسام'], ['log', 'سجل المبيعات والتصدير والمقارنة']].map(([id, label]) => (
+      {[['live', 'التقارير الحية لكل الأقسام'], ['quality', '🏅 الجودة والمراكز'], ['repair', '⏱️ متوسط وقت الصيانة'], ['log', 'سجل المبيعات والتصدير والمقارنة']]
+        .filter(([id]) => (id !== 'repair' && id !== 'quality') || appUser?.role === 'admin' || appUser?.permissions?.manageTickets)
+        .map(([id, label]) => (
         <button
           key={id}
           onClick={() => setReportsTab(id)}
@@ -318,6 +340,24 @@ export function ReportsManager({ appUser, systemSettings }) {
       ))}
     </div>
   );
+
+  if (reportsTab === 'quality') {
+    return (
+      <>
+        {tabsBar}
+        <QualityCenter appUser={appUser} warehouses={warehouses} systemSettings={systemSettings} />
+      </>
+    );
+  }
+
+  if (reportsTab === 'repair') {
+    return (
+      <>
+        {tabsBar}
+        <RepairTimeReport appUser={appUser} warehouses={warehouses} systemSettings={systemSettings} />
+      </>
+    );
+  }
 
   if (reportsTab === 'live') {
     return (
@@ -333,7 +373,7 @@ export function ReportsManager({ appUser, systemSettings }) {
       <>
         {tabsBar}
         {exportCenterPanel}
-        <MonthlyComparison warehouses={warehouses} />
+        <MonthlyComparison warehouses={seeAllWarehouses ? warehouses : warehouses.filter(w => w.id === ownWarehouse)} lockedWarehouse={seeAllWarehouses ? null : ownWarehouse} />
         <LoadingSkeleton type="table" count={5} />
       </>
     );
@@ -343,7 +383,7 @@ export function ReportsManager({ appUser, systemSettings }) {
     <>
     {tabsBar}
     {exportCenterPanel}
-    <MonthlyComparison warehouses={warehouses} />
+    <MonthlyComparison warehouses={seeAllWarehouses ? warehouses : warehouses.filter(w => w.id === ownWarehouse)} lockedWarehouse={seeAllWarehouses ? null : ownWarehouse} />
     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden text-right" dir="rtl">
        <div className="p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
          <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
@@ -364,9 +404,10 @@ export function ReportsManager({ appUser, systemSettings }) {
                className="border border-slate-200 dark:border-slate-700 p-2 rounded-lg text-sm font-bold bg-white dark:bg-slate-900"
                value={warehouse}
                onChange={e => setWarehouse(e.target.value)}
+               disabled={!seeAllWarehouses}
              >
-               <option value="all">كل المخازن</option>
-               {warehouses.map(w => (
+               {seeAllWarehouses && <option value="all">كل المخازن</option>}
+               {warehouses.filter(w => seeAllWarehouses || w.id === ownWarehouse).map(w => (
                  <option key={w.id} value={w.id}>{w.name}</option>
                ))}
              </select>
