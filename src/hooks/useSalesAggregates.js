@@ -50,7 +50,9 @@ export function useSalesAggregates(warehouseId, enabled = true, months = 11) {
           const msg = e.code === 'failed-precondition'
             ? 'محتاج Index جديد: شغّل firebase deploy --only firestore:indexes'
             : (e.code === 'permission-denied' ? 'لا توجد صلاحية' : friendlyMessage(e.message));
-          setState({ months: [], loading: false, error: msg });
+          // Firestore بيحط في رسالة الخطأ رابط بيعمل الـ Index المطلوب بالظبط بضغطة
+          const indexUrl = (String(e.message || '').match(/https:\/\/console\.firebase\.google\.com\S+/) || [])[0] || null;
+          setState({ months: [], loading: false, error: msg, indexUrl });
         }
       }
     };

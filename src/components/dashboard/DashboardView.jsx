@@ -247,6 +247,9 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
             {errorList.map(([k, v]) => (
               <p key={k}>تعذّر تحميل «{SOURCE_LABELS[k] || k}»: {v}</p>
             ))}
+            {agg.indexUrl && appUser?.role === 'admin' && (
+              <a href={agg.indexUrl} target="_blank" rel="noopener noreferrer" className="inline-block mt-2 px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs">اعمل الـ Index الناقص بضغطة (Firebase Console)</a>
+            )}
             <p className="text-xs mt-1 font-normal">باقي الأقسام بتشتغل عادي. لو المشكلة في الصلاحيات راجع قواعد الأمان في Firebase.</p>
           </div>
         </div>
