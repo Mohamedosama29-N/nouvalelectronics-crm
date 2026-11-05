@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { addDoc, collection, doc, getDocs, limit, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDocs, limit, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { Brain, Search, BookOpen, TrendingUp, ShieldAlert, Smile, Loader2, Sparkles, Plus, Save, Archive, RefreshCw, Phone, ExternalLink, Pencil } from 'lucide-react';
 import { db } from '../../firebase/config';
 import { loadRecentTickets } from '../../ai/ticketPool';
+import { asTickets, loadErrorMessage, loadForecastTickets } from '../../ai/forecastStore';
 import { invalidateKb, loadKbArticles, loadWarrantySources } from '../../ai/kbStore';
 import { articleFromSuggestion, buildWarrantyMaps, customerMood, forecastTicketVolume, FRAUD_LEVELS, fraudScan, kbText, mineSolutions, MOODS, semanticSearch, WEEKDAYS } from '../../ai/insights';
 import { statusLabel, whatsappLink } from '../../ai/ticketAssist';
@@ -193,26 +194,29 @@ function KbTab({ appUser, systemSettings }) {
 }
 
 // ================================================================ (16) توقع حجم التذاكر
-let forecastCache = { at: 0, list: null };
 function ForecastTab({ appUser, warehouses }) {
   const [tickets, setTickets] = useState(null);
+  const [stale, setStale] = useState(null);
   const [wh, setWh] = useState(seeAll(appUser) ? 'all' : appUser?.assignedWarehouseId || 'main');
   const [now] = useState(() => new Date());
+  const [reload, setReload] = useState(0);
   useEffect(() => {
-    // 📊 (5) التوقع بيتحسب من تاريخ الإنشاء والفرع بس — بنحفظ النتيجة ساعة عشان متتقريش آلاف التذاكر كل مرة
-    if (forecastCache.list && Date.now() - forecastCache.at < 60 * 60000) { setTimeout(() => setTickets(forecastCache.list), 0); return; }
-    const from = new Date(now.getTime() - 113 * DAY);
-    getDocs(query(collection(db, 'tickets'), where('createdAt', '>=', from), orderBy('createdAt', 'asc'), limit(15000)))
-      .then((s) => {
-        const list = s.docs.map((d) => d.data()).filter((t) => !t.isDeleted).map((t) => ({ createdAt: t.createdAt, warehouseId: t.warehouseId, assignedCenter: t.assignedCenter, assignedTechnician: t.assignedTechnician }));
-        forecastCache = { at: Date.now(), list };
-        setTickets(list);
-      })
-      .catch((e) => { console.error(e); showError('معرفتش أحمّل التذاكر'); setTickets([]); });
-  }, [now]);
+    // 📊 (5) البيانات محفوظة على الجهاز وبنجيب الجديد بس (forecastStore) عشان متتقريش آلاف التذاكر كل مرة
+    let alive = true;
+    loadForecastTickets({ force: reload > 0 }).then(({ list, stale: st, error }) => {
+      if (!alive) return;
+      if (error) {
+        console.error(error);
+        if (list.length) setStale(loadErrorMessage(error));
+        else showError(loadErrorMessage(error));
+      } else setStale(st ? 'البيانات من آخر مرة اتحدثت' : null);
+      setTickets(asTickets(list));
+    });
+    return () => { alive = false; };
+  }, [reload]);
   const f = useMemo(() => (tickets ? forecastTicketVolume(tickets, { now, warehouse: wh }) : null), [tickets, wh, now]);
   if (!f) return <div className={card}><Loader2 className="animate-spin text-indigo-500" /></div>;
-  if (!f.enough) return <div className={card}><p className="text-sm">محتاجين تاريخ أكتر (على الأقل 10 تذاكر في آخر 16 أسبوع) عشان نتوقع.</p></div>;
+  if (!f.enough) return <div className={`${card} flex flex-wrap items-center gap-3`}><p className="text-sm flex-1">{stale || 'محتاجين تاريخ أكتر (على الأقل 10 تذاكر في آخر 16 أسبوع) عشان نتوقع.'}</p><button type="button" onClick={() => setReload((r) => r + 1)} className={`${btn} bg-slate-100 dark:bg-slate-700`}><RefreshCw size={14} /> جرّب تاني</button></div>;
   const recent = f.history.slice(-28);
   const max = Math.max(...recent.map((h) => h.count), ...f.forecast.map((x) => x.high), 1);
   const day = (d) => new Date(`${d}T00:00:00`).toLocaleDateString('ar-EG', { day: 'numeric', month: 'numeric' });
@@ -220,6 +224,8 @@ function ForecastTab({ appUser, warehouses }) {
     <div className="space-y-4">
       <div className={`${card} flex flex-wrap items-center gap-3`}>
         <select className={inp} value={wh} disabled={!seeAll(appUser)} onChange={(e) => setWh(e.target.value)} aria-label="الفرع"><option value="all">كل الفروع</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
+        <button type="button" onClick={() => setReload((r) => r + 1)} className={`${btn} bg-slate-100 dark:bg-slate-700`}><RefreshCw size={14} /> تحديث</button>
+        {stale && <span className="text-[11px] text-amber-700 dark:text-amber-300">{stale}</span>}
         <button type="button" onClick={() => exportToExcel(f.forecast.map((x) => ({ 'اليوم': x.date, 'اليوم في الأسبوع': WEEKDAYS[x.wd], 'المتوقع': x.expected, 'أقل': x.low, 'أعلى': x.high })), 'Ticket_Forecast', 'التوقع')} className={`${btn} bg-slate-100 dark:bg-slate-700`}>Excel</button>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center text-xs">

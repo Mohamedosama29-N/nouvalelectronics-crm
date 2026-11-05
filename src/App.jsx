@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { InstallAppButton } from './components/common/InstallAppButton';
 
 import {
   collection, getDoc, doc, onSnapshot
@@ -821,6 +822,9 @@ useEffect(() => {
                </div>
             </button>
             
+            {/* 📱 تثبيت السيستم كتطبيق على الموبايل أو الكمبيوتر */}
+            <InstallAppButton variant="sidebar" />
+
             {/* زر الوضع الداكن */}
             <button 
               onClick={() => setDarkMode(!darkMode)}

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { loadErrorMessage } from '../../ai/forecastStore';
 import { arrayUnion, collection, doc, getDocs, limit, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { Building, Loader2, RefreshCw, Clock, Save } from 'lucide-react';
 import { db } from '../../firebase/config';
@@ -32,7 +33,7 @@ export function CenterPortal({ appUser, systemSettings, warehouses = [] }) {
     try {
       const snap = await getDocs(query(collection(db, 'tickets'), where('assignedMaintenanceCenter', '==', c), orderBy('updatedAt', 'desc'), limit(500)));
       setItems(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    } catch (e) { console.error(e); showError(e?.code === 'failed-precondition' ? 'محتاج Index: شغّل firebase deploy --only firestore:indexes' : 'معرفتش أحمّل التذاكر'); }
+    } catch (e) { console.error(e); showError(loadErrorMessage(e)); }
     finally { setLoading(false); }
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- تحميل عند تغيير المركز بس

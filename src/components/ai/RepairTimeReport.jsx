@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { loadErrorMessage } from '../../ai/forecastStore';
 import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { Timer, Loader2, Download, Sparkles, Wand2, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { db } from '../../firebase/config';
@@ -60,7 +61,7 @@ export function RepairTimeReport({ appUser, warehouses = [], systemSettings }) {
       setData(entry);
     } catch (e) {
       console.error(e);
-      showError(e?.code === 'failed-precondition' ? 'محتاج Index: شغّل firebase deploy --only firestore:indexes' : 'معرفتش أحمّل التذاكر.');
+      showError(loadErrorMessage(e));
     } finally { setLoading(false); }
   };
 
