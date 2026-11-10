@@ -14,7 +14,7 @@ export const TICKET_STATUSES = [
   // 🆕 نهاية الصيانة الفعلية + المراجعات قبل التسليم
   { value: 'maintenance_done', label: 'تمت الصيانة', color: 'green' },
   { value: 'financial_reviewed', label: 'تمت المراجعة ماليًا', color: 'emerald' },
-  { value: 'material_reviewed', label: 'تمت المراجعة ماديًا', color: 'emerald' },
+  { value: 'technical_reviewed', label: 'تمت المراجعة فنيًا', color: 'emerald' },
   { value: 'contacted_customer', label: 'تم التواصل مع العميل لاستلام الجهاز', color: 'blue' },
   { value: 'delivered_to_customer', label: 'تم التسليم للعميل', color: 'green' },
   { value: 'waiting_shipping_company', label: 'انتظار ارسال شركة الشحن', color: 'yellow' },

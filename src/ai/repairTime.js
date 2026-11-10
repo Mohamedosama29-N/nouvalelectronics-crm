@@ -13,7 +13,7 @@ import { REPAIR_DONE_STATUSES } from '../constants/tickets';
 
 export const DONE_STATUSES = ['delivered_to_customer', 'delivered_asc', 'closed'];
 export const NOT_REPAIRED = ['rejected_by_customer', 'rejected_and_delivered', 'damaged_disposed'];
-const READY_STATUSES = ['maintenance_done', 'financial_reviewed', 'material_reviewed', 'contacted_customer', ...DONE_STATUSES];
+const READY_STATUSES = ['maintenance_done', 'financial_reviewed', 'technical_reviewed', 'contacted_customer', ...DONE_STATUSES];
 const WAIT_CUSTOMER = ['waiting_customer_approval_cost', 'contacted_customer'];
 const WAIT_PARTS = ['waiting_spare_parts', 'spare_parts_unavailable'];
 const FACTORY = ['sent_to_factory', 'factory_maintenance_done', 'sent_from_factory', 'shipped_asc'];

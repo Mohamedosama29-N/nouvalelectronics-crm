@@ -1,6 +1,6 @@
 /* 📱 Service Worker بتاع نوڤال: بيخلّي السيستم يفتح حتى من غير نت (الملفات بتتحفظ على الجهاز).
    البيانات نفسها بيحفظها Firestore في الكاش بتاعه — الملف ده للواجهة بس. */
-const VERSION = 'nouval-shell-v1';
+const VERSION = 'nouval-shell-v2'; // v2: أيقونة التطبيق الجديدة
 const SHELL = ['/', '/index.html', '/manifest.json', '/logo192.png', '/logo512.png', '/favicon.ico'];
 
 self.addEventListener('install', (e) => {

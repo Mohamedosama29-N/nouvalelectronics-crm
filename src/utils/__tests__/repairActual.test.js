@@ -7,7 +7,7 @@ describe('وقت الصيانة الفعلي', () => {
   it('measures from creation to the first «تمت الصيانة», not delivery', () => {
     const t = { id: 'a', createdAt: t0, status: 'delivered_to_customer', statusHistory: [
       { status: 'received_maintenance', timestamp: at(1) }, { status: 'maintenance_done', timestamp: at(30) },
-      { status: 'financial_reviewed', timestamp: at(32) }, { status: 'material_reviewed', timestamp: at(33) }, { status: 'delivered_to_customer', timestamp: at(80) }] };
+      { status: 'financial_reviewed', timestamp: at(32) }, { status: 'technical_reviewed', timestamp: at(33) }, { status: 'delivered_to_customer', timestamp: at(80) }] };
     const a = analyzeTicket(t);
     expect(a.repair).toBe(30 * H);
     expect(a.total).toBe(80 * H);

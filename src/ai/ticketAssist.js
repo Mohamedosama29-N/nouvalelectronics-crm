@@ -111,7 +111,7 @@ export function templateMessage(ticket, { companyName = '' } = {}) {
       return `${hi}\n${dev}${no} حالته: ${statusLabel(ticket.status)}. هنتابع مع حضرتك أول بأول.${sign}`;
     case 'maintenance_done':
     case 'financial_reviewed':
-    case 'material_reviewed':
+    case 'technical_reviewed':
     case 'contacted_customer':
     case 'factory_rejected':
       return `${hi}\n${dev}${no} جاهز للاستلام${remaining > 0 ? `، والمبلغ المتبقي ${money(remaining)}` : ''}. مستنيين حضرتك.${sign}`;
