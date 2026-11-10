@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Gauge, HardDriveDownload } from 'lucide-react';
 import { FREE_LIMITS, readUsageToday, usageLevel } from '../../utils/readMeter';
 import { backupDue } from '../../utils/fullBackup';
+import { quotaStatus, setSharedUsage } from '../../utils/quotaGuard';
 
 // 🔔 شريط تذكير النسخة الاحتياطية للأدمن (بيظهر فوق الصفحات)
 export function BackupReminder({ appUser, systemSettings, onOpen }) {
@@ -27,7 +28,7 @@ export function UsageWarning({ appUser, onOpen }) {
     if (appUser?.role !== 'admin') return undefined;
     if (Date.now() - usageCache.at < 30 * 60000) return undefined;
     let alive = true;
-    readUsageToday().then((d) => { usageCache = { at: Date.now(), data: d }; if (alive) setU(d); }).catch(() => {});
+    readUsageToday().then((d) => { usageCache = { at: Date.now(), data: d }; setSharedUsage((d.reads || 0) / FREE_LIMITS.reads); if (alive) setU(d); }).catch(() => {});
     return () => { alive = false; };
   }, [appUser]);
   if (appUser?.role !== 'admin' || !u) return null;
@@ -36,8 +37,25 @@ export function UsageWarning({ appUser, onOpen }) {
   if (worst.level === 'ok') return null;
   return (
     <div className={`mb-4 p-3 rounded-xl border text-xs font-bold flex flex-wrap items-center gap-2 print:hidden ${worst.level === 'danger' ? 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-900/20 dark:text-rose-300' : 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300'}`}>
-      <Gauge size={16} /> استهلاك {worst.kind} النهارده وصل {Math.round(worst.pct * 100)}% من الحد المجاني. قلّل التقارير الكبيرة لحد ما الحصة تتجدد (حوالي 10 الصبح).
+      <Gauge size={16} /> استهلاك {worst.kind} النهارده وصل {Math.round(worst.pct * 100)}% من الحد المجاني. {r.pct >= 0.8 ? 'وضع التوفير اشتغل لوحده: البيانات بتتحدث كل 10 دقايق.' : 'قلّل التقارير الكبيرة لحد ما الحصة تتجدد (حوالي 10 الصبح).'}
       <button type="button" onClick={onOpen} className="px-3 py-1 rounded-lg bg-white/70 dark:bg-slate-800">التفاصيل</button>
+    </div>
+  );
+}
+
+// 🛡️ شريط لكل الموظفين لو حصة القراءات خلصت: السيستم شغال من البيانات المحفوظة على الجهاز
+export function QuotaBanner() {
+  const [st, setSt] = useState(() => quotaStatus());
+  useEffect(() => {
+    const on = (e) => setSt(e?.detail || quotaStatus());
+    window.addEventListener('erp:quota', on);
+    return () => window.removeEventListener('erp:quota', on);
+  }, []);
+  if (!st.exhausted) return null;
+  return (
+    <div className="mb-4 p-3 rounded-xl border bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-900/20 dark:text-rose-300 text-xs font-bold flex items-start gap-2 print:hidden" role="status">
+      <Gauge size={16} className="shrink-0 mt-0.5" />
+      <span>حصة القراءات بتاعة النهارده خلصت، فالشاشات بتعرض آخر بيانات محفوظة على الجهاز ده (ممكن متكونش محدّثة لحظيًا). التسجيل العادي شغال، بس العمليات اللي محتاجة تتأكد من السيرفر (زي البيع والتحويلات) ممكن تتأخر. السيستم هيرجع طبيعي لوحده بعد ما الحصة تتجدد حوالي 10 الصبح بتوقيت مصر.</span>
     </div>
   );
 }

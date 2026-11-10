@@ -8,6 +8,7 @@ import { AUTH_MODE, APPCHECK_KEY, secureAuthStatus, sendResetLink } from '../../
 import { hasPerm } from '../../utils/permissions';
 import { showConfirm, showError, showSuccess } from '../../utils/alerts';
 import { toDate } from '../../utils/liveStats';
+import { quotaStatus } from '../../utils/quotaGuard';
 import { deviceUsage, FREE_LIMITS, flushUsage, onUsage, quotaDay, readUsageToday, usageLevel } from '../../utils/readMeter';
 import { resetTicketPools } from '../../ai/ticketPool';
 
@@ -193,6 +194,7 @@ const Bar = ({ used, limit, label }) => {
     </div>
   );
 };
+const SRC_LABELS = { tickets: 'التذاكر', transactions: 'الفواتير', inventory: 'المخزون', customers: 'العملاء', transfers: 'التحويلات', returns: 'المرتجعات', employees: 'الموظفين', notifications: 'الإشعارات', activity_logs: 'سجل النشاط', settings: 'الإعدادات', warehouses: 'الفروع', contactLogs: 'سجل التواصل', knowledgeBase: 'قاعدة المعرفة', usageDaily: 'عدّاد الاستهلاك', expenses: 'المصروفات', attendance: 'الحضور' };
 function UsageTab({ appUser }) {
   const [total, setTotal] = useState(null);
   const [mine, setMine] = useState(() => deviceUsage());
@@ -208,6 +210,15 @@ function UsageTab({ appUser }) {
           <>
             <Bar used={total.reads || 0} limit={FREE_LIMITS.reads} label="القراءات" />
             <Bar used={total.writes || 0} limit={FREE_LIMITS.writes} label="الكتابات" />
+            {total.src && Object.keys(total.src).length > 0 && (
+              <div className="text-xs space-y-1">
+                <p className="font-bold">أكتر حاجات بتستهلك قراءات النهارده (كل الأجهزة):</p>
+                {Object.entries(total.src).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => (
+                  <div key={k} className="flex items-center gap-2"><span className="w-28 truncate">{SRC_LABELS[k] || k}</span><div className="flex-1 h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden"><div className="h-full bg-indigo-500" style={{ width: `${Math.min(100, (v / Math.max(1, total.reads || 1)) * 100)}%` }} /></div><b className="w-16 text-left">{Number(v).toLocaleString()}</b></div>
+                ))}
+              </div>
+            )}
+            {quotaStatus().economy && <p className="text-xs font-bold text-amber-700 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-2">وضع التوفير شغال: البيانات بتتحدث كل 10 دقايق بدل كل دقيقة عشان الحصة تكفّي الشغل الأساسي لحد ما تتجدد.</p>}
           </>
         )}
         <p className="text-[11px] text-slate-500">رقم تقريبي من عدّاد جوه السيستم (الأجهزة بتبعته كل ربع ساعة)، والحصة بتتجدد حوالي الساعة 10 الصبح بتوقيت مصر. الرقم الرسمي في Firebase Console ← Firestore ← Usage.</p>
@@ -221,9 +232,11 @@ function UsageTab({ appUser }) {
       </div>
       <div className={`${card} text-xs space-y-1 text-slate-600 dark:text-slate-300`}>
         <p className="font-black text-sm text-slate-800 dark:text-white">نصايح توفّر القراءات</p>
-        <p>• شاشات التحليلات بقت بتحتفظ بالتذاكر على الجهاز وبتجيب اللي اتغير بس — متقفلش المتصفح بـ "مسح البيانات" كل شوية.</p>
-        <p>• التقارير الكبيرة (الأرباح، توقع حجم التذاكر، النسخة الاحتياطية) بتقرا آلاف المستندات — اعملها مرة في اليوم مش كل شوية.</p>
-        <p>• لو العدّاد عدّى 70% هيظهر تنبيه للأدمن فوق الصفحات.</p>
+        <p>• لوحة التحكم والتقارير والكول سنتر والتحليلات بقت بتحتفظ بالبيانات على الجهاز (مرايا محلية) وبتجيب من السيرفر الجديد والمتعدّل بس. أول فتح على كل جهاز بيقرا الفترة كاملة مرة واحدة، وبعد كده بيبقى رخيص جدًا.</p>
+        <p>• متمسحش بيانات المتصفح كل شوية، ومتستخدمش التصفح الخفي للشغل اليومي، عشان النسخة المحفوظة متضيعش.</p>
+        <p>• لو الاستهلاك عدّى 80% السيستم بيدخل «وضع التوفير» لوحده: التحديث كل 10 دقايق بدل كل دقيقة.</p>
+        <p>• لو الحصة خلصت خالص، الشاشات بتعرض آخر بيانات محفوظة بدل ما تقع، وبترجع طبيعي لوحدها بعد ما الحصة تتجدد.</p>
+        <p>• النسخة الاحتياطية الكاملة بتقرا كل البيانات — اعملها مرة في الأسبوع ويُفضّل الصبح بعد ما الحصة تتجدد.</p>
       </div>
     </div>
   );

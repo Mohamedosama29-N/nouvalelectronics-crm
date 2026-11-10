@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { collection, getDocs, getCountFromServer, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
+import { transactionsBetween } from '../../data/mirror';
+import { collection, getCountFromServer, query, where, Timestamp } from 'firebase/firestore';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { BarChart3, Loader2, TrendingUp, TrendingDown, Minus, FileDown, Download } from 'lucide-react';
 import { db } from '../../firebase/config';
@@ -42,7 +43,7 @@ export function MonthlyComparison({ warehouses = [], lockedWarehouse = null }) {
     const startTs = Timestamp.fromDate(start);
     const endTs = Timestamp.fromDate(end);
     const [txSnap, ticketsCount] = await Promise.all([
-      getDocs(query(collection(db, 'transactions'), where('timestamp', '>=', startTs), where('timestamp', '<=', endTs), orderBy('timestamp', 'desc'), limit(MAX_DOCS))),
+      transactionsBetween(start, end, { max: MAX_DOCS }).then((l) => ({ docs: l.map((x) => ({ data: () => x })) })), // 📉 من المرايا المحلية
       // 🛠️ FIX: عدد التذاكر كان دايمًا على مستوى الشركة حتى لو اخترت فرع (والمبيعات متفلترة بالفرع)
       getCountFromServer(query(collection(db, 'tickets'), ...(warehouse !== 'all' ? [where('assignedCenter', '==', warehouse)] : []), where('createdAt', '>=', startTs), where('createdAt', '<=', endTs)))
     ]);

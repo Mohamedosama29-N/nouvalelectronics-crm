@@ -54,7 +54,7 @@ export function classifyFaults(draft, faults = [], pool = [], { codeField = 'mai
 // analyzed = تذاكر خلصت ومحللة (analyzeTicket) ومعاها الأصل في .t
 export const analyzePool = (pool = []) => pool.map((t) => {
   const a = analyzeTicket(t);
-  return a && a.outcome === 'repaired' ? { ...a, t } : null;
+  return a && a.outcome === 'repaired' && a.completedAt ? { ...a, t } : null;
 }).filter(Boolean);
 
 export function predictDuration(draft, analyzed = [], { minCount = 3 } = {}) {

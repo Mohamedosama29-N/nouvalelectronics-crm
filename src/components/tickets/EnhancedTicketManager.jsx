@@ -60,6 +60,7 @@ import { TicketCustomerTools } from '../ai/TicketCustomerTools';
 import { TicketNetworkTools } from '../ai/TicketNetworkTools';
 import { makeTrackToken, refreshTrackingIfAny } from '../../utils/ticketTracking';
 import { notify } from '../../utils/notifications';
+import { addPartToTicket, deductTicketParts, removePartFromTicket } from '../../utils/ticketParts';
 import { useIntent } from '../../hooks/useIntent';
 
 export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUser, warehouseMap, onGenerateInvoice }) {
@@ -406,8 +407,11 @@ export function EnhancedTicketManager({ systemSettings, setGlobalLoading, appUse
     setSearchingSpareParts(true);
     try {
       const tokens = buildQueryTokens(term);
+      // 🔗 القطعة بتتخصم من المخزن اللي اتاخدت منه، فالفرع يدوّر في مخزنه بس (المدير والمخزن الرئيسي يشوفوا الكل)
+      const seeAllStock = appUser.role === 'admin' || appUser.role === 'main_warehouse_manager';
       const snap = await getDocs(query(
         collection(db, 'inventory'),
+        ...(seeAllStock ? [] : [where('warehouseId', '==', appUser.assignedWarehouseId || 'main')]),
         where('isDeleted', '==', false),
         where('searchTokens', 'array-contains-any', tokens.length ? tokens : [term]),
         limit(10)
@@ -1149,6 +1153,13 @@ const loadTickets = useCallback(async (targetPage = 1) => {
       ticketData.trackToken = makeTrackToken();
       const docRef = await addDoc(collection(db, 'tickets'), ticketData);
       refreshTrackingIfAny(ticketData, trackingOpts(ticketData));
+      // 🔗 قطع الغيار اللي اتختارت من المخزون مع التذكرة بتتخصم دلوقتي
+      if ((ticketData.spareParts || []).some((p) => p.id)) {
+        try {
+          const { missing } = await deductTicketParts(docRef.id, { by: appUser.name });
+          if (missing.length) showInfo(`القطع دي مش متاحة في المخزن واتسجلت على التذكرة من غير خصم: ${missing.join('، ')}`);
+        } catch (e) { console.warn('deduct ticket parts', e); }
+      }
       // 🔔 إشعار للفني/المركز المعيّن
       const devLabel = [ticketData.device, ticketData.deviceModel].filter(Boolean).join(' ');
       if (ticketData.assignedTechnician) notify({ toName: ticketData.assignedTechnician, title: `تذكرة جديدة ليك: ${generatedTicketNumber}`, body: `${devLabel} — ${String(ticketData.issue || '').slice(0, 80)}`, view: 'my_tickets', from: appUser.name });
@@ -1354,102 +1365,40 @@ const loadTickets = useCallback(async (targetPage = 1) => {
   };
 
   // ========== إضافة قطعة غيار ==========
+  // 🔗 القطعة المربوطة بالمخزون بتتخصم من المخزن فورًا (utils/ticketParts)، وبترجع لو اتشالت
+  const syncTicketViews = (ticketId, t) => {
+    const patch = { spareParts: t.spareParts, totalCost: t.totalCost, remaining: t.remaining, history: t.history };
+    if (fullTicketView?.id === ticketId) setFullTicketView({ ...fullTicketView, ...patch });
+    setSelectedTicket(prev => prev?.id === ticketId ? { ...prev, ...patch } : prev);
+    setEditingTicket(prev => prev?.id === ticketId ? { ...prev, ...patch } : prev);
+  };
+
   const handleAddSparePart = async (ticketId, part, opts = {}) => {
     setGlobalLoading(true);
     let added = false;
-
     try {
-      const ticketRef = doc(db, 'tickets', ticketId);
-      const snap = await getDoc(ticketRef);
-      const current = snap.data();
-      if (opts.skipIfExists && part.id && (current.spareParts || []).some(p => p.id === part.id)) {
-        setGlobalLoading(false);
-        return false;
+      const res = await addPartToTicket(ticketId, part, { by: appUser.name, skipIfExists: !!opts.skipIfExists });
+      if (res.added) {
+        added = true;
+        showSuccess(res.deducted ? 'اتضافت القطعة واتخصمت من المخزن' : 'اتضافت القطعة (من غير ربط بالمخزون)');
+        syncTicketViews(ticketId, res.ticket);
       }
-      
-      const spareParts = [...(current.spareParts || []), {
-        ...part,
-        // 🛠️ FIX (باگ حرج): كان بيستبدل معرّف المخزون الحقيقي بمعرّف
-        // مؤقت دايمًا، حتى لو القطعة جاية من بحث حقيقي في المخزون - يعني
-        // أي قطعة اتضافت كده كانت بتفقد ربطها بالمخزون بصمت، وساعة عمل
-        // فاتورة من التذكرة كانت بتتحط في نقطة البيع كـ"خدمة" عادية من
-        // غير خصم فعلي من المخزون، رغم كل الشغل اللي اتعمل عشان الربط ده.
-        // دلوقتي بيحتفظ بالمعرّف الحقيقي لو موجود، ومش بيعمل معرّف مؤقت
-        // إلا للقطع المضافة يدويًا (اللي أصلًا مالهاش معرّف مخزون حقيقي).
-        id: part.id || Date.now().toString(),
-        addedAt: new Date().toISOString(),
-        addedBy: appUser.name
-      }];
-      
-      const totalCost = (current.totalCost || 0) + (part.price * part.quantity);
-      const remaining = totalCost - (current.totalPaid || 0);
-      
-      const history = [...(current.history || []), {
-        action: `إضافة قطعة غيار: ${part.name} (${part.quantity} x ${part.price} ج)`,
-        timestamp: new Date().toISOString(),
-        by: appUser.name
-      }];
-
-      await updateDoc(ticketRef, {
-        spareParts,
-        totalCost,
-        remaining,
-        updatedAt: serverTimestamp(),
-        history
-      });
-      
-      showSuccess("تم إضافة قطعة الغيار");
-      added = true;
-
-      if (fullTicketView?.id === ticketId) {
-        setFullTicketView({ ...fullTicketView, spareParts, totalCost, remaining, history });
-      }
-      // 🛠️ FIX: المودال بيعرض بيانات selectedTicket، وده كان بيفضل زي
-      // ما هو (قديم) بعد الإضافة لحد ما تقفل المودال وتفتحه تاني.
-      setSelectedTicket(prev => prev?.id === ticketId ? { ...prev, spareParts, totalCost, remaining, history } : prev);
-    } catch(e) {
-      showError("فشل إضافة قطعة الغيار: " + e.message);
+    } catch (e) {
+      showError(e.code === 'insufficient-stock' ? e.message : 'فشل إضافة قطعة الغيار: ' + e.message);
     }
-    
     setGlobalLoading(false);
     return added;
   };
 
-  // 🆕 حذف قطعة غيار من التذكرة (كانت غير موجودة خالص - مفيش طريقة
-  // تصحح غلطة لو ضفت قطعة غلط إلا بالدخول على قاعدة البيانات يدويًا)
+  // حذف قطعة غيار من التذكرة (ولو كانت اتخصمت من المخزن بترجع له)
   const handleRemoveSparePart = async (ticketId, partId) => {
     setGlobalLoading(true);
     try {
-      const ticketRef = doc(db, 'tickets', ticketId);
-      const snap = await getDoc(ticketRef);
-      const current = snap.data();
-
-      const removedPart = (current.spareParts || []).find(p => p.id === partId);
-      const spareParts = (current.spareParts || []).filter(p => p.id !== partId);
-      const totalCost = Math.max(0, (current.totalCost || 0) - ((removedPart?.price || 0) * (removedPart?.quantity || 1)));
-      const remaining = totalCost - (current.totalPaid || 0);
-
-      const history = [...(current.history || []), {
-        action: `حذف قطعة غيار: ${removedPart?.name || ''}`,
-        timestamp: new Date().toISOString(),
-        by: appUser.name
-      }];
-
-      await updateDoc(ticketRef, {
-        spareParts,
-        totalCost,
-        remaining,
-        updatedAt: serverTimestamp(),
-        history
-      });
-
-      showSuccess("تم حذف قطعة الغيار");
-
-      if (fullTicketView?.id === ticketId) {
-        setFullTicketView({ ...fullTicketView, spareParts, totalCost, remaining, history });
+      const res = await removePartFromTicket(ticketId, partId, { by: appUser.name });
+      if (res.removed) {
+        showSuccess(res.returned ? 'اتشالت القطعة ورجعت للمخزن' : 'تم حذف قطعة الغيار');
+        syncTicketViews(ticketId, res.ticket);
       }
-      setSelectedTicket(prev => prev?.id === ticketId ? { ...prev, spareParts, totalCost, remaining, history } : prev);
-      setEditingTicket(prev => prev?.id === ticketId ? { ...prev, spareParts, totalCost, remaining, history } : prev);
     } catch (e) {
       showError("فشل حذف قطعة الغيار: " + e.message);
     }
@@ -1572,7 +1521,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
         // 🛠️ FIX: كان بيسقط id/serialNumber هنا، يعني حتى لو القطعة كانت
         // مرتبطة بصنف حقيقي في المخزون، الوصلة كانت بتتقطع قبل ما توصل
         // نقطة البيع، فمستحيل كان يتحدد إنها فعلاً من المخزون ولا مضافة يدويًا.
-        items: ticket.spareParts?.map(p => ({ id: p.id, serialNumber: p.serialNumber, name: p.name, price: p.price, quantity: p.quantity })) || [],
+        items: ticket.spareParts?.map(p => ({ id: p.id, serialNumber: p.serialNumber, name: p.name, price: p.price, quantity: p.quantity, stockDeducted: !!p.stockDeducted })) || [],
         totalCost: ticket.totalCost || 0
       });
     } else {
@@ -2103,7 +2052,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
           >
             <div>
               <p className="font-bold text-sm">{item.name}</p>
-              <p className="text-xs text-slate-400 font-mono">{item.serialNumber} - متاح: {item.quantity}</p>
+              <p className="text-xs text-slate-400 font-mono">{item.serialNumber} - متاح: {item.quantity}{item.warehouseId ? ` · ${(typeof warehouseMap?.[item.warehouseId] === "string" ? warehouseMap[item.warehouseId] : warehouseMap?.[item.warehouseId]?.name) || item.warehouseId}` : ''}</p>
             </div>
             <span className="text-xs font-bold text-teal-600">{item.price} ج</span>
           </button>
@@ -2733,7 +2682,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                         >
                           <div>
                             <p className="font-bold text-sm">{item.name}</p>
-                            <p className="text-xs text-slate-400 font-mono">{item.serialNumber} - متاح: {item.quantity}</p>
+                            <p className="text-xs text-slate-400 font-mono">{item.serialNumber} - متاح: {item.quantity}{item.warehouseId ? ` · ${(typeof warehouseMap?.[item.warehouseId] === "string" ? warehouseMap[item.warehouseId] : warehouseMap?.[item.warehouseId]?.name) || item.warehouseId}` : ''}</p>
                           </div>
                           <span className="text-xs font-bold text-teal-600">{item.price} ج</span>
                         </button>
@@ -3764,7 +3713,7 @@ const loadTickets = useCallback(async (targetPage = 1) => {
                       >
                         <div>
                           <p className="font-bold text-sm">{item.name}</p>
-                          <p className="text-xs text-slate-400 font-mono">{item.serialNumber} - متاح: {item.quantity}</p>
+                          <p className="text-xs text-slate-400 font-mono">{item.serialNumber} - متاح: {item.quantity}{item.warehouseId ? ` · ${(typeof warehouseMap?.[item.warehouseId] === "string" ? warehouseMap[item.warehouseId] : warehouseMap?.[item.warehouseId]?.name) || item.warehouseId}` : ''}</p>
                         </div>
                         <span className="text-xs font-bold text-teal-600">{item.price} ج</span>
                       </button>

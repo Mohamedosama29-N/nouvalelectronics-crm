@@ -19,7 +19,7 @@ const QUICK = [
   { status: 'waiting_customer_approval_cost', label: 'محتاج موافقة العميل', icon: <BadgeDollarSign size={16} />, cls: 'bg-amber-500', needsCost: true },
   { status: 'waiting_spare_parts', label: 'مستني قطعة', icon: <PackageSearch size={16} />, cls: 'bg-orange-500' },
   { status: 'maintenance_after_approval', label: 'بصلّح', icon: <Wrench size={16} />, cls: 'bg-violet-600' },
-  { status: 'contacted_customer', label: 'خلص — جاهز', icon: <CheckCircle2 size={16} />, cls: 'bg-emerald-600' },
+  { status: 'maintenance_done', label: 'خلصت الصيانة', icon: <CheckCircle2 size={16} />, cls: 'bg-emerald-600' },
 ];
 
 // 📱 "تذاكري": شاشة الفني على الموبايل

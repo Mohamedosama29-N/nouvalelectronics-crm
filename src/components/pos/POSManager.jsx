@@ -96,7 +96,8 @@ export function POSManager({ appUser, systemSettings, setGlobalLoading, prefillF
           underWarranty: false
         };
 
-        if (!item.id) {
+        // 🔗 القطعة اتخصمت من المخزن وقت ما اتضافت على التذكرة: هنا سعر بس من غير خصم تاني
+        if (!item.id || item.stockDeducted) {
           cartItems.push(fallbackServiceItem);
           continue;
         }

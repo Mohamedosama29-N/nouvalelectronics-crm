@@ -1,7 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import {
-  collection, doc, getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager
+  collection, doc, enablePersistentCacheIndexAutoCreation, getFirestore, getPersistentCacheIndexManager, initializeFirestore, persistentLocalCache, persistentMultipleTabManager
 } from 'firebase/firestore';
 import { getMessaging } from 'firebase/messaging';
 import { getFunctions } from 'firebase/functions';
@@ -53,10 +53,16 @@ export const auth = getAuth(app);
 
 // 📱 (8) كاش محلي دائم: السيستم بيفتح ويقرا آخر بيانات حتى من غير نت، والتعديلات بتتحفظ على
 // الجهاز وبتتبعت لوحدها لما النت يرجع. لو المتصفح مش بيدعمه (وضع التصفح الخفي) بنرجع للعادي.
+// 📉 (توفير القراءات) الكاش كبير (200MB) عشان المرايا المحلية (src/data/mirror.js) متتمسحش،
+// والفهارس المحلية بتتعمل لوحدها عشان القراءة من الكاش تبقى سريعة.
+export let persistentCacheOn = false;
 const makeDb = () => {
   try {
     if (typeof window === 'undefined' || typeof indexedDB === 'undefined') return getFirestore(app);
-    return initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+    const d = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager(), cacheSizeBytes: 200 * 1024 * 1024 }) });
+    persistentCacheOn = true;
+    try { const m = getPersistentCacheIndexManager(d); if (m) enablePersistentCacheIndexAutoCreation(m); } catch { /* اختياري */ }
+    return d;
   } catch (e) {
     console.warn('offline cache disabled', e?.code || e);
     return getFirestore(app);

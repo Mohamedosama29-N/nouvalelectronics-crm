@@ -1,6 +1,7 @@
 // 🧮 تنفيذ الاستعلام على Firestore. الإجماليات بتتحسب بـ Aggregation Queries
 // (قراءة واحدة لكل 1000 مستند)، فالسؤال مش بيكلّف قراءات كتير.
-import { collection, count, getAggregateFromServer, getDocs, limit, orderBy, query, sum, where } from 'firebase/firestore';
+import { collection, count, getAggregateFromServer, getDocs, limit, query, sum, where } from 'firebase/firestore';
+import { ticketsCreatedBetween, ticketsUpdatedSince, transactionsBetween } from '../data/mirror';
 import { db } from '../firebase/config';
 import { TICKET_TERMINAL_STATUSES } from '../constants/tickets';
 import { topProductsFrom } from '../utils/liveStats';
@@ -61,10 +62,7 @@ const customersNew = async ([f, t]) => Number((await getAggregateFromServer(quer
 
 // تذاكر اتعدّلت من بداية الفترة (أي تذكرة خلصت جوه الفترة لازم تكون منهم)
 const ticketsTouchedSince = async (wh, since) => {
-  const cons = [];
-  if (wh !== 'all') cons.push(where('assignedCenter', '==', wh));
-  cons.push(where('updatedAt', '>=', since), orderBy('updatedAt', 'desc'), limit(5000));
-  return (await getDocs(query(collection(db, 'tickets'), ...cons))).docs.map((d) => ({ id: d.id, ...d.data() }));
+  return ticketsUpdatedSince(since, { wheres: wh !== 'all' ? [['assignedCenter', '==', wh]] : [], max: 20000 });
 };
 
 const repairReport = async (wh, range, slaHours, warehouseName) => {
@@ -94,19 +92,14 @@ export async function executeIntent(intent, now = new Date(), { slaHours, wareho
 
   if (intent.metric === 'top_products') {
     const MAX = 3000;
-    const cons = [where('type', '==', 'sell')];
-    if (wh !== 'all') cons.push(where('warehouseId', '==', wh));
-    cons.push(where('timestamp', '>=', range[0]), where('timestamp', '<', range[1]), limit(MAX));
-    const snap = await getDocs(query(collection(db, 'transactions'), ...cons));
-    const txs = snap.docs.map((d) => d.data());
-    return { top: topProductsFrom(txs, intent.topN || 5, 'revenue'), truncated: snap.size >= MAX, range };
+    const all = await transactionsBetween(range[0], range[1], { wheres: [['type', '==', 'sell'], ...(wh !== 'all' ? [['warehouseId', '==', wh]] : [])], max: MAX * 10 });
+    const txs = all.filter((t) => { const d = t.timestamp?.toDate ? t.timestamp.toDate() : new Date(t.timestamp); return d < range[1]; });
+    return { top: topProductsFrom(txs, intent.topN || 5, 'revenue'), truncated: false, range };
   }
 
   if (intent.metric === 'top_faults') {
-    const cons = [];
-    if (wh !== 'all') cons.push(where('assignedCenter', '==', wh));
-    cons.push(where('createdAt', '>=', range[0]), where('createdAt', '<', range[1]), limit(5000));
-    const list = (await getDocs(query(collection(db, 'tickets'), ...cons))).docs.map((d) => d.data());
+    const list = (await ticketsCreatedBetween(range[0], range[1], { wheres: wh !== 'all' ? [['assignedCenter', '==', wh]] : [], max: 20000 }))
+      .filter((t) => { const d = t.createdAt?.toDate ? t.createdAt.toDate() : new Date(t.createdAt); return d < range[1]; });
     const m = new Map();
     let uncoded = 0;
     list.forEach((t) => {
@@ -124,13 +117,16 @@ export async function executeIntent(intent, now = new Date(), { slaHours, wareho
       const top = rep.byTechnician.filter((t) => t.count >= 2 && t.key !== 'غير محدد').sort((a, b) => a.avg - b.avg).slice(0, intent.topN || 10);
       return { top, range };
     }
+    // 🆕 الأولوية لوقت الصيانة الفعلي (من الفتح لـ«تمت الصيانة»)، ولو مفيش نرجع للإجمالي لحد التسليم
+    const actual = rep.repairCount > 0;
     if (intent.groupBy === 'warehouse') {
-      return { value: rep.total.avg, groups: rep.byCenter.map((g) => ({ name: g.name, value: g.avg, count: g.count })), range };
+      const g = actual ? rep.repairByCenter : rep.byCenter;
+      return { value: actual ? rep.repair.avg : rep.total.avg, groups: g.map((x) => ({ name: x.name, value: x.avg, count: x.count })), range };
     }
-    const out = { value: rep.total.avg, range, extra: { net: rep.net.avg, median: rep.total.median, count: rep.count, slaRate: rep.slaRate } };
+    const out = { value: actual ? rep.repair.avg : rep.total.avg, range, extra: { net: rep.net.avg, median: actual ? rep.repair.median : rep.total.median, count: actual ? rep.repairCount : rep.count, slaRate: rep.slaRate } };
     if (intent.compare) {
       const prev = await repairReport(wh, previousPeriod(intent.period, range, now), slaHours, whName);
-      out.previous = prev.total.avg;
+      out.previous = actual && prev.repairCount ? prev.repair.avg : prev.total.avg;
     }
     return out;
   }

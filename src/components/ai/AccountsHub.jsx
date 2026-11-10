@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { transactionsBetween, wholeCollection } from '../../data/mirror';
 import { addDoc, arrayUnion, collection, doc, getDocs, increment, limit, orderBy, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { Truck, ClipboardCheck, Wallet, FileText, TrendingUp, Barcode, Loader2, RefreshCw, Plus, Save, Trash2, PackageCheck, Printer, Search, Lock, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { db } from '../../firebase/config';
@@ -299,7 +300,7 @@ function CountTab({ appUser, warehouses }) {
   const start = async () => {
     setBusy(true);
     try {
-      const s = await getDocs(query(collection(db, 'inventory'), where('warehouseId', '==', wh), limit(3000)));
+      const s = { docs: (await wholeCollection('inventory', { wheres: [['warehouseId', '==', wh]], max: 20000 })).map((x) => ({ id: x.id, data: () => x })) };
       const lines = {};
       s.docs.forEach((d) => { const x = d.data(); if (x.isDeleted) return; lines[d.id] = { serialNumber: x.serialNumber, name: x.name || x.serialNumber, systemQty: Number(x.quantity) || 0, countedQty: null, cost: Number(x.avgCost || x.cost) || 0, price: Number(x.price) || 0 }; });
       const ref = await addDoc(collection(db, 'stockCounts'), { warehouseId: wh, status: 'open', lines, createdAt: serverTimestamp(), createdBy: me(appUser) });
@@ -414,8 +415,8 @@ function CountTab({ appUser, warehouses }) {
 // ================================================================ (50) الوردية والخزنة
 const loadShiftTxs = async (shift) => {
   const from = toDate(shift.openedAt) || new Date();
-  const s = await getDocs(query(collection(db, 'transactions'), where('timestamp', '>=', from), orderBy('timestamp', 'asc'), limit(3000)));
-  return s.docs.map((d) => d.data());
+  // 📉 من المرايا المحلية
+  return (await transactionsBetween(from, null, { max: 20000 })).reverse();
 };
 
 function ShiftTab({ appUser }) {
@@ -587,12 +588,13 @@ function MarginTab({ appUser, warehouses }) {
   const run = async () => {
     setBusy(true);
     try {
-      const [tx, inv] = await Promise.all([
-        getDocs(query(collection(db, 'transactions'), where('timestamp', '>=', new Date(from)), where('timestamp', '<=', new Date(`${to}T23:59:59`)), orderBy('timestamp', 'asc'), limit(8000))),
-        getDocs(collection(db, 'inventory')),
+      const [txl, invl] = await Promise.all([
+        transactionsBetween(new Date(from), new Date(`${to}T23:59:59`), { max: 50000 }),
+        wholeCollection('inventory', { max: 100000 }),
       ]);
+      const tx = { docs: txl.reverse().map((x) => ({ data: () => x })) };
       const costs = new Map();
-      inv.docs.forEach((d) => { const x = d.data(); const c = Number(x.avgCost || x.cost) || 0; if (c > 0) { costs.set(`${x.serialNumber}|${x.warehouseId || 'main'}`, c); if (!costs.has(x.serialNumber)) costs.set(x.serialNumber, c); } });
+      invl.forEach((x) => { const c = Number(x.avgCost || x.cost) || 0; if (c > 0) { costs.set(`${x.serialNumber}|${x.warehouseId || 'main'}`, c); if (!costs.has(x.serialNumber)) costs.set(x.serialNumber, c); } });
       const list = tx.docs.map((d) => d.data()).filter((t) => wh === 'all' || (t.warehouseId || 'main') === wh);
       setRep({ ...marginReport(list, (s, w) => costs.get(`${normalizeSerial(s)}|${w || 'main'}`) || costs.get(normalizeSerial(s))), truncated: tx.size >= 8000 });
     } catch (e) { console.error(e); showError(e?.code === 'failed-precondition' ? 'محتاج Index: firebase deploy --only firestore:indexes' : 'معرفتش أحسب الأرباح'); }

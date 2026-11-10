@@ -22,7 +22,7 @@ export const PUBLIC_STEPS = [
   { key: 'received', label: 'استلمنا الجهاز', statuses: ['created', 'received_maintenance'] },
   { key: 'diagnosis', label: 'فحص وتشخيص', statuses: ['waiting_customer_approval_cost', 'customer_approved_cost', 'rejected_by_customer'] },
   { key: 'repair', label: 'جاري الإصلاح', statuses: ['maintenance_after_approval', 'waiting_spare_parts', 'spare_parts_unavailable', 'sent_to_factory', 'factory_maintenance_done', 'sent_from_factory', 'factory_rejected', 'shipped_asc', 'waiting_shipping_company'] },
-  { key: 'ready', label: 'جاهز للاستلام', statuses: ['contacted_customer'] },
+  { key: 'ready', label: 'جاهز للاستلام', statuses: ['maintenance_done', 'financial_reviewed', 'material_reviewed', 'contacted_customer'] },
   { key: 'done', label: 'اتسلّم', statuses: ['delivered_to_customer', 'delivered_asc', 'closed', 'rejected_and_delivered', 'damaged_disposed'] },
 ];
 export const stepIndexOf = (status) => Math.max(0, PUBLIC_STEPS.findIndex((s) => s.statuses.includes(status)));

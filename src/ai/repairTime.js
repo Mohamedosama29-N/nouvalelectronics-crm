@@ -1,4 +1,6 @@
 // ⏱️ متوسط وقت الصيانة — من سجل حالات التذكرة (statusHistory).
+//   🆕 وقت الصيانة الفعلي = من فتح التذكرة لحد أول مرة بقت «تمت الصيانة» (أو «تمت الصيانة في المصنع»).
+//      ده الرقم الأساسي في التقرير، ومبيتأثرش بالمراجعات ولا بتأخير العميل في الاستلام.
 // لكل تذكرة اتسلّمت/اتقفلت جوه الفترة:
 //   الإجمالي   = من فتح التذكرة لحد التسليم/الإغلاق
 //   حتى الجاهزية = من فتح التذكرة لحد ما الجهاز بقى جاهز (اتصلنا بالعميل) أو اتسلّم
@@ -7,10 +9,11 @@
 //   المصنع      = وقت في حالات المصنع
 //   الصافي     = الإجمالي − انتظار العميل − انتظار القطع  (وقت الشغل الفعلي علينا)
 import { toDate, ticketWarehouseOf } from '../utils/liveStats';
+import { REPAIR_DONE_STATUSES } from '../constants/tickets';
 
 export const DONE_STATUSES = ['delivered_to_customer', 'delivered_asc', 'closed'];
 export const NOT_REPAIRED = ['rejected_by_customer', 'rejected_and_delivered', 'damaged_disposed'];
-const READY_STATUSES = ['contacted_customer', ...DONE_STATUSES];
+const READY_STATUSES = ['maintenance_done', 'financial_reviewed', 'material_reviewed', 'contacted_customer', ...DONE_STATUSES];
 const WAIT_CUSTOMER = ['waiting_customer_approval_cost', 'contacted_customer'];
 const WAIT_PARTS = ['waiting_spare_parts', 'spare_parts_unavailable'];
 const FACTORY = ['sent_to_factory', 'factory_maintenance_done', 'sent_from_factory', 'shipped_asc'];
@@ -24,7 +27,7 @@ const parseDateTime = (date, time) => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
-// تحليل تذكرة واحدة. بيرجّع null لو التذكرة لسه مخلصتش
+// تحليل تذكرة واحدة. بيرجّع null لو التذكرة لسه مخلصتش (لا اتسلمت ولا الصيانة خلصت)
 export function analyzeTicket(t) {
   const created = toDate(t.createdAt);
   if (!created) return null;
@@ -32,6 +35,10 @@ export function analyzeTicket(t) {
     .map((h) => ({ status: h.status, at: toDate(h.timestamp) }))
     .filter((h) => h.at && h.status)
     .sort((a, b) => a.at - b.at);
+  // 🆕 لحظة انتهاء الصيانة الفعلية
+  const repairedEntry = hist.find((h) => REPAIR_DONE_STATUSES.includes(h.status) && h.at >= created);
+  const repairedAt = repairedEntry?.at || null;
+  const repair = repairedAt ? repairedAt - created : null;
 
   const doneEntry = hist.find((h) => DONE_STATUSES.includes(h.status));
   const rejectedEntry = hist.find((h) => NOT_REPAIRED.includes(h.status));
@@ -48,11 +55,12 @@ export function analyzeTicket(t) {
       outcome = NOT_REPAIRED.includes(t.status) ? 'not_repaired' : 'repaired';
     }
   }
-  if (!completedAt || completedAt < created) return null;
+  if (completedAt && completedAt < created) completedAt = null;
+  if (!completedAt && !repairedAt) return null;
 
   // توزيع الوقت على الحالات (كل فترة بتتحسب على الحالة اللي كانت قبلها)
   const seg = { waitCustomer: 0, waitParts: 0, factory: 0 };
-  if (!estimated) {
+  if (!estimated && completedAt) {
     const points = [{ status: 'created', at: created }, ...hist.filter((h) => h.at >= created && h.at <= completedAt)];
     for (let i = 0; i < points.length - 1; i++) {
       const dur = points[i + 1].at - points[i].at;
@@ -62,9 +70,9 @@ export function analyzeTicket(t) {
       else if (FACTORY.includes(st)) seg.factory += dur;
     }
   }
-  const total = completedAt - created;
+  const total = completedAt ? completedAt - created : null;
   const readyEntry = hist.find((h) => READY_STATUSES.includes(h.status) && h.at >= created);
-  const toReady = readyEntry ? Math.min(readyEntry.at, completedAt) - created : total;
+  const toReady = completedAt ? (readyEntry ? Math.min(readyEntry.at, completedAt) - created : total) : null;
   return {
     id: t.id,
     ticketNumber: t.ticketNumber || '',
@@ -77,8 +85,10 @@ export function analyzeTicket(t) {
     completedAt,
     total,
     toReady,
-    net: Math.max(0, total - seg.waitCustomer - seg.waitParts),
+    net: total === null ? null : Math.max(0, total - seg.waitCustomer - seg.waitParts),
     ...seg,
+    repairedAt,
+    repair,
     estimated,
     outcome,
   };
@@ -109,8 +119,10 @@ const groupStats = (rows, keyFn, metric, labelFn = (k) => k) => {
 
 // التقرير الكامل للفترة [from, to)
 export function buildRepairTimeReport(tickets, { from, to, slaHours = { high: 4, medium: 24, low: 72 }, warehouseName = (x) => x, scope = () => true } = {}) {
-  const analyzed = (tickets || []).map(analyzeTicket).filter(Boolean)
-    .filter((r) => r.completedAt >= from && r.completedAt < to && scope(r.center));
+  const all = (tickets || []).map(analyzeTicket).filter(Boolean).filter((r) => scope(r.center));
+  // 🆕 الصيانة الفعلية: التذاكر اللي «تمت الصيانة» جوه الفترة (حتى لو لسه متسلمتش)
+  const fixed = all.filter((r) => r.repairedAt && r.repairedAt >= from && r.repairedAt < to);
+  const analyzed = all.filter((r) => r.completedAt && r.completedAt >= from && r.completedAt < to);
   const repaired = analyzed.filter((r) => r.outcome === 'repaired');
   const sla = (r) => (slaHours?.[r.priority] ?? 24) * HOUR;
   const withinSla = repaired.filter((r) => r.total <= sla(r)).length;
@@ -122,15 +134,26 @@ export function buildRepairTimeReport(tickets, { from, to, slaHours = { high: 4,
   const factory = sumOf('factory');
 
   // الاتجاه أسبوعيًا (حسب تاريخ التسليم)
+  // 🆕 الاتجاه أسبوعيًا بوقت الصيانة الفعلي (حسب تاريخ «تمت الصيانة»)، ولو مفيش لسه نرجع للإجمالي
   const weeks = new Map();
-  repaired.forEach((r) => {
-    const d = new Date(r.completedAt); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 1) % 7));
+  const trendRows = fixed.length ? fixed.map((r) => ({ at: r.repairedAt, v: r.repair, net: r.repair })) : repaired.map((r) => ({ at: r.completedAt, v: r.total, net: r.net }));
+  trendRows.forEach((r) => {
+    const d = new Date(r.at); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 1) % 7));
     const k = d.toISOString().slice(0, 10);
     const w = weeks.get(k) || { name: k, sum: 0, net: 0, n: 0 };
-    w.sum += r.total; w.net += r.net; w.n += 1; weeks.set(k, w);
+    w.sum += r.v; w.net += r.net; w.n += 1; weeks.set(k, w);
   });
 
+  const repairStat = (list) => (list.length ? { avg: list.reduce((a, r) => a + r.repair, 0) / list.length, median: quantile(list.map((r) => r.repair).sort((a, b) => a - b), 0.5) } : null);
   return {
+    // 🆕 متوسط وقت الصيانة الفعلي (من فتح التذكرة لحد «تمت الصيانة»)
+    repair: summarize(fixed.map((r) => r.repair)),
+    repairCount: fixed.length,
+    repairByTechnician: groupStats(fixed, (r) => r.technician, 'repair'),
+    repairByCenter: groupStats(fixed, (r) => r.center, 'repair', warehouseName),
+    repairByDevice: groupStats(fixed, (r) => r.deviceType, 'repair'),
+    repairStat,
+    fixedRows: fixed,
     count: repaired.length,
     notRepaired: analyzed.length - repaired.length,
     estimatedCount: repaired.filter((r) => r.estimated).length,

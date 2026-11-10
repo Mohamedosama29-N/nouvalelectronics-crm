@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
+import { ticketsUpdatedSince } from '../../data/mirror';
 import { Award, Loader2, RefreshCw, Clock, Repeat, Bug, Smile, Users, FileText, Printer, Sparkles, Wand2, TrendingUp, AlertTriangle } from 'lucide-react';
-import { db } from '../../firebase/config';
 import { loadOpenTickets } from '../../ai/ticketPool';
 import { agingReport, AGING_BUCKETS, repeatRepairs, faultsByModel, faultSpikes, satisfactionSummary, centerScorecard, technicianScorecard, maintenanceCenterScorecard } from '../../ai/quality';
 import { analyzeTicket, buildRepairTimeReport, formatDuration } from '../../ai/repairTime';
@@ -98,13 +97,12 @@ export function QualityCenter({ appUser, warehouses = [], systemSettings }) {
     setLoading(true); setAiText('');
     try {
       const since = new Date(range[0].getTime() - 90 * DAY); // عشان نلاقي الإصلاح السابق للأجهزة اللي رجعت
-      const cons = seeAll ? [] : [where('assignedCenter', '==', own)];
-      cons.push(where('updatedAt', '>=', since), orderBy('updatedAt', 'desc'), limit(8000));
-      const [snap, open] = await Promise.all([getDocs(query(collection(db, 'tickets'), ...cons)), loadOpenTickets().catch(() => [])]);
+      // 📉 من المرايا المحلية
+      const [list, open] = await Promise.all([ticketsUpdatedSince(since, { wheres: seeAll ? [] : [['assignedCenter', '==', own]], max: 20001 }), loadOpenTickets().catch(() => [])]);
       setData({
-        tickets: snap.docs.map((d) => ({ id: d.id, ...d.data() })),
+        tickets: list.slice(0, 20000),
         open: open.filter((t) => seeAll || ticketWarehouseOf(t) === own),
-        truncated: snap.size >= 8000,
+        truncated: list.length > 20000,
       });
     } catch (e) {
       console.error(e);
@@ -171,7 +169,7 @@ export function QualityCenter({ appUser, warehouses = [], systemSettings }) {
 table{width:100%;border-collapse:collapse;font-size:12px}td,th{border:1px solid #e2e8f0;padding:5px;text-align:right}th{background:#f1f5f9}pre{white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.8}small{color:#64748b}</style></head><body>
 <h1>التقرير الشهري للصيانة ${company ? `— ${esc(company)}` : ''}</h1><small>${esc(from)} → ${esc(to)}</small>
 <h2>المؤشرات</h2><div class="k">
-<div>تذاكر جديدة<b>${rep.created}</b></div><div>اتسلّمت<b>${rep.time.count}</b></div><div>متوسط وقت الصيانة<b>${esc(formatDuration(rep.time.total.avg))}</b></div><div>جوه SLA<b>${pct(rep.time.slaRate)}</b></div>
+<div>تذاكر جديدة<b>${rep.created}</b></div><div>اتسلّمت<b>${rep.time.count}</b></div><div>متوسط وقت الصيانة الفعلي<b>${esc(formatDuration(rep.time.repairCount ? rep.time.repair.avg : rep.time.total.avg))}</b></div><div>جوه SLA<b>${pct(rep.time.slaRate)}</b></div>
 <div>رضا العملاء /10<b>${rep.satisfaction.avg ? rep.satisfaction.avg.toFixed(1) : '—'}</b></div><div>CSAT<b>${pct(rep.satisfaction.csat)}</b></div><div>أجهزة رجعت تاني<b>${rep.repeats.length}</b></div><div>مفتوحة أكتر من 15 يوم<b>${rep.aging.totals.b3 || 0}</b></div></div>
 ${aiText ? `<h2>التحليل والتوصيات</h2><pre>${esc(aiText)}</pre>` : ''}
 <h2>ترتيب المراكز</h2><table><tr><th>#</th><th>المركز</th><th>الدرجة</th><th>خلصت</th><th>متوسط الوقت</th><th>SLA</th><th>رجعت</th><th>الرضا</th></tr>
@@ -227,7 +225,7 @@ ${rep.spikes.length ? `<h2>زيادات مفاجئة</h2><table><tr><th>المو
       {rep && tab === 'overview' && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi i={0} label="متوسط وقت الصيانة" value={rep.time.count ? formatDuration(rep.time.total.avg) : '—'} sub={`${rep.time.count} تذكرة خلصت · ${rep.created} جديدة`} />
+            <Kpi i={0} label="متوسط وقت الصيانة الفعلي" value={rep.time.repairCount ? formatDuration(rep.time.repair.avg) : rep.time.count ? formatDuration(rep.time.total.avg) : '—'} sub={rep.time.repairCount ? `من الفتح لـ«تمت الصيانة» · ${rep.time.repairCount} تذكرة · ${rep.created} جديدة` : `${rep.time.count} تذكرة خلصت · ${rep.created} جديدة`} />
             <Kpi i={1} label="جوه مهلة الـ SLA" value={pct(rep.time.slaRate)} cls="from-emerald-500 to-emerald-700" />
             <Kpi i={2} label="أجهزة رجعت خلال 90 يوم" value={rep.repeats.length} sub={rep.time.count ? `${pct(rep.repeats.length / rep.time.count)} من اللي خلصت` : ''} cls="from-rose-500 to-rose-700" />
             <Kpi i={3} label="رضا العملاء" value={rep.satisfaction.avg ? `${rep.satisfaction.avg.toFixed(1)} / 10` : '—'} sub={rep.satisfaction.count ? `CSAT ${pct(rep.satisfaction.csat)} · ${rep.satisfaction.count} تقييم` : 'مفيش تقييمات'} cls="from-violet-500 to-violet-700" />

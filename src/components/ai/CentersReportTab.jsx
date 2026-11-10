@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
+import { ticketsUpdatedSince } from '../../data/mirror';
+import { collection, getDocs, limit, query, where } from 'firebase/firestore';
 import { FileText, Loader2, Printer } from 'lucide-react';
 import { db } from '../../firebase/config';
 import { loadOpenTickets } from '../../ai/ticketPool';
@@ -26,13 +27,13 @@ export function CentersReportTab({ systemSettings }) {
     try {
       const { from, to } = monthRange(month);
       const [t, open, c, s] = await Promise.all([
-        getDocs(query(collection(db, 'tickets'), where('updatedAt', '>=', from), orderBy('updatedAt', 'desc'), limit(8000))),
+        ticketsUpdatedSince(from, { max: 20000 }),
         loadOpenTickets().catch(() => []),
         getDocs(query(collection(db, 'warrantyClaims'), where('createdAt', '>=', from), where('createdAt', '<', to), limit(2000))).catch(() => ({ docs: [] })),
         getDocs(query(collection(db, 'centerSettlements'), where('month', '==', month), limit(200))).catch(() => ({ docs: [] })),
       ]);
       setRep(buildCentersMonthlyReport({
-        month, tickets: t.docs.map((d) => ({ id: d.id, ...d.data() })).filter((x) => !x.isDeleted), openTickets: open,
+        month, tickets: t.filter((x) => !x.isDeleted), openTickets: open,
         claims: c.docs.map((d) => d.data()), settlements: s.docs.map((d) => d.data()), centers: centersFromSettings(systemSettings), slaHours: systemSettings?.ticketSLA,
       }));
     } catch (e) { console.error(e); showError(e?.code === 'failed-precondition' ? 'محتاج Index: firebase deploy --only firestore:indexes' : 'معرفتش أعمل التقرير'); }

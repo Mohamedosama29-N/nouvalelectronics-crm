@@ -43,8 +43,9 @@ import {
 import { LoginScreen } from './components/auth/LoginScreen';
 import { REQUIRE_REAL_AUTH, initFirebaseAuth, isRealSession, endSession } from './utils/authSession';
 import { initAppCheck } from './utils/secureAuth';
-import { BackupReminder, UsageWarning } from './components/ai/BackupReminder';
-import { flushUsage } from './utils/readMeter';
+import { BackupReminder, QuotaBanner, UsageWarning } from './components/ai/BackupReminder';
+import { FREE_LIMITS, flushUsage, readUsageToday } from './utils/readMeter';
+import { setSharedUsage } from './utils/quotaGuard';
 import { OfflineBadge } from './components/common/OfflineBadge';
 import { ChangeMyPassword } from './components/auth/ChangeMyPassword';
 import { runBackgroundJobs } from './utils/backgroundJobs';
@@ -392,11 +393,14 @@ useEffect(() => {
   // 📊 إرسال عدّاد الاستهلاك كل ربع ساعة (كتابة واحدة) وعند قفل الصفحة
   useEffect(() => {
     if (!appUser) return undefined;
-    const send = () => { flushUsage(appUser).catch(() => {}); };
+    // ومعاه بنقرا الاستهلاك المشترك (مستند واحد) عشان كل الأجهزة تدخل «وضع التوفير» مع بعض
+    const share = () => { readUsageToday().then((d) => setSharedUsage((d.reads || 0) / FREE_LIMITS.reads)).catch(() => {}); };
+    const send = () => { flushUsage(appUser).catch(() => {}); share(); };
+    const first = setTimeout(share, 20000);
     const iv = setInterval(send, 15 * 60000);
     const onHide = () => { if (document.visibilityState === 'hidden') send(); };
     document.addEventListener('visibilitychange', onHide);
-    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onHide); };
+    return () => { clearTimeout(first); clearInterval(iv); document.removeEventListener('visibilitychange', onHide); };
   }, [appUser]);
 
   // 🔑 حارس التصدير حسب صلاحية الموظف الحالي
@@ -923,6 +927,7 @@ useEffect(() => {
                 
                 {currentView !== 'security' && <BackupReminder appUser={appUser} systemSettings={systemSettings} onOpen={() => setCurrentView('security')} />}
                 {currentView !== 'security' && <UsageWarning appUser={appUser} onOpen={() => setCurrentView('security')} />}
+                <QuotaBanner />
                 {/* الصفحات المختلفة - كل صفحة بتتحمّل عند الحاجة فقط (React.lazy) */}
                 <React.Suspense fallback={<PageLoadingFallback />}>
                 {currentView === 'dashboard' && <DashboardView appUser={appUser} warehouses={warehouses} onNavigateToInventory={handleNavigateToInventory} notify={notify} systemSettings={systemSettings} />}

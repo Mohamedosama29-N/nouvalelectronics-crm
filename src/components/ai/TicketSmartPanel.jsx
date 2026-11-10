@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { wholeCollection } from '../../data/mirror';
 import { Brain, Tag, Clock, Wrench, UserCheck, Loader2, Sparkles, Check, Building2, BookOpen } from 'lucide-react';
 import { loadOpenTickets, loadRecentTickets } from '../../ai/ticketPool';
 import { analyzePool, classifyFaults, predictDuration, predictPartsAndCost, suggestTechnicians } from '../../ai/ticketPredict';
 import { centersFromSettings, suggestCenters } from '../../ai/network';
 import { matchTemplate } from '../../ai/staff';
-import { collection, getDocs, limit, query } from 'firebase/firestore';
-import { db } from '../../firebase/config';
 import { formatDuration } from '../../ai/repairTime';
 import { askJSON, friendlyAIError, isAIFeatureOn } from '../../ai/aiClient';
 import { redactText } from '../../ai/redact';
@@ -29,8 +28,7 @@ const Section = ({ icon, title, children }) => (
 let tplCache = { at: 0, list: [] };
 const loadTemplates = async () => {
   if (Date.now() - tplCache.at < 600000) return tplCache.list;
-  const snap = await getDocs(query(collection(db, 'faultTemplates'), limit(1000)));
-  tplCache = { at: Date.now(), list: snap.docs.map((d) => ({ id: d.id, ...d.data() })) };
+  tplCache = { at: Date.now(), list: await wholeCollection('faultTemplates', { max: 5000 }) };
   return tplCache.list;
 };
 

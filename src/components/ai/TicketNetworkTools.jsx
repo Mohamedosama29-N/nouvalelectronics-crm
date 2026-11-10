@@ -6,6 +6,8 @@ import { centersFromSettings, claimFromTicket, CLAIM_FLOW, DEFECTIVE_FLOW, PART_
 import { formatDuration } from '../../ai/repairTime';
 import { showError, showSuccess } from '../../utils/alerts';
 import { notify } from '../../utils/notifications';
+import { buildQueryTokens } from '../../utils/search';
+import { setTicketStatusQuiet } from '../../utils/ticketParts';
 
 const inp = 'w-full border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500';
 const btn = 'flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-50';
@@ -49,11 +51,25 @@ export function TicketNetworkTools({ ticket, systemSettings, appUser, warehouses
     finally { setBusy(false); }
   };
 
+  // 🔗 بحث عن القطعة في المخزون عشان الطلب يبقى مربوط بصنف حقيقي (سيريال)
+  const searchPart = async () => {
+    const tokens = buildQueryTokens(form.partQuery || '');
+    if (!tokens.length) return;
+    setBusy(true);
+    try {
+      const snap = await getDocs(query(collection(db, 'inventory'), where('warehouseId', '==', form.fromWarehouse || 'main'), where('isDeleted', '==', false), where('searchTokens', 'array-contains-any', tokens), limit(8)));
+      setForm((f) => ({ ...f, partResults: snap.docs.map((d) => ({ id: d.id, ...d.data() })) }));
+    } catch { showError('معرفتش أدوّر في المخزون'); }
+    finally { setBusy(false); }
+  };
+  const pickPart = (it) => setForm((f) => ({ ...f, partResults: [], partQuery: '', picked: [...(f.picked || []).filter((x) => x.serialNumber !== it.serialNumber), { name: it.name, qty: 1, serialNumber: it.serialNumber, price: Number(it.price) || 0 }] }));
+
   const requestParts = async () => {
-    const items = String(form.items || '').split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+    const typed = String(form.items || '').split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
       const m = /^(.*?)(?:\s*[x×*]\s*(\d+))?$/.exec(l);
       return { name: m[1].trim(), qty: Number(m[2]) || 1 };
     });
+    const items = [...(form.picked || []), ...typed];
     if (!items.length) { showError('اكتب القطع المطلوبة (كل قطعة في سطر)'); return; }
     setBusy(true);
     try {
@@ -65,6 +81,8 @@ export function TicketNetworkTools({ ticket, systemSettings, appUser, warehouses
       };
       const r = await addDoc(collection(db, 'partRequests'), rec);
       setRelated((x) => ({ ...x, parts: [{ id: r.id, ...rec }, ...x.parts] }));
+      // 🔗 التذكرة بتتحول «انتظار قطع الغيار» لوحدها، فوقت الانتظار يتحسب صح في تقرير وقت الصيانة
+      if (await setTicketStatusQuiet(ticket, 'waiting_spare_parts', { by, note: `طلب قطع غيار (${items.length})` }).catch(() => false)) onTicketPatched?.({ status: 'waiting_spare_parts' });
       ['admin', 'main_warehouse_manager'].forEach((role) => notify({ toRole: role, title: `طلب قطع غيار — ${ticket.ticketNumber || ''}`, body: items.map((i) => `${i.name}×${i.qty}`).join('، '), view: 'network', from: by }));
       showSuccess('اتبعت طلب القطع'); setMode(''); setForm({});
     } catch (e) { console.error(e); showError('معرفتش أبعت الطلب'); }
@@ -131,7 +149,25 @@ export function TicketNetworkTools({ ticket, systemSettings, appUser, warehouses
           )}
           {mode === 'parts' && (
             <div className="grid sm:grid-cols-2 gap-2 anim-fade">
-              <textarea aria-label="القطع المطلوبة" rows={3} value={form.items || ''} onChange={(e) => setForm({ ...form, items: e.target.value })} placeholder={'كل قطعة في سطر، والكمية بعد ×\nبورد باور × 1\nريموت'} className={inp} />
+              <div className="space-y-2 sm:col-span-2">
+                <div className="flex gap-2">
+                  <input aria-label="دوّر على القطعة في المخزون" value={form.partQuery || ''} onChange={(e) => setForm({ ...form, partQuery: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); searchPart(); } }} placeholder="دوّر على القطعة في المخزون بالاسم أو السيريال (مستحسن)" className={inp} />
+                  <button type="button" onClick={searchPart} disabled={busy} className={`${btn} bg-slate-100 dark:bg-slate-700`}>بحث</button>
+                </div>
+                {(form.partResults || []).length > 0 && (
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700 bg-white dark:bg-slate-800">
+                    {form.partResults.map((it) => <button key={it.id} type="button" onClick={() => pickPart(it)} className="w-full text-right px-3 py-1.5 text-xs hover:bg-teal-50 dark:hover:bg-teal-900/30">{it.name} <span className="font-mono text-slate-400">{it.serialNumber}</span></button>)}
+                  </div>
+                )}
+                {(form.picked || []).map((p) => (
+                  <div key={p.serialNumber} className="flex items-center gap-2 text-xs bg-teal-50 dark:bg-teal-900/20 rounded-lg px-2 py-1">
+                    <span className="flex-1">🔗 {p.name} <span className="font-mono text-slate-400">{p.serialNumber}</span></span>
+                    <input type="number" min="1" aria-label={`كمية ${p.name}`} value={p.qty} onChange={(e) => setForm((f) => ({ ...f, picked: f.picked.map((x) => (x.serialNumber === p.serialNumber ? { ...x, qty: Math.max(1, Number(e.target.value) || 1) } : x)) }))} className="w-16 border border-slate-200 dark:border-slate-700 rounded px-1 py-0.5 bg-white dark:bg-slate-900" />
+                    <button type="button" aria-label="شيل" onClick={() => setForm((f) => ({ ...f, picked: f.picked.filter((x) => x.serialNumber !== p.serialNumber) }))} className="text-rose-500">✕</button>
+                  </div>
+                ))}
+              </div>
+              <textarea aria-label="القطع المطلوبة" rows={3} value={form.items || ''} onChange={(e) => setForm({ ...form, items: e.target.value })} placeholder={'قطع مش موجودة في المخزون (اختياري):\nكل قطعة في سطر، والكمية بعد ×'} className={inp} />
               <div className="space-y-2">
                 <select aria-label="من مخزن" value={form.fromWarehouse || 'main'} onChange={(e) => setForm({ ...form, fromWarehouse: e.target.value })} className={inp}>
                   {(warehouses.length ? warehouses : [{ id: 'main', name: 'الرئيسي' }]).map((w) => <option key={w.id} value={w.id}>من: {w.name}</option>)}
@@ -158,7 +194,7 @@ export function TicketNetworkTools({ ticket, systemSettings, appUser, warehouses
 
           {(related.parts.length > 0 || related.defective.length > 0 || related.claims.length > 0) && (
             <div className="text-xs space-y-1 border-t border-slate-200 dark:border-slate-700 pt-2">
-              {related.parts.map((p) => <p key={p.id}>📦 طلب قطع: {p.items.map((i) => `${i.name}×${i.qty}`).join('، ')} — <b>{PART_REQUEST_FLOW[p.status]?.label || p.status}</b></p>)}
+              {related.parts.map((p) => <p key={p.id}>📦 طلب قطع: {p.items.map((i) => `${i.serialNumber ? '🔗 ' : ''}${i.name}×${i.qty}`).join('، ')} — <b>{PART_REQUEST_FLOW[p.status]?.label || p.status}</b>{p.status === 'received' && p.addedToTicket ? ' · اتضافت على التذكرة' : ''}</p>)}
               {related.defective.map((p) => <p key={p.id}>♻️ قطعة تالفة: {p.partName} — <b>{DEFECTIVE_FLOW[p.status]?.label || p.status}</b></p>)}
               {related.claims.map((c) => <p key={c.id}>🧾 مطالبة ضمان — <b>{CLAIM_FLOW[c.status]?.label || c.status}</b>{c.approvedAmount ? ` · ${Number(c.approvedAmount).toLocaleString()} ج` : ''}</p>)}
             </div>

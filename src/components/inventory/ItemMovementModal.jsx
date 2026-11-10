@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { collection, getDocs, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
+import { mirrorDocs } from '../../data/mirror';
+import { Timestamp } from 'firebase/firestore';
 import { X, Loader2, Download, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
-import { db } from '../../firebase/config';
 import { exportToCSV } from '../../utils/exportUtils';
 
 const toDate = (ts) => (ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null);
@@ -29,11 +29,13 @@ export function ItemMovementModal({ item, warehouseMap, onClose }) {
       try {
         const start = Timestamp.fromDate(new Date(`${from}T00:00:00`));
         const end = Timestamp.fromDate(new Date(`${to}T23:59:59`));
-        const [txSnap, trSnap, retSnap] = await Promise.all([
-          getDocs(query(collection(db, 'transactions'), where('timestamp', '>=', start), where('timestamp', '<=', end), orderBy('timestamp', 'desc'), limit(1500))),
-          getDocs(query(collection(db, 'transfers'), where('createdAt', '>=', start), where('createdAt', '<=', end), orderBy('createdAt', 'desc'), limit(1500))),
-          getDocs(query(collection(db, 'returns'), where('createdAt', '>=', start), where('createdAt', '<=', end), orderBy('createdAt', 'desc'), limit(1500)))
-        ]);
+        // 📉 من المرايا المحلية (الجديد بس من السيرفر)
+        const wrap = (l) => ({ docs: l.map((x) => ({ id: x.id, data: () => x })) });
+        const [txSnap, trSnap, retSnap] = (await Promise.all([
+          mirrorDocs('transactions', 'timestamp', { from: start, to: end, max: 20000 }),
+          mirrorDocs('transfers', 'createdAt', { from: start, to: end, max: 20000 }),
+          mirrorDocs('returns', 'createdAt', { from: start, to: end, max: 20000 }),
+        ])).map(wrap);
         const out = [];
         const matches = (i) => (i.id && i.id === item.id) || (i.serialNumber && i.serialNumber === item.serialNumber);
 

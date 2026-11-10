@@ -36,10 +36,19 @@ export const onUsage = (fn) => { listeners.add(fn); return () => listeners.delet
 // الجزء اللي لسه ماتبعتش لمستند الاستهلاك المشترك
 export function takeUnflushed() {
   const m = load();
-  const d = { day: m.day, reads: m.reads - m.flushedReads, writes: m.writes - m.flushedWrites };
+  const ft = m.flushedTop || {};
+  const top = {};
+  Object.entries(m.top || {}).forEach(([k, v]) => { const x = v - (ft[k] || 0); if (x > 0) top[k] = x; });
+  const d = { day: m.day, reads: m.reads - m.flushedReads, writes: m.writes - m.flushedWrites, top };
   return d;
 }
-export function markFlushed(d) { const m = load(); if (m.day !== d.day) return; m.flushedReads += d.reads; m.flushedWrites += d.writes; persist(); }
+export function markFlushed(d) {
+  const m = load(); if (m.day !== d.day) return;
+  m.flushedReads += d.reads; m.flushedWrites += d.writes;
+  m.flushedTop = m.flushedTop || {};
+  Object.entries(d.top || {}).forEach(([k, v]) => { m.flushedTop[k] = (m.flushedTop[k] || 0) + v; });
+  persist();
+}
 
 export function usageLevel(used, limit) {
   const p = limit ? used / limit : 0;
@@ -55,7 +64,10 @@ export async function flushUsage(user, { force = false } = {}) {
   lastFlush = Date.now();
   const { doc, increment, serverTimestamp, setDoc } = await import('firebase/firestore');
   const { db } = await import('../firebase/config');
-  await setDoc(doc(db, 'usageDaily', d.day), { reads: increment(d.reads), writes: increment(d.writes), updatedAt: serverTimestamp(), [`by.${String(user?.id || 'x').replace(/[.~*/[\]]/g, '_')}`]: increment(d.reads) }, { merge: true });
+  const safe = (k) => String(k || 'x').replace(/[.~*/[\]]/g, '_');
+  // setDoc مع merge بيدمج الـ maps المتداخلة (النقطة في اسم الحقل مش بتتفهم كمسار هنا)
+  const src = Object.fromEntries(Object.entries(d.top || {}).map(([k, v]) => [safe(k), increment(v)]));
+  await setDoc(doc(db, 'usageDaily', d.day), { reads: increment(d.reads), writes: increment(d.writes), updatedAt: serverTimestamp(), by: { [safe(user?.id)]: increment(d.reads) }, src }, { merge: true });
   markFlushed(d);
   return true;
 }

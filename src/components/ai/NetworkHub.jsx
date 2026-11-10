@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { addDoc, arrayUnion, collection, doc, getDocs, limit, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { ticketsUpdatedSince } from '../../data/mirror';
+import { addDoc, arrayUnion, collection, doc, getDoc, getDocs, limit, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { Building2, PackagePlus, PackageX, FileBadge, ShieldCheck, FileSignature, Loader2, RefreshCw, Search, Plus, Save, ExternalLink, CheckCircle2, AlertTriangle, MapPin } from 'lucide-react';
 import { db } from '../../firebase/config';
 import { loadOpenTickets } from '../../ai/ticketPool';
@@ -11,6 +12,7 @@ import { notify } from '../../utils/notifications';
 import { requestNavigation } from '../../utils/appEvents';
 import { whatsappLink, statusLabel } from '../../ai/ticketAssist';
 import { toDate } from '../../utils/liveStats';
+import { addPartToTicket, findStockItem, setTicketStatusQuiet } from '../../utils/ticketParts';
 import { GovernorateMap } from './GovernorateMap';
 import { CentersReportTab } from './CentersReportTab';
 
@@ -73,10 +75,10 @@ function CentersTab({ systemSettings, appUser }) {
       const [y, mo] = month.split('-').map(Number);
       const from = new Date(y, mo - 1, 1); const to = new Date(y, mo, 1);
       const [t, s] = await Promise.all([
-        getDocs(query(collection(db, 'tickets'), where('updatedAt', '>=', from), orderBy('updatedAt', 'desc'), limit(8000))),
+        ticketsUpdatedSince(from, { max: 20000 }),
         getDocs(query(collection(db, 'centerSettlements'), where('month', '==', month), limit(200))),
       ]);
-      setDues(centerDues(t.docs.map((d) => ({ id: d.id, ...d.data() })), centers, { from, to }));
+      setDues(centerDues(t, centers, { from, to }));
       setPaid(Object.fromEntries(s.docs.map((d) => [d.data().center, d.data()])));
     } catch (e) { console.error(e); showError('معرفتش أحسب المستحقات'); }
     finally { setBusy(false); }
@@ -155,9 +157,35 @@ function PartsTab({ appUser }) {
     return () => { cancelled = true; };
   }, [items]);
 
+  // 🔗 لما المركز يستلم: القطع المربوطة بالمخزون بتتضاف على التذكرة وتتخصم من مخزن فرع التذكرة،
+  // والتذكرة بترجع «تحت الصيانة» لو كانت مستنية القطع
+  const attachToTicket = async (r) => {
+    const linked = (r.items || []).filter((i) => i.serialNumber);
+    const added = []; const missing = [];
+    for (const i of linked) {
+      try {
+        const st = await findStockItem(i.serialNumber, r.branch || 'main');
+        if (!st) { missing.push(i.name); continue; }
+        await addPartToTicket(r.ticketId, { id: st.id, serialNumber: st.serialNumber, name: st.name, quantity: i.qty, price: Number(st.price) || Number(i.price) || 0 }, { by, source: `partRequest:${r.id}` });
+        added.push(i.name);
+      } catch { missing.push(i.name); }
+    }
+    (r.items || []).filter((i) => !i.serialNumber).forEach((i) => missing.push(i.name));
+    try {
+      const t = await getDoc(doc(db, 'tickets', r.ticketId));
+      if (t.exists() && t.data().status === 'waiting_spare_parts') await setTicketStatusQuiet({ id: t.id, ...t.data() }, 'received_maintenance', { by, note: 'وصلت قطع الغيار' });
+      if (added.length) await updateDoc(doc(db, 'partRequests', r.id), { addedToTicket: true });
+      const tech = t.exists() ? t.data().assignedTechnician : '';
+      if (tech) notify({ toName: tech, title: `وصلت قطع ${r.ticketNumber}`, body: [added.length ? `اتضافت: ${added.join('، ')}` : '', missing.length ? `ضيفها يدوي: ${missing.join('، ')}` : ''].filter(Boolean).join(' · '), view: 'my_tickets', from: by });
+    } catch (e) { console.warn('part request → ticket', e); }
+    if (added.length) showSuccess(`اتضافت على التذكرة واتخصمت من المخزن: ${added.join('، ')}`);
+    if (missing.length) showError(`ضيف القطع دي على التذكرة يدوي (مش مربوطة أو مش موجودة في مخزن الفرع): ${missing.join('، ')}`);
+  };
+
   const move = async (r, status) => {
     try {
       await advance('partRequests', r, status, by); patch((arr) => arr.map((x) => (x.id === r.id ? { ...x, status } : x))); showSuccess(PART_REQUEST_FLOW[status].label);
+      if (status === 'received') await attachToTicket(r);
       if (r.requestedBy) notify({ toName: r.requestedBy, title: `طلب القطع ${r.ticketNumber}: ${PART_REQUEST_FLOW[status].label}`, body: r.items.map((i) => `${i.name}×${i.qty}`).join('، '), view: 'tickets', intent: { kind: 'ticket', id: r.ticketId }, from: by });
     }
     catch { showError('معرفتش أحدّث الطلب'); }
@@ -192,7 +220,7 @@ function PartsTab({ appUser }) {
           </div>
         </div>
       ))}
-      <p className="text-[10px] text-slate-400">الطلبات بتتعمل من جوه التذكرة (المركز وقطع الغيار ← طلب قطع). حركة المخزون الفعلية بتتعمل زي الأول من التحويلات أو من قطع غيار التذكرة.</p>
+      <p className="text-[10px] text-slate-400">الطلبات بتتعمل من جوه التذكرة (المركز وقطع الغيار ← طلب قطع). نقل القطعة لمخزن الفرع بيتعمل بتحويل مخزني بالكود، ولما تضغط «المركز استلم» القطع المربوطة (🔗) بتتضاف على التذكرة وتتخصم من مخزن الفرع لوحدها.</p>
     </div>
   );
 }

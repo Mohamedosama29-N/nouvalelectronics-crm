@@ -87,6 +87,8 @@ export const ALL_PERMISSIONS = [
   { key: 'createTransfer', label: 'إنشاء طلب تحويل', category: 'تحويلات' },
   { key: 'approveTransfer', label: 'الموافقة على التحويل', category: 'تحويلات' },
   { key: 'rejectTransfer', label: 'رفض التحويل', category: 'تحويلات' },
+  // 🆕 الفرع اللي بيطلب تحويل يشوف الكمية المتاحة في المخزن الرئيسي ولا لأ (من غيرها بيشوف «متوفر/غير متوفر» بس)
+  { key: 'viewSourceStock', label: 'رؤية الكمية المتاحة في المخزن الرئيسي عند طلب تحويل', category: 'تحويلات' },
   
   // تقارير
   { key: 'viewReports', label: 'عرض التقارير', category: 'تقارير' },
@@ -176,6 +178,7 @@ export const ROLE_DEFAULT_PERMISSIONS = {
     createTransfer: false,
     approveTransfer: true,
     rejectTransfer: true,
+    viewSourceStock: true,
     viewReports: true,
     viewCharts: true,
     exportReports: true,
@@ -224,6 +227,7 @@ export const ROLE_DEFAULT_PERMISSIONS = {
     createTransfer: true,
     approveTransfer: false,
     rejectTransfer: false,
+    viewSourceStock: false,
     viewReports: true,
     viewCharts: true,
     exportReports: true,

@@ -66,7 +66,7 @@ export function customerDevices(tickets = [], sales = []) {
 const hasFollowUp = (t) => !!t.followUpDate || ['accessibility', 'maintenanceTime', 'centerDealing', 'deliveryProcedures'].some((k) => Number(t.followUp?.[k]) > 0);
 export function followUpQueue(tickets = [], { minDays = 2, maxDays = 10, now = new Date(), skipIds = new Set() } = {}) {
   return tickets.map((t) => ({ t, a: analyzeTicket(t) }))
-    .filter(({ t, a }) => a && a.outcome === 'repaired' && !hasFollowUp(t) && !skipIds.has(t.id)
+    .filter(({ t, a }) => a && a.completedAt && a.outcome === 'repaired' && !hasFollowUp(t) && !skipIds.has(t.id)
       && (now - a.completedAt) >= minDays * DAY && (now - a.completedAt) <= maxDays * DAY)
     .map(({ t, a }) => ({ ticket: t, daysSince: Math.floor((now - a.completedAt) / DAY), completedAt: a.completedAt }))
     .sort((x, y) => y.daysSince - x.daysSince);

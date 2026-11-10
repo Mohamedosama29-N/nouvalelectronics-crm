@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { collection, getDocs, limit, query, where } from 'firebase/firestore';
+import { transactionsBetween, wholeCollection } from '../../data/mirror';
 import { TrendingUp, TrendingDown, Minus, Loader2, Download, Sparkles, PackageX, AlertTriangle, Clock, Archive, ShoppingCart } from 'lucide-react';
-import { db } from '../../firebase/config';
 import { buildForecast } from '../../ai/stockForecast';
 import { exportToExcel } from '../../utils/exportUtils';
 import { showError } from '../../utils/alerts';
@@ -46,21 +45,13 @@ export function StockForecastPanel({ appUser, warehouseMap = {} }) {
     setLoading(true);
     try {
       const since = new Date(Date.now() - days * 86400000);
-      const invCons = [where('isDeleted', '==', false)];
-      if (wh !== 'all') invCons.unshift(where('warehouseId', '==', wh));
-      const txCons = [where('type', '==', 'sell')];
-      if (wh !== 'all') txCons.push(where('warehouseId', '==', wh));
-      txCons.push(where('timestamp', '>=', since), limit(10000));
-      const [invSnap, txSnap] = await Promise.all([
-        getDocs(query(collection(db, 'inventory'), ...invCons)),
-        getDocs(query(collection(db, 'transactions'), ...txCons)),
+      // 📉 المخزون والمبيعات من المرايا المحلية (الجديد والمتعدّل بس من السيرفر)
+      const whW = wh !== 'all' ? [['warehouseId', '==', wh]] : [];
+      const [inv, txs] = await Promise.all([
+        wholeCollection('inventory', { wheres: [...whW, ['isDeleted', '==', false]], max: 50000 }),
+        transactionsBetween(since, null, { wheres: [['type', '==', 'sell'], ...whW], max: 10001 }),
       ]);
-      const entry = {
-        at: Date.now(),
-        inventory: invSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-        txs: txSnap.docs.map((d) => d.data()),
-        truncated: txSnap.size >= 10000,
-      };
+      const entry = { at: Date.now(), inventory: inv, txs: txs.slice(0, 10000), truncated: txs.length > 10000 };
       cache.set(key, entry);
       setData(entry);
     } catch (e) {

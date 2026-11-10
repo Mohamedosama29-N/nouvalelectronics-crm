@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { collection, getDocs, limit, query, where } from 'firebase/firestore';
+import { transactionsBetween } from '../../data/mirror';
 import { Sparkles, Plus } from 'lucide-react';
-import { db } from '../../firebase/config';
 import { buildBasketModel, suggestForCart } from '../../ai/basket';
 
 // كاش للجلسة: آخر 90 يوم من مبيعات المخزن، بيتحمّل مرة كل 15 دقيقة بس
@@ -10,9 +9,9 @@ async function loadModel(warehouseId) {
   const hit = cache.get(warehouseId);
   if (hit && Date.now() - hit.at < 15 * 60 * 1000) return hit.model;
   const since = new Date(Date.now() - 90 * 86400000);
-  const snap = await getDocs(query(collection(db, 'transactions'),
-    where('type', '==', 'sell'), where('warehouseId', '==', warehouseId), where('timestamp', '>=', since), limit(3000)));
-  const model = buildBasketModel(snap.docs.map((d) => d.data()));
+  // 📉 من المرايا المحلية: الفواتير الجديدة بس بتتقري من السيرفر
+  const list = await transactionsBetween(since, null, { wheres: [['type', '==', 'sell'], ['warehouseId', '==', warehouseId]], max: 3000 });
+  const model = buildBasketModel(list);
   cache.set(warehouseId, { at: Date.now(), model });
   return model;
 }

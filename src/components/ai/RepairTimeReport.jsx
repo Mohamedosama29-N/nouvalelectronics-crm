@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
+import { ticketsUpdatedSince } from '../../data/mirror';
 import { loadErrorMessage } from '../../ai/forecastStore';
-import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { Timer, Loader2, Download, Sparkles, Wand2, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
-import { db } from '../../firebase/config';
 import { buildRepairTimeReport, formatDuration, repairInsights } from '../../ai/repairTime';
 import { askText, friendlyAIError, isAIFeatureOn } from '../../ai/aiClient';
 import { AdvancedCharts } from '../common/AdvancedCharts';
@@ -52,11 +51,8 @@ export function RepairTimeReport({ appUser, warehouses = [], systemSettings }) {
     setLoading(true); setAiText('');
     try {
       // أي تذكرة خلصت جوه الفترة لازم يكون آخر تعديل عليها بعد بداية الفترة
-      const cons = [];
-      if (wh !== 'all') cons.push(where('assignedCenter', '==', wh));
-      cons.push(where('updatedAt', '>=', range[0]), orderBy('updatedAt', 'desc'), limit(5000));
-      const snap = await getDocs(query(collection(db, 'tickets'), ...cons));
-      const entry = { at: Date.now(), tickets: snap.docs.map((d) => ({ id: d.id, ...d.data() })), truncated: snap.size >= 5000, wh };
+      const list = await ticketsUpdatedSince(range[0], { wheres: wh !== 'all' ? [['assignedCenter', '==', wh]] : [], max: 20001 });
+      const entry = { at: Date.now(), tickets: list.slice(0, 20000), truncated: list.length > 20000, wh };
       cache.set(key, entry);
       setData(entry);
     } catch (e) {
@@ -74,12 +70,13 @@ export function RepairTimeReport({ appUser, warehouses = [], systemSettings }) {
   const insights = useMemo(() => (report ? repairInsights(report) : []), [report]);
 
   const analyzeAI = async () => {
-    if (!report?.count) return;
+    if (!report?.count && !report?.repairCount) return;
     // أسماء الفنيين بتتبعت كأكواد (فني 1، فني 2) وبنرجّعها محليًا
     const aliases = new Map(report.byTechnician.map((t, i) => [t.name, `فني ${i + 1}`]));
     const d = (ms) => +(ms / 86400000).toFixed(2);
     const payload = {
       period: `${from} → ${to}`, repairedTickets: report.count, notRepaired: report.notRepaired,
+      avgActualRepairDays: report.repairCount ? d(report.repair.avg) : null, actualRepairTickets: report.repairCount,
       avgTotalDays: d(report.total.avg), medianTotalDays: d(report.total.median), p90TotalDays: d(report.total.p90),
       avgNetDays: d(report.net.avg), avgToReadyDays: d(report.toReady.avg),
       slaRate: report.slaRate === null ? null : Math.round(report.slaRate * 100),
@@ -102,18 +99,23 @@ export function RepairTimeReport({ appUser, warehouses = [], systemSettings }) {
   };
 
   const exportRows = () => {
-    if (!report?.rows.length) return;
-    exportToExcel(report.rows.map((r) => ({
+    const byId = new Map([...report.rows, ...report.fixedRows].map((x) => [x.id, x]));
+    if (!byId.size) return;
+    exportToExcel([...byId.values()].map((r) => ({
       'التذكرة': r.ticketNumber, 'الجهاز': r.device, 'الفني': r.technician, 'الفرع': whName(r.center), 'الأولوية': r.priority,
-      'تاريخ الفتح': r.createdAt.toISOString().slice(0, 16).replace('T', ' '), 'تاريخ الإنهاء': r.completedAt.toISOString().slice(0, 16).replace('T', ' '),
-      'الإجمالي (ساعة)': +(r.total / 3600000).toFixed(1), 'الصافي (ساعة)': +(r.net / 3600000).toFixed(1),
+      'تاريخ الفتح': r.createdAt.toISOString().slice(0, 16).replace('T', ' '), 'تمت الصيانة': r.repairedAt ? r.repairedAt.toISOString().slice(0, 16).replace('T', ' ') : '',
+      'وقت الصيانة الفعلي (ساعة)': r.repair === null ? '' : +(r.repair / 3600000).toFixed(1),
+      'تاريخ التسليم': r.completedAt ? r.completedAt.toISOString().slice(0, 16).replace('T', ' ') : '',
+      'الإجمالي (ساعة)': r.total === null ? '' : +(r.total / 3600000).toFixed(1), 'الصافي (ساعة)': r.net === null ? '' : +(r.net / 3600000).toFixed(1),
       'انتظار العميل (ساعة)': +(r.waitCustomer / 3600000).toFixed(1), 'انتظار القطع (ساعة)': +(r.waitParts / 3600000).toFixed(1),
       'تقديري': r.estimated ? 'نعم' : '',
     })), `Repair_Time_${from}_${to}`, 'وقت الصيانة');
   };
 
   const kpis = report ? [
-    { label: 'متوسط وقت الصيانة (إجمالي)', value: formatDuration(report.total.avg), sub: `الوسيط ${formatDuration(report.total.median)}`, cls: 'from-teal-500 to-teal-700' },
+    // 🆕 الرقم الأساسي: من فتح التذكرة لحد «تمت الصيانة»
+    { label: 'متوسط وقت الصيانة الفعلي', value: report.repairCount ? formatDuration(report.repair.avg) : '—', sub: report.repairCount ? `من الفتح لـ«تمت الصيانة» · ${report.repairCount} تذكرة · الوسيط ${formatDuration(report.repair.median)}` : 'لسه مفيش تذاكر اتعلّمت «تمت الصيانة» في الفترة', cls: 'from-teal-500 to-teal-700' },
+    { label: 'لحد التسليم (إجمالي)', value: report.count ? formatDuration(report.total.avg) : '—', sub: `من الفتح للتسليم · الوسيط ${formatDuration(report.total.median)}`, cls: 'from-slate-500 to-slate-700' },
     { label: 'صافي الشغل عندنا', value: formatDuration(report.net.avg), sub: 'من غير انتظار العميل والقطع', cls: 'from-violet-500 to-violet-700' },
     { label: 'لحد ما الجهاز يبقى جاهز', value: formatDuration(report.toReady.avg), sub: 'من الاستلام للاتصال بالعميل', cls: 'from-sky-500 to-sky-700' },
     { label: 'جوه مهلة الـ SLA', value: report.slaRate === null ? '—' : `${Math.round(report.slaRate * 100)}%`, sub: `${report.count} تذكرة اتصلحت · ${report.notRepaired} اترفضت`, cls: 'from-emerald-500 to-emerald-700' },
@@ -180,13 +182,13 @@ export function RepairTimeReport({ appUser, warehouses = [], systemSettings }) {
         </div>
       )}
 
-      {report && report.count === 0 && (
+      {report && report.count === 0 && report.repairCount === 0 && (
         <div className="p-8 text-center text-slate-500 text-sm bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700">مفيش تذاكر اتسلّمت أو اتقفلت في الفترة دي.</div>
       )}
 
-      {report && report.count > 0 && (
+      {report && (report.count > 0 || report.repairCount > 0) && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             {kpis.map((k, i) => (
               <div key={k.label} className={`anim-up card-lift rounded-2xl p-4 text-white bg-gradient-to-br ${k.cls} shadow-sm`} style={{ '--d': `${i * 60}ms` }}>
                 <p className="text-[11px] font-bold opacity-90">{k.label}</p>
@@ -215,7 +217,7 @@ export function RepairTimeReport({ appUser, warehouses = [], systemSettings }) {
             </div>
             <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4 anim-up">
               <AdvancedCharts data={report.weekly} type="line" height={220} title="متوسط وقت الصيانة أسبوعيًا (بالأيام)"
-                series={[{ key: 'avgDays', name: 'الإجمالي' }, { key: 'netDays', name: 'الصافي' }]} />
+                series={report.repairCount ? [{ key: 'avgDays', name: 'وقت الصيانة الفعلي' }] : [{ key: 'avgDays', name: 'الإجمالي' }, { key: 'netDays', name: 'الصافي' }]} />
             </div>
           </div>
 
@@ -233,9 +235,9 @@ export function RepairTimeReport({ appUser, warehouses = [], systemSettings }) {
           </div>
 
           <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
-            {groupTable('حسب الفني', report.byTechnician, 'صافي الوقت (من غير انتظار العميل والقطع)')}
-            {groupTable('حسب الفرع', report.byCenter, 'الوقت الإجمالي')}
-            {groupTable('حسب نوع الجهاز', report.byDevice, 'الوقت الإجمالي')}
+            {report.repairCount ? groupTable('حسب الفني', report.repairByTechnician, 'وقت الصيانة الفعلي') : groupTable('حسب الفني', report.byTechnician, 'صافي الوقت (من غير انتظار العميل والقطع)')}
+            {report.repairCount ? groupTable('حسب الفرع', report.repairByCenter, 'وقت الصيانة الفعلي') : groupTable('حسب الفرع', report.byCenter, 'الوقت الإجمالي')}
+            {report.repairCount ? groupTable('حسب نوع الجهاز', report.repairByDevice, 'وقت الصيانة الفعلي') : groupTable('حسب نوع الجهاز', report.byDevice, 'الوقت الإجمالي')}
             {groupTable('حسب الأولوية', report.byPriority, 'الوقت الإجمالي')}
           </div>
 

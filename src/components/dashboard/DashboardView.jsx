@@ -64,7 +64,7 @@ export function DashboardView({ appUser, warehouses, onNavigateToInventory, syst
       { key: 'activity', collection: 'activity_logs', timeField: 'timestamp', sinceMs: dayStart - 30 * DAY, max: 20, soft: true }
     ];
     if (appUser?.role === 'admin' || appUser?.permissions?.manageTickets) {
-      s.push({ key: 'ticketsOpen', collection: 'tickets', wheres: [['status', 'not-in', TICKET_TERMINAL_STATUSES]] });
+      s.push({ key: 'ticketsOpen', collection: 'tickets', openPool: true, wheres: [['status', 'not-in', TICKET_TERMINAL_STATUSES]] });
       s.push({ key: 'ticketsRecent', collection: 'tickets', timeField: 'createdAt', sinceMs: dayStart - 34 * DAY, max: 5000 });
     }
     if (appUser?.role === 'admin' || appUser?.permissions?.viewTransfers) {

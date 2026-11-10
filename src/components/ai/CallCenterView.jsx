@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ticketsUpdatedSince } from '../../data/mirror';
 import { addDoc, collection, doc, getDocs, limit, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { PhoneCall, Search, Loader2, Plus, Phone, ExternalLink, ClipboardList, HeartHandshake, CalendarClock, History, ShieldCheck, Save, Check, Sparkles, Megaphone, Inbox } from 'lucide-react';
 import { db } from '../../firebase/config';
@@ -233,10 +234,8 @@ function FollowUpTab({ appUser, systemSettings }) {
   const load = async () => {
     setLoading(true);
     try {
-      const cons = seeAll ? [] : [where('assignedCenter', '==', own)];
-      cons.push(where('updatedAt', '>=', new Date(Date.now() - 12 * DAY)), orderBy('updatedAt', 'desc'), limit(2000));
-      const snap = await getDocs(query(collection(db, 'tickets'), ...cons));
-      setList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      // 📉 من المرايا المحلية: التذاكر اللي اتعدّلت بس بتتقري من السيرفر
+      setList(await ticketsUpdatedSince(new Date(Date.now() - 12 * DAY), { wheres: seeAll ? [] : [['assignedCenter', '==', own]], max: 2000 }));
     } catch (e) { console.error(e); showError('معرفتش أحمّل القائمة'); }
     finally { setLoading(false); }
   };
@@ -319,10 +318,8 @@ function RemindersTab({ appUser, systemSettings }) {
   const load = async () => {
     setLoading(true);
     try {
-      const cons = seeAll ? [] : [where('assignedCenter', '==', own)];
-      cons.push(where('updatedAt', '>=', new Date(Date.now() - 400 * DAY)), orderBy('updatedAt', 'desc'), limit(5000));
-      const snap = await getDocs(query(collection(db, 'tickets'), ...cons));
-      setItems(periodicDue(snap.docs.map((d) => ({ id: d.id, ...d.data() })), { rules: systemSettings?.periodicMaintenance || undefined }));
+      const list = await ticketsUpdatedSince(new Date(Date.now() - 400 * DAY), { wheres: seeAll ? [] : [['assignedCenter', '==', own]], max: 20000 });
+      setItems(periodicDue(list, { rules: systemSettings?.periodicMaintenance || undefined }));
     } catch (e) { console.error(e); showError('معرفتش أحمّل القائمة'); }
     finally { setLoading(false); }
   };

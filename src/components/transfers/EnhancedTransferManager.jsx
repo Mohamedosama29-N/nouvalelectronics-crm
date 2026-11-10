@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { watchMirror } from '../../data/mirror';
 import {
   collection, addDoc, getDocs, getDoc, setDoc, doc, updateDoc, query, where, serverTimestamp, orderBy, onSnapshot, increment, limit, runTransaction
 } from 'firebase/firestore';
@@ -94,6 +95,8 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
 
   const currentWarehouseId = appUser.assignedWarehouseId || 'main';
   const isMainWarehouse = currentWarehouseId === 'main' || appUser.role === 'admin' || appUser.role === 'main_warehouse_manager';
+  // 🆕 الفرع يشوف كمية المخزن الرئيسي بس لو معاه صلاحية «رؤية الكمية المتاحة» — غير كده بيشوف متوفر/غير متوفر
+  const canSeeSourceQty = isMainWarehouse || appUser.permissions?.viewSourceStock === true;
   const mainName = warehouseMap?.main || 'المخزن الرئيسي';
   const canReject = appUser.permissions?.rejectTransfer || isMainWarehouse;
 
@@ -117,26 +120,14 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
       setTransfers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
-    const invQ = isMainWarehouse 
-      ? query(collection(db, 'inventory'), where('warehouseId', '==', 'main'), where('isDeleted', '==', false))
-      : query(collection(db, 'inventory'), where('warehouseId', '==', currentWarehouseId), where('isDeleted', '==', false));
-
-    // 🛠️ FIX (أداء): زي مشكلة الموظفين - كان الاستماع مفتوح على مخزون الفرع
-    // كامل بدون حد أقصى. الأفضل مستقبلًا استخدام pagination حقيقي هنا زي
-    // شاشة المخزون الرئيسية، لكن كحل فوري وآمن حطينا سقف كبير كفاية لمعظم
-    // الفروع بدون ما يكسر إمكانية اختيار أي صنف موجود فعليًا.
-    const invUnsub = onSnapshot(query(invQ, limit(1000)), snap => {
-      setInventory(snap.docs.map(d => ({id: d.id, ...d.data()})));
-    });
+    // 📉 المخزون من المرايا المحلية + التعديلات الجديدة بس (بدل ما يتقري 1000 صنف كل ما الشاشة تتفتح)
+    const invUnsub = watchMirror('inventory', { wheres: [['warehouseId', '==', isMainWarehouse ? 'main' : currentWarehouseId], ['isDeleted', '==', false]] }, (l) => setInventory(l));
 
     // 🆕 مصدر البحث لطلب تحويل جديد - بيتغيّر حسب الفرع اللي تختاره من
     // القائمة المنسدلة (مش المخزن الرئيسي بس زي قبل كده)
     let sourceInvUnsub = () => {};
     if (!isMainWarehouse) {
-      sourceInvUnsub = onSnapshot(
-        query(collection(db, 'inventory'), where('warehouseId', '==', requestFromWarehouseId), where('isDeleted', '==', false), limit(1000)),
-        snap => setSourceInventory(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-      );
+      sourceInvUnsub = watchMirror('inventory', { wheres: [['warehouseId', '==', requestFromWarehouseId], ['isDeleted', '==', false]] }, (l) => setSourceInventory(l));
     }
 
     return () => { unsub(); invUnsub(); sourceInvUnsub(); };
@@ -209,7 +200,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
     if (!Number.isFinite(qty) || qty <= 0) return showError("الكمية غير صالحة");
     const existing = cart.find(c => c.serialNumber === selectedProduct.serialNumber);
     const newTotal = (existing?.requestedQty || 0) + qty;
-    if (newTotal > selectedProduct.quantity) {
+    if (canSeeSourceQty && newTotal > selectedProduct.quantity) {
       return showError(`الكمية الإجمالية (${newTotal}) أكبر من المتاح (${selectedProduct.quantity}) في ${isMainWarehouse ? 'مخزنك' : mainName}`);
     }
     setCart(prev => existing
@@ -224,7 +215,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
   const updateCartQty = (serialNumber, value) => {
     const qty = Math.max(1, Number(value) || 1);
     const src = findSourceItem(serialNumber);
-    if (src && qty > src.quantity) {
+    if (canSeeSourceQty && src && qty > src.quantity) {
       showError(`المتاح ${src.quantity} فقط`);
       return;
     }
@@ -245,7 +236,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
     let items = cart;
     if (selectedProduct) {
       const qty = Number(reqQty);
-      if (qty > 0 && qty <= selectedProduct.quantity && !cart.some(c => c.serialNumber === selectedProduct.serialNumber)) {
+      if (qty > 0 && (!canSeeSourceQty || qty <= selectedProduct.quantity) && !cart.some(c => c.serialNumber === selectedProduct.serialNumber)) {
         items = [...cart, { inventoryId: selectedProduct.id, serialNumber: selectedProduct.serialNumber, itemName: selectedProduct.name, price: Number(selectedProduct.price) || 0, requestedQty: qty }];
       }
     }
@@ -254,7 +245,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
     if (isMainWarehouse && toWarehouseId === 'main') return showError("لا يمكن التحويل للمخزن الرئيسي نفسه");
     for (const it of items) {
       const src = findSourceItem(it.serialNumber);
-      if (src && it.requestedQty > src.quantity) {
+      if (canSeeSourceQty && src && it.requestedQty > src.quantity) {
         return showError(`الكمية المطلوبة من ${it.itemName} أكبر من المتاح (${src.quantity})`);
       }
     }
@@ -479,7 +470,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
           if (!fromSnap.exists()) throw new Error(`المنتج ${r.it.itemName} غير موجود بالمخزن المرسل!`);
           const currentQty = fromSnap.data().quantity || 0;
           if (currentQty < r.it.requestedQty) {
-            throw new Error(`الكمية غير كافية من ${r.it.itemName} في المخزن المرسل! المتاح: ${currentQty}, المطلوب: ${r.it.requestedQty}`);
+            throw new Error(canSeeSourceQty ? `الكمية غير كافية من ${r.it.itemName} في المخزن المرسل! المتاح: ${currentQty}, المطلوب: ${r.it.requestedQty}` : `الكمية المطلوبة من ${r.it.itemName} مش متاحة دلوقتي في المخزن المرسل. كلّم المخزن الرئيسي.`);
           }
           const toSnap = r.toRef ? await transaction.get(r.toRef) : null;
           loaded.push({ ...r, fromSnap, currentQty, toSnap });
@@ -732,7 +723,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{item.serialNumber}</p>
                       </div>
                       <span className={`text-xs font-bold px-3 py-1 rounded-lg ${item.quantity > 0 ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300'}`}>
-                        الكمية: {item.quantity}
+                        {canSeeSourceQty ? `الكمية: ${item.quantity}` : (item.quantity > 0 ? 'متوفر' : 'غير متوفر')}
                       </span>
                     </button>
                   ))}
@@ -751,7 +742,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
                 <p className="text-slate-500 dark:text-slate-400 font-mono text-sm">{selectedProduct.serialNumber}</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-4 py-2 rounded-xl font-bold text-sm">
-                    {isMainWarehouse ? 'المتاح في مخزنك' : 'المتاح في المخزن الرئيسي'}: {selectedProduct.quantity}
+                    {canSeeSourceQty ? `${isMainWarehouse ? 'المتاح في مخزنك' : 'المتاح في المخزن الرئيسي'}: ${selectedProduct.quantity}` : 'متوفر في المخزن الرئيسي'}
                   </div>
                   <div className="bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-4 py-2 rounded-xl font-bold text-sm">
                     السعر: {selectedProduct.price} ج
@@ -778,7 +769,7 @@ export function EnhancedTransferManager({ appUser, warehouseMap, setGlobalLoadin
                   <input 
                     type="number" 
                     min="1" 
-                    max={selectedProduct.quantity}
+                    max={canSeeSourceQty ? selectedProduct.quantity : undefined}
                     className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-xl font-bold text-center bg-white dark:bg-slate-900" 
                     value={reqQty} 
                     onChange={e=>setReqQty(Number(e.target.value))} 
